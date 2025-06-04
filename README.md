@@ -13,4 +13,3 @@ The app features a clean, modern GUI, stores your data in a MongoDB database, an
 I’m open to suggestions, feedback, and improvements!
 
 🙏 If you’d like to support this project, I’d really appreciate it — even a kind word helps!
-[Insert your Patreon / Ko-fi / link here]
