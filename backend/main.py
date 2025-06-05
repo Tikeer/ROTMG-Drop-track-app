@@ -1,8 +1,12 @@
 from pymongo import MongoClient
 import certifi
 import customtkinter as ctk
+import os
+from dotenv import load_dotenv
 
-uri = "mongodb+srv://tiker:demoTOJIA2uzKXyB@cluster0.lgo6fpb.mongodb.net/"
+load_dotenv()
+
+uri = os.getenv("MONGODB_URI")
 
 # Using certifi for proper SSL certificate verification
 client = MongoClient(
