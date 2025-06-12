@@ -1,4 +1,5 @@
 from backend.logic import AppLogic
+from backend.logic import SpriteDisplay
 import customtkinter as ctk
 
 ctk.set_appearance_mode("dark")
