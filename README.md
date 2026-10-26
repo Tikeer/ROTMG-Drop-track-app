@@ -59,9 +59,9 @@ Roadmap
 
 - [x] Core domain models & automatic JSON persistence
 
-- [ ] Dark-mode dashboard UI inspired by modern RotMG community tools
+- [x] Dark-mode dashboard UI inspired by modern RotMG community tools
 
-- [ ] Dedicated Graveyard history view & character lifetime statistics
+- [x] Dedicated Graveyard history view & character lifetime statistics
 
 - [ ] Season countdown timer & item collection log
 
