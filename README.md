@@ -29,6 +29,7 @@ The solution is structured using **Separation of Concerns (SoC)** to ensure busi
 RotmgTrackerV1/
 ├── RotmgTrackerV1.Core/       # Pure C# Class Library (Domain Models, Enums, State & Storage Services)
 └── RotmgTrackerV1.Desktop/    # WPF Host with BlazorWebView (Modern HTML/CSS/Razor UI)
+```
 
 Backend / Domain (Core): C#, .NET 10, LINQ, System.Text.Json. Zero UI dependencies—100% reusable for future Web API or Blazor WebAssembly targets.
 
