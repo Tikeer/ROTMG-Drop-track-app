@@ -1,5 +1,43 @@
-bin/
-obj/
-/packages/
-riderModule.iml
-/_ReSharper.Caches/
+## .NET / Build Outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## Visual Studio / User-specific files
+.vs/
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## NuGet Packages & Caches
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Local App Data (Twoje lokalne zapisy dropów podczas testów)
+rotmg_data.json
+
+## OS Generated
+.DS_Store
+Thumbs.db
