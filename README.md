@@ -11,7 +11,7 @@ Built with a decoupled architecture in **C# (.NET 10)** to support a native Wind
 
 ---
 
-##Key Features (v1 Desktop)
+## Key Features (v1 Desktop)
 
 * **Seasonal & Non-Seasonal Loot Counter:** Track *Regular Whites*, *Legendary Whites*, *STs*, *Blueprints*, *Tops*, *Divine Items*, and *Shinies* with quick increment/decrement controls.
 * **Automated Graveyard Archiving:** Resetting a character upon death automatically archives the session's final stats and timestamp into a local Graveyard history before starting a fresh run.
@@ -30,28 +30,33 @@ RotmgTrackerV1/
 ├── RotmgTrackerV1.Core/       # Pure C# Class Library (Domain Models, Enums, State & Storage Services)
 └── RotmgTrackerV1.Desktop/    # WPF Host with BlazorWebView (Modern HTML/CSS/Razor UI)
 ```
+- **Backend / Domain (`Core`):** C#, .NET 10, LINQ, `System.Text.Json`. Zero UI dependencies—100% reusable for future Web API or Blazor WebAssembly targets.
+- **Frontend (`Desktop`):** WPF hosting Blazor Hybrid (`BlazorWebView`),  enabling responsive, dark-themed web styling inside a fast native Windows executable.
 
-Backend / Domain (Core): C#, .NET 10, LINQ, System.Text.Json. Zero UI dependencies—100% reusable for future Web API or Blazor WebAssembly targets.
+---
 
-Frontend (Desktop): WPF hosting Blazor Hybrid (BlazorWebView), enabling responsive, dark-themed web styling inside a fast native Windows executable.
+## Getting Started
 
-Getting Started
-Prerequisites
-.NET 10 SDK
+### Prerequisites
 
-Windows 10/11 (with Microsoft Edge WebView2 Runtime, pre-installed on modern Windows)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- Windows 10/11 (with Microsoft Edge WebView2 Runtime, pre-installed on modern Windows)
+- IDE: JetBrains Rider or Visual Studio 2022+
 
-IDE: JetBrains Rider or Visual Studio 2022+
+### Build & Run
 
-Build & Run
 1. Clone the repository:
-git clone [https://github.com/Tikeer/RotmgTrackerV1.git](https://github.com/Tikeer/RotmgTrackerV1.git)
-cd RotmgTrackerV1
-
+   ```bash
+   git clone [https://github.com/Tikeer/RotmgTrackerV1.git](https://github.com/Tikeer/RotmgTrackerV1.git)
+   cd RotmgTrackerV1
+    ```
 2. Build and run the desktop project:
-dotnet run --project RotmgTrackerV1.Desktop
+```bash
+    dotnet run --project RotmgTrackerV1.Desktop
+    ```
 
- Roadmap
+Roadmap
+
 [x] Core domain models & automatic JSON persistence
 
 [ ] Dark-mode dashboard UI inspired by modern RotMG community tools
