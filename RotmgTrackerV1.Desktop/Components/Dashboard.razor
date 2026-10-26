@@ -1,122 +1,343 @@
 ﻿@inject TrackerStateService State
 
-<div class="dashboard">
-    <div class="top-bar">
-        <div style="display: flex; align-items: center; gap: 14px;">
-            <h1 style="font-size: 1.35rem; font-weight: 700;">RotMG Drop Tracker</h1>
-            <span class="@(State.Data.CurrentCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
-                  @onclick="ToggleSsnl"
-                  title="Click to toggle SSNL / Non-SSNL">
-                @(State.Data.CurrentCharacter.IsSeasonal ? "SSNL" : "NON-SSNL")
-            </span>
+<div class="app-shell">
+    <!-- COLLAPSIBLE LEFT SIDEBAR -->
+    <aside class="sidebar @(_sidebarCollapsed ? "collapsed" : "")">
+        <div class="sidebar-top">
+            <button class="hamburger-btn" @onclick="ToggleSidebar" title="Toggle Menu">
+                ☰
+            </button>
+            <span class="sidebar-brand">RotMG Tracker</span>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 14px;">
-            <span style="color: var(--text-muted); font-size: 0.85rem;">
-                Graveyard: <strong>@State.Data.Graveyard.Count</strong>
-            </span>
-            <button class="btn btn-danger" @onclick="KillCharacter">
-                 RIP 
-            </button>
-        </div>
-    </div>
-    
-    <div class="section-card">
-        <div class="section-header">
-            <div class="section-title">Character Drops</div>
-        </div>
-        <div class="drops-grid">
-            @foreach (var drop in State.Data.CurrentCharacter.Drops)
-            {
-                <div class="drop-item">
-                    <div class="drop-header">
-                        <span class="drop-name">@FormatDropName(drop.Key)</span>
-                        <span class="drop-value">@drop.Value</span>
+        <div class="sidebar-section-label">Main Modules</div>
+
+        <button class="nav-item @(_activeTab == "tracker" ? "active" : "")"
+                @onclick='() => _activeTab = "tracker"'>
+            <span class="nav-icon">⚔</span>
+            <span class="nav-label">Character Tracker</span>
+            <span class="nav-badge">@State.Data.ActiveCharacters.Count</span>
+        </button>
+
+        <button class="nav-item @(_activeTab == "openings" ? "active" : "")"
+                @onclick='() => _activeTab = "openings"'>
+            <span class="nav-icon">📦</span>
+            <span class="nav-label">Chest Openings</span>
+            <span class="nav-badge">@State.Data.Openings.Count</span>
+        </button>
+
+        <button class="nav-item @(_activeTab == "graveyard" ? "active" : "")"
+                @onclick='() => _activeTab = "graveyard"'>
+            <span class="nav-icon">💀</span>
+            <span class="nav-label">Graveyard</span>
+            <span class="nav-badge">@State.Data.Graveyard.Count</span>
+        </button>
+
+        <div class="sidebar-section-label" style="margin-top: 12px;">Future Tools (v2)</div>
+
+        <button class="nav-item disabled" title="Planned for future update">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">DPS Calculator</span>
+            <span class="nav-badge soon">SOON</span>
+        </button>
+
+        <button class="nav-item disabled" title="Planned for future update">
+            <span class="nav-icon">🛡</span>
+            <span class="nav-label">Item Collection</span>
+            <span class="nav-badge soon">SOON</span>
+        </button>
+
+        <button class="nav-item disabled" title="Planned for future update">
+            <span class="nav-icon">⏳</span>
+            <span class="nav-label">Season Timer</span>
+            <span class="nav-badge soon">SOON</span>
+        </button>
+    </aside>
+
+    <!-- MAIN FULL-SCREEN SCROLLABLE AREA -->
+    <main class="main-workspace">
+        @if (_activeTab == "tracker")
+        {
+            <div class="page-view">
+                <!-- MULTI-CHARACTER BAR -->
+                <div class="char-bar">
+                    <div class="char-pills">
+                        @foreach (var ch in State.Data.ActiveCharacters)
+                        {
+                            <div class="char-pill @(ch.Id == State.ActiveCharacter.Id ? "active" : "")"
+                                 @onclick="() => State.SelectCharacter(ch.Id)">
+                                <span>@ch.Name (@ch.Class)</span>
+                                <span class="@(ch.IsSeasonal ? "badge-ssnl" : "badge-nossnl")" style="font-size: 0.68rem; padding: 2px 7px;">
+                                    @(ch.IsSeasonal ? "SSNL" : "NS")
+                                </span>
+                            </div>
+                        }
+                        <button class="btn btn-primary btn-sm" @onclick="() => _showNewCharForm = !_showNewCharForm">
+                            @(_showNewCharForm ? "Cancel" : "+ New Character")
+                        </button>
                     </div>
-                    <div class="btn-group">
-                        <button class="btn" @onclick="() => ChangeDrop(drop.Key, -1)">-</button>
-                        <button class="btn" @onclick="() => ChangeDrop(drop.Key, 1)">+</button>
+
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="@(State.ActiveCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
+                              @onclick="ToggleSsnl"
+                              title="Click to toggle SSNL / Non-SSNL for current character">
+                            @(State.ActiveCharacter.IsSeasonal ? "SSNL" : "NON-SSNL")
+                        </span>
+
+                        @if (State.Data.ActiveCharacters.Count > 1)
+                        {
+                            <button class="btn btn-sm" title="Remove character without sending to Graveyard"
+                                    @onclick="() => State.DeleteActiveCharacter(State.ActiveCharacter.Id)">
+                                Delete
+                            </button>
+                        }
+
+                        <button class="btn btn-danger btn-sm" @onclick="KillCharacter" title="Archive character to Graveyard">
+                            💀 RIP
+                        </button>
                     </div>
                 </div>
-            }
-        </div>
-    </div>
-    
-    <div class="section-card">
-        <div class="section-header">
-            <div class="section-title">Daily Quests / Marks To-Do</div>
-            <div style="display: flex; gap: 8px;">
-                <input class="input-dark" placeholder="Dungeon (fe. Nest)" @bind="_newQuestName" />
-                <input class="input-dark" type="number" style="width: 65px;" min="1" max="20" @bind="_newQuestTarget" />
-                <button class="btn" style="flex: 0 0 auto;" @onclick="AddNewQuest">+ Add</button>
-            </div>
-        </div>
 
-        <div class="row-list">
-            @foreach (var quest in State.Data.ActiveQuests)
-            {
-                <div class="list-row @(quest.IsCompleted ? "completed" : "")">
-                    <div>
-                        <strong style="font-size: 1rem;">@quest.TargetMarks x @quest.DungeonName</strong>
-                        <span style="margin-left: 12px; color: @(quest.IsCompleted ? "var(--accent-green)" : "var(--text-muted)"); font-weight: 600;">
-                            [ @quest.CurrentMarks / @quest.TargetMarks ]
-                            @(quest.IsCompleted ? "✔ COMPLETED" : "")
+                <!-- NEW CHARACTER CREATION FORM -->
+                @if (_showNewCharForm)
+                {
+                    <div class="section-card" style="border-color: var(--accent-white);">
+                        <div class="section-header" style="margin-bottom: 12px;">
+                            <div class="section-title" style="color: var(--accent-white);">Create New Character</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                            <input class="input-dark" placeholder="Name / Note (e.g. PPE Wizard)" @bind="_newCharName" />
+
+                            <select class="input-dark" @bind="_newCharClass">
+                                @foreach (var rotmgClass in Enum.GetValues<RotmgClass>())
+                                {
+                                    <option value="@rotmgClass">@rotmgClass</option>
+                                }
+                            </select>
+
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
+                                <input type="checkbox" @bind="_newCharSsnl" />
+                                Seasonal (SSNL)
+                            </label>
+
+                            <button class="btn btn-primary btn-sm" @onclick="CreateCharacter">Create & Select</button>
+                        </div>
+                    </div>
+                }
+
+                <!-- CHARACTER DROPS GRID -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            @State.ActiveCharacter.Name (@State.ActiveCharacter.Class) — Drops
+                        </div>
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">
+                            Total Logged: <strong style="color: var(--text-primary);">@State.ActiveCharacter.TotalDrops</strong>
                         </span>
                     </div>
-                    <div style="display: flex; gap: 6px;">
-                        <button class="btn" @onclick="() => State.ChangeQuestMark(quest.Id, -1)">-</button>
-                        <button class="btn" @onclick="() => State.ChangeQuestMark(quest.Id, 1)">+1 Mark</button>
-                        <button class="btn btn-danger" @onclick="() => State.RemoveQuest(quest.Id)">✕</button>
+                    <div class="drops-grid">
+                        @foreach (var drop in State.ActiveCharacter.Drops)
+                        {
+                            <div class="drop-item" @key="drop.Key">
+                                <div class="drop-header">
+                                    <span class="drop-name">@FormatDropName(drop.Key)</span>
+                                    <span class="drop-value">@drop.Value</span>
+                                </div>
+                                <div class="btn-group">
+                                    <button class="btn" @onclick="() => ChangeDrop(drop.Key, -1)">-</button>
+                                    <button class="btn" @onclick="() => ChangeDrop(drop.Key, 1)">+</button>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
-            }
-        </div>
-    </div>
-    
-    <div class="section-card">
-        <div class="section-header">
-            <div class="section-title">Chest Openings</div>
-            <button class="btn" style="flex: 0 0 auto;" @onclick="CreateNewOpening">+ New Opening</button>
-        </div>
 
-        @foreach (var opening in State.Data.Openings)
-        {
-            <div style="margin-bottom: 18px; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 14px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-                    <strong>@opening.Title</strong>
-                    <span>
-                        whites/st :
-                        <strong style="color: var(--accent-white);">@opening.TotalWhites</strong> /
-                        <strong style="color: var(--accent-st);">@opening.TotalSTs</strong>
-                    </span>
-                </div>
+                <!-- DAILY QUESTS / MARKS TO-DO -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">Daily Quests / Marks To-Do</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input class="input-dark" placeholder="Dungeon (e.g. Nest)" @bind="_newQuestName" />
+                            <input class="input-dark" type="number" style="width: 68px;" min="1" max="20" @bind="_newQuestTarget" />
+                            <button class="btn btn-primary btn-sm" @onclick="AddNewQuest">+ Add Quest</button>
+                        </div>
+                    </div>
 
-                <div class="row-list">
-                    @foreach (var chest in opening.Chests)
-                    {
-                        <div class="list-row">
-                            <span style="width: 110px; font-weight: 600; text-transform: lowercase;">@chest.Key</span>
-                            <span>
-                                <strong style="color: var(--accent-white);">@chest.Value.Whites</strong> /
-                                <strong style="color: var(--accent-st);">@chest.Value.STs</strong>
-                            </span>
-                            <div style="display: flex; gap: 6px;">
-                                <button class="btn" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, -1)">-W</button>
-                                <button class="btn" style="color: var(--accent-white);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, 1)">+White</button>
-                                <button class="btn" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, -1)">-ST</button>
-                                <button class="btn" style="color: var(--accent-st);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, 1)">+ST</button>
+                    <div class="row-list">
+                        @foreach (var quest in State.Data.ActiveQuests)
+                        {
+                            int pct = quest.TargetMarks > 0 ? Math.Min(100, (int)((double)quest.CurrentMarks / quest.TargetMarks * 100)) : 0;
+                            <div class="list-row @(quest.IsCompleted ? "completed" : "")" @key="quest.Id">
+                                <div>
+                                    <div>
+                                        <strong style="font-size: 1rem;">@quest.TargetMarks x @quest.DungeonName</strong>
+                                        <span style="margin-left: 12px; color: @(quest.IsCompleted ? "var(--accent-green)" : "var(--text-muted)"); font-weight: 600;">
+                                            [ @quest.CurrentMarks / @quest.TargetMarks ]
+                                            @(quest.IsCompleted ? "✔ COMPLETED" : "")
+                                        </span>
+                                    </div>
+                                    <div class="quest-progress-bg">
+                                        <div class="quest-progress-fill" style="width: @(pct)%;"></div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 6px;">
+                                    <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, -1)">-</button>
+                                    <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, 1)">+1 Mark</button>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveQuest(quest.Id)">✕</button>
+                                </div>
                             </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else if (_activeTab == "openings")
+        {
+            <div class="page-view">
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">Chest Openings</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input class="input-dark" placeholder="Opening title (optional)" @bind="_newOpeningTitle" />
+                            <button class="btn btn-primary btn-sm" @onclick="CreateNewOpening">+ New Opening</button>
+                        </div>
+                    </div>
+
+                    @foreach (var opening in State.Data.Openings)
+                    {
+                        <div class="opening-box" @key="opening.Id">
+                            <div class="opening-header">
+                                <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;"
+                                     @onclick="() => State.ToggleOpeningExpanded(opening.Id)">
+                                    <span style="color: var(--text-muted);">@(opening.IsExpanded ? "▼" : "▶")</span>
+                                    <strong style="font-size: 1.05rem;">@opening.Title</strong>
+                                </div>
+
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="color: var(--text-muted); font-size: 0.85rem;">Total Chests:</span>
+                                    <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(opening.Id, -1)">-</button>
+                                    <input class="input-dark" type="number" min="0" style="width: 72px; text-align: center; font-weight: 700;"
+                                           value="@opening.TotalChests"
+                                           @onchange="(e) => OnChestCountInput(opening.Id, e.Value)" />
+                                    <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(opening.Id, 1)">+</button>
+                                </div>
+
+                                <div style="display: flex; align-items: center; gap: 14px;">
+                                    <span>
+                                        Whites / ST :
+                                        <strong style="color: var(--accent-white);">@opening.TotalWhites</strong> /
+                                        <strong style="color: var(--accent-st);">@opening.TotalSTs</strong>
+                                    </span>
+                                    <button class="btn btn-danger btn-sm" title="Delete Opening"
+                                            @onclick="() => State.RemoveOpeningSession(opening.Id)">
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (opening.IsExpanded)
+                            {
+                                <div class="row-list" style="margin-top: 14px;">
+                                    @foreach (var chest in opening.Chests)
+                                    {
+                                        <div class="list-row" @key="chest.Key">
+                                            <span style="width: 110px; font-weight: 600; text-transform: capitalize;">@chest.Key</span>
+                                            <span>
+                                                <strong style="color: var(--accent-white);">@chest.Value.Whites</strong> /
+                                                <strong style="color: var(--accent-st);">@chest.Value.STs</strong>
+                                            </span>
+                                            <div style="display: flex; gap: 6px;">
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, -1)">-W</button>
+                                                <button class="btn btn-sm" style="color: var(--accent-white);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, 1)">+White</button>
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, -1)">-ST</button>
+                                                <button class="btn btn-sm" style="color: var(--accent-st);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, 1)">+ST</button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
             </div>
         }
-    </div>
+        else if (_activeTab == "graveyard")
+        {
+            <div class="page-view">
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">Fallen Characters (Graveyard)</div>
+                        <span style="color: var(--text-muted); font-size: 0.85rem;">
+                            Total Fallen: <strong>@State.Data.Graveyard.Count</strong>
+                        </span>
+                    </div>
+
+                    @if (State.Data.Graveyard.Count == 0)
+                    {
+                        <div style="padding: 36px; text-align: center; color: var(--text-muted);">
+                            No fallen characters yet. Stay safe in the Nexus!
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="graveyard-grid">
+                            @foreach (var dead in State.Data.Graveyard)
+                            {
+                                <div class="grave-card" @key="dead.Id">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <strong style="font-size: 1.05rem;">@dead.Name (@dead.Class)</strong>
+                                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                                                Died: @(dead.DiedAt?.ToString("yyyy-MM-dd HH:mm") ?? "Unknown")
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl")">
+                                                @(dead.IsSeasonal ? "SSNL" : "NS")
+                                            </span>
+                                            <button class="btn btn-danger btn-sm" title="Delete Entry"
+                                                    @onclick="() => State.RemoveGraveyardEntry(dead.Id)">
+                                                ✕
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div style="border-top: 1px solid var(--border-subtle); padding-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
+                                        @foreach (var d in dead.Drops.Where(x => x.Value > 0))
+                                        {
+                                            <span style="background: #18181f; border: 1px solid var(--border-subtle); padding: 4px 9px; border-radius: 6px; font-size: 0.8rem;">
+                                                @FormatDropName(d.Key): <strong style="color: var(--accent-white);">@d.Value</strong>
+                                            </span>
+                                        }
+                                        @if (dead.TotalDrops == 0)
+                                        {
+                                            <span style="color: var(--text-muted); font-size: 0.82rem;">No drops recorded before death.</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </main>
 </div>
 
 @code {
+    private bool _sidebarCollapsed = false;
+    private string _activeTab = "tracker";
+
+    // New Character state
+    private bool _showNewCharForm = false;
+    private string _newCharName = string.Empty;
+    private RotmgClass _newCharClass = RotmgClass.Wizard;
+    private bool _newCharSsnl = true;
+
+    // Quest & Opening state
     private string _newQuestName = string.Empty;
     private int _newQuestTarget = 4;
+    private string _newOpeningTitle = string.Empty;
 
     protected override void OnInitialized()
     {
@@ -126,10 +347,36 @@
         }
     }
 
+    private void ToggleSidebar() => _sidebarCollapsed = !_sidebarCollapsed;
     private void ChangeDrop(DropType type, int delta) => State.ChangeDropCount(type, delta);
     private void ToggleSsnl() => State.ToggleSeasonal();
     private void KillCharacter() => State.ArchiveAndResetCharacter();
-    private void CreateNewOpening() => State.AddOpeningSession($"{State.Data.Openings.Count + 1} opening");
+
+    private void CreateCharacter()
+    {
+        string name = string.IsNullOrWhiteSpace(_newCharName) ? _newCharClass.ToString() : _newCharName;
+        State.AddNewCharacter(name, _newCharClass, _newCharSsnl);
+        _newCharName = string.Empty;
+        _showNewCharForm = false;
+    }
+
+    private void CreateNewOpening()
+    {
+        string title = string.IsNullOrWhiteSpace(_newOpeningTitle)
+            ? $"{State.Data.Openings.Count + 1} opening"
+            : _newOpeningTitle.Trim();
+
+        State.AddOpeningSession(title);
+        _newOpeningTitle = string.Empty;
+    }
+
+    private void OnChestCountInput(Guid openingId, object? value)
+    {
+        if (int.TryParse(value?.ToString(), out int parsed))
+        {
+            State.SetOpeningTotalChests(openingId, parsed);
+        }
+    }
 
     private void AddNewQuest()
     {
@@ -140,14 +387,14 @@
 
     private string FormatDropName(DropType type) => type switch
     {
-        DropType.RegularWhite => "Regular white",
-        DropType.LegendaryWhite => "Legendary white",
+        DropType.RegularWhite => "Regular White",
+        DropType.LegendaryWhite => "Legendary White",
         DropType.ST => "ST",
         DropType.BPs => "BPs",
         DropType.Tops => "Tops",
         DropType.DivineGoodItem => "Divine Good Item",
         DropType.Shiny => "Shiny",
-        DropType.Shivine => "Shiny Divine Item",    
+        DropType.Shivine => "Shiny Divine Item",
         _ => type.ToString()
     };
 }

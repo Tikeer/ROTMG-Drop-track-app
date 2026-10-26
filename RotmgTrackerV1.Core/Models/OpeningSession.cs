@@ -13,6 +13,8 @@ public class OpeningSession
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "New Opening";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public int TotalChests { get; set; } = 0;
+    public bool IsExpanded { get; set; } = true;
 
     public Dictionary<ChestType, ChestDropStats> Chests { get; set; } = new()
     {

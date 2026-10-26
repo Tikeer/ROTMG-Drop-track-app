@@ -3,10 +3,52 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
         xmlns:components="clr-namespace:RotmgTrackerV1.Desktop.Components"
-        Title="RotMG Drop Tracker" Height="820" Width="1050"
-        Background="#09090b">
-    <Grid>
-        <blazor:BlazorWebView HostPage="wwwroot\index.html" Services="{DynamicResource services}">
+        Title="RotMG Drop Tracker" Height="840" Width="1220"
+        MinHeight="600" MinWidth="850"
+        Background="#09090b"
+        BorderBrush="#27272a"
+        BorderThickness="1"
+        StateChanged="Window_StateChanged">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="34"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0"
+                      CornerRadius="0"
+                      NonClientFrameEdges="None" />
+    </WindowChrome.WindowChrome>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="34" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Native-Handled Dark Title Bar -->
+        <Border Grid.Row="0" Background="#09090b" BorderBrush="#18181f" BorderThickness="0,0,0,1">
+            <Grid>
+                <TextBlock Text="RotMG Drop Tracker"
+                           Foreground="#71717a"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           Margin="16,0,0,0" />
+
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Content="—" Click="Minimize_Click"
+                            Width="44" Height="34" Background="Transparent" Foreground="#a1a1aa" BorderThickness="0" Cursor="Hand" />
+                    <Button Content="▢" Click="Maximize_Click"
+                            Width="44" Height="34" Background="Transparent" Foreground="#a1a1aa" BorderThickness="0" Cursor="Hand" />
+                    <Button Content="✕" Click="Close_Click"
+                            Width="44" Height="34" Background="Transparent" Foreground="#ef4444" BorderThickness="0" Cursor="Hand" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Blazor WebView -->
+        <blazor:BlazorWebView Grid.Row="1" HostPage="wwwroot\index.html" Services="{DynamicResource services}">
             <blazor:BlazorWebView.RootComponents>
                 <blazor:RootComponent Selector="#app" ComponentType="{x:Type components:Dashboard}" />
             </blazor:BlazorWebView.RootComponents>
