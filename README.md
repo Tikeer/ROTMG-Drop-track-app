@@ -51,7 +51,7 @@ RotmgTrackerV1/
    cd RotmgTrackerV1
     ```
 2. Build and run the desktop project:
-```bash
+    ```bash
     dotnet run --project RotmgTrackerV1.Desktop
     ```
 
