@@ -8,6 +8,8 @@
 A lightweight, modern desktop utility designed for **Realm of the Mad God (RotMG)** players to track character loot drops, daily dungeon mark quests, and end-of-season chest openings without relying on manual text notes.
 
 Built with a decoupled architecture in **C# (.NET 10)** to support a native Windows desktop experience today while maintaining a shared domain layer ready for a full web application expansion.
+<img width="905" height="618" alt="image" src="https://github.com/user-attachments/assets/20423096-2381-4508-81a5-3aaa0a9b80ca" />
+
 
 ---
 
