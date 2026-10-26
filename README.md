@@ -57,12 +57,12 @@ RotmgTrackerV1/
 
 Roadmap
 
-[x] Core domain models & automatic JSON persistence
+- [x] Core domain models & automatic JSON persistence
 
-[ ] Dark-mode dashboard UI inspired by modern RotMG community tools
+- [ ] Dark-mode dashboard UI inspired by modern RotMG community tools
 
-[ ] Dedicated Graveyard history view & character lifetime statistics
+- [ ] Dedicated Graveyard history view & character lifetime statistics
 
-[ ] Season countdown timer & item collection log
+- [ ] Season countdown timer & item collection log
 
-[ ] v2 Expansion: Standalone Web Application sharing RotmgTrackerV1.Core
+- [ ] v2 Expansion: Standalone Web Application sharing RotmgTrackerV1.Core
