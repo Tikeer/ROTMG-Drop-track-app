@@ -1,16 +1,16 @@
-﻿using System.Data;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using RotmgTrackerV1.Core.Models;
+using RotmgTrackerV1.Core.Data;
 using RotmgTrackerV1.Core.Enums;
+using RotmgTrackerV1.Core.Models;
 
 namespace RotmgTrackerV1.Core.Services;
 
 public class TrackerSaveData
 {
-    public CharacterSession? CurrentCharacter { get; set; } = new();
     public List<CharacterSession> ActiveCharacters { get; set; } = new();
     public Guid ActiveCharacterId { get; set; }
+    public CharacterSession? CurrentCharacter { get; set; }
     public List<CharacterSession> Graveyard { get; set; } = new();
     public List<DungeonMarkQuest> ActiveQuests { get; set; } = new();
     public List<OpeningSession> Openings { get; set; } = new();
@@ -18,8 +18,8 @@ public class TrackerSaveData
 
 public class TrackerStateService
 {
-    private readonly string _saveFilePath;
-    private readonly object _saveLock = new();
+    private readonly string _dbFilePath;
+    private readonly object _dbLock = new();
     public TrackerSaveData Data { get; private set; } = new();
 
     [JsonIgnore]
@@ -32,20 +32,80 @@ public class TrackerStateService
 
             if (Data.ActiveCharacters.Count == 0)
             {
-                var defaultChar = CreateFreshCharacter("Main Character", RotmgClass.Wizard, true);
+                var defaultChar = CreateFreshCharacter("Seasonal #1", RotmgClass.Wizard, true);
                 Data.ActiveCharacters.Add(defaultChar);
             }
-            
+
             Data.ActiveCharacterId = Data.ActiveCharacters[0].Id;
             return Data.ActiveCharacters[0];
         }
     }
+
     public TrackerStateService()
     {
-        string appFolder = AppDomain.CurrentDomain.BaseDirectory;
-        _saveFilePath = Path.Combine(appFolder, "rotmg_data.json");
-        Load();
-        MigrateAndEnsureDrops();
+        // Bezpieczny folder systemowy (macOS: ~/Library/Application Support/RotmgTracker, Win: %AppData%/RotmgTracker)
+        string appDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "RotmgTracker");
+
+        Directory.CreateDirectory(appDataDir);
+        _dbFilePath = Path.Combine(appDataDir, "rotmg_tracker.db");
+
+        InitializeDatabaseAndLoad();
+    }
+
+    private void InitializeDatabaseAndLoad()
+    {
+        using var db = new TrackerDbContext(_dbFilePath);
+        db.Database.EnsureCreated();
+
+        // Jeśli baza SQLite jest pusta, sprawdzamy czy istnieje stary plik rotmg_data.json do zaimportowania
+        if (!db.Characters.Any() && !db.Openings.Any())
+        {
+            TryMigrateLegacyJson();
+            EnsureDropsInitialized();
+            SaveToSqlite();
+            return;
+        }
+
+        var allChars = db.Characters.ToList();
+        Data.ActiveCharacters = allChars.Where(c => c.DiedAt == null).ToList();
+        Data.Graveyard = allChars.Where(c => c.DiedAt != null).OrderByDescending(c => c.DiedAt).ToList();
+        Data.ActiveQuests = db.Quests.ToList();
+        Data.Openings = db.Openings.OrderByDescending(o => o.CreatedAt).ToList();
+
+        var activeSetting = db.Settings.FirstOrDefault(s => s.Key == "ActiveCharacterId");
+        if (activeSetting != null && Guid.TryParse(activeSetting.Value, out Guid parsedId))
+        {
+            Data.ActiveCharacterId = parsedId;
+        }
+
+        EnsureDropsInitialized();
+    }
+
+    private void TryMigrateLegacyJson()
+    {
+        string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rotmg_data.json");
+        if (!File.Exists(legacyPath)) return;
+
+        try
+        {
+            string json = File.ReadAllText(legacyPath);
+            var legacyData = JsonSerializer.Deserialize<TrackerSaveData>(json);
+            if (legacyData != null)
+            {
+                Data = legacyData;
+                if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
+                {
+                    Data.ActiveCharacters.Add(Data.CurrentCharacter);
+                    Data.ActiveCharacterId = Data.CurrentCharacter.Id;
+                }
+            }
+        }
+        catch
+        {
+            // Ignoruj uszkodzony plik JSON
+        }
     }
 
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal)
@@ -58,22 +118,13 @@ public class TrackerStateService
         };
 
         foreach (var type in Enum.GetValues<DropType>())
-        {
             ch.Drops[type] = 0;
-        }
 
         return ch;
     }
 
-    private void MigrateAndEnsureDrops()
+    private void EnsureDropsInitialized()
     {
-        if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
-        {
-            Data.ActiveCharacters.Add(Data.CurrentCharacter);
-            Data.ActiveCharacterId = Data.CurrentCharacter.Id;
-            Data.CurrentCharacter = null;
-        }
-
         if (Data.ActiveCharacters.Count == 0)
         {
             var first = CreateFreshCharacter("Wizard #1", RotmgClass.Wizard, true);
@@ -111,21 +162,17 @@ public class TrackerStateService
     public void DeleteActiveCharacter(Guid characterId)
     {
         if (Data.ActiveCharacters.Count <= 1) return;
-        Data.ActiveCharacters.RemoveAll(ch => ch.Id == characterId);
+        Data.ActiveCharacters.RemoveAll(c => c.Id == characterId);
         if (Data.ActiveCharacterId == characterId)
-        {
             Data.ActiveCharacterId = Data.ActiveCharacters[0].Id;
-        }
+
         SaveAsync();
     }
 
     public void ChangeDropCount(DropType type, int delta)
     {
         var current = ActiveCharacter;
-        if (!current.Drops.ContainsKey(type))
-            current.Drops[type] = 0;
-
-        current.Drops[type] = Math.Max(0, current.Drops[type] + delta);
+        current.Drops[type] = Math.Max(0, current.Drops.GetValueOrDefault(type) + delta);
         SaveAsync();
     }
 
@@ -138,17 +185,16 @@ public class TrackerStateService
     public void ArchiveAndResetCharacter()
     {
         var deadChar = ActiveCharacter;
-        deadChar.DiedAt =  DateTime.Now;
+        deadChar.DiedAt = DateTime.Now;
         Data.Graveyard.Insert(0, deadChar);
-        
         Data.ActiveCharacters.Remove(deadChar);
 
         if (Data.ActiveCharacters.Count == 0)
         {
-            var replacement = CreateFreshCharacter($"{deadChar.Class}",deadChar.Class,deadChar.IsSeasonal);
+            var replacement = CreateFreshCharacter($"{deadChar.Class}", deadChar.Class, deadChar.IsSeasonal);
             Data.ActiveCharacters.Add(replacement);
         }
-        
+
         Data.ActiveCharacterId = Data.ActiveCharacters[0].Id;
         SaveAsync();
     }
@@ -159,13 +205,12 @@ public class TrackerStateService
         SaveAsync();
     }
 
-    public void AddQuest(string dunegonName, int targetMarks)
+    public void AddQuest(string dungeonName, int targetMarks)
     {
-        if (string.IsNullOrWhiteSpace(dunegonName)) return;
-
+        if (string.IsNullOrWhiteSpace(dungeonName)) return;
         Data.ActiveQuests.Add(new DungeonMarkQuest
         {
-            DungeonName = dunegonName.Trim(),
+            DungeonName = dungeonName.Trim(),
             TargetMarks = Math.Max(1, targetMarks)
         });
         SaveAsync();
@@ -175,7 +220,6 @@ public class TrackerStateService
     {
         var quest = Data.ActiveQuests.FirstOrDefault(q => q.Id == questId);
         if (quest == null) return;
-        
         quest.CurrentMarks = Math.Max(0, quest.CurrentMarks + delta);
         SaveAsync();
     }
@@ -190,7 +234,7 @@ public class TrackerStateService
     {
         Data.Openings.Insert(0, new OpeningSession
         {
-            Title = string.IsNullOrWhiteSpace(title) ? $"{Data.Openings.Count + 1} opening" : title
+            Title = string.IsNullOrWhiteSpace(title) ? $"Opening #{Data.Openings.Count + 1}" : title
         });
         SaveAsync();
     }
@@ -205,7 +249,6 @@ public class TrackerStateService
     {
         var opening = Data.Openings.FirstOrDefault(o => o.Id == openingId);
         if (opening == null) return;
-        
         opening.IsExpanded = !opening.IsExpanded;
         SaveAsync();
     }
@@ -214,7 +257,6 @@ public class TrackerStateService
     {
         var opening = Data.Openings.FirstOrDefault(o => o.Id == openingId);
         if (opening == null) return;
-        
         opening.TotalChests = Math.Max(0, opening.TotalChests + delta);
         SaveAsync();
     }
@@ -223,7 +265,6 @@ public class TrackerStateService
     {
         var opening = Data.Openings.FirstOrDefault(o => o.Id == openingId);
         if (opening == null) return;
-        
         opening.TotalChests = Math.Max(0, value);
         SaveAsync();
     }
@@ -244,33 +285,32 @@ public class TrackerStateService
 
     public void SaveAsync()
     {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        string json = JsonSerializer.Serialize(Data, options);
-        _ = Task.Run(() =>
-        {
-            lock (_saveLock)
-            {
-                File.WriteAllText(_saveFilePath, json);
-            }
-        });
+        _ = Task.Run(SaveToSqlite);
     }
 
-    public void Load()
+    private void SaveToSqlite()
     {
-        if (!File.Exists(_saveFilePath))
+        lock (_dbLock)
         {
-            SaveAsync();
-            return;
-        }
+            using var db = new TrackerDbContext(_dbFilePath);
+            db.Database.EnsureCreated();
 
-        try
-        {
-            string json = File.ReadAllText(_saveFilePath);
-            Data = JsonSerializer.Deserialize<TrackerSaveData>(json) ?? new TrackerSaveData();
-        }
-        catch
-        {
-            Data = new TrackerSaveData();
+            db.Characters.RemoveRange(db.Characters);
+            db.Quests.RemoveRange(db.Quests);
+            db.Openings.RemoveRange(db.Openings);
+            db.Settings.RemoveRange(db.Settings);
+
+            db.Characters.AddRange(Data.ActiveCharacters);
+            db.Characters.AddRange(Data.Graveyard);
+            db.Quests.AddRange(Data.ActiveQuests);
+            db.Openings.AddRange(Data.Openings);
+            db.Settings.Add(new AppSetting
+            {
+                Key = "ActiveCharacterId",
+                Value = Data.ActiveCharacterId.ToString()
+            });
+
+            db.SaveChanges();
         }
     }
 }

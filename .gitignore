@@ -10,6 +10,7 @@ x86/
 bld/
 [Ll]og/
 [Ll]ogs/
+[Pp]ublish/
 
 ## JetBrains Rider
 .idea/
@@ -35,7 +36,7 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
-## Local App Data (Twoje lokalne zapisy dropów podczas testów)
+## Local App Data 
 rotmg_data.json
 
 ## OS Generated
