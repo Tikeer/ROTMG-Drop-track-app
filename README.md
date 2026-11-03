@@ -61,11 +61,11 @@ You can compile self-contained binaries (no .NET installation required on the ta
 ```bash
 dotnet publish RotmgTrackerV1.Desktop -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish/windows
 ```
--macOS (Apple Silicon arm64):
+- macOS (Apple Silicon arm64):
 ```bash
 dotnet publish RotmgTrackerV1.Desktop -c Release -r osx-arm64 --self-contained true -o ./publish/macos
 ```
-Linux (x64):
+- Linux (x64):
 ```bash
 dotnet publish RotmgTrackerV1.Desktop -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o ./publish/linux
 ```
