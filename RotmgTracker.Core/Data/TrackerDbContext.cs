@@ -16,9 +16,11 @@ public class TrackerDbContext : DbContext
     private readonly string _dbPath;
 
     public DbSet<CharacterSession> Characters => Set<CharacterSession>();
+    public DbSet<LootDropRecord> LootHistory => Set<LootDropRecord>();
+    public DbSet<DungeonRunRecord> DungeonRuns => Set<DungeonRunRecord>();
+    public DbSet<WishlistTarget> WishlistTargets => Set<WishlistTarget>();
     public DbSet<DungeonMarkQuest> Quests => Set<DungeonMarkQuest>();
     public DbSet<OpeningSession> Openings => Set<OpeningSession>();
-    public DbSet<LootDropRecord> LootHistory => Set<LootDropRecord>();
     public DbSet<AppSetting> Settings => Set<AppSetting>();
 
     public TrackerDbContext(string dbPath)
@@ -35,12 +37,20 @@ public class TrackerDbContext : DbContext
 
         modelBuilder.Entity<AppSetting>().HasKey(s => s.Key);
         modelBuilder.Entity<LootDropRecord>().HasKey(l => l.Id);
+        modelBuilder.Entity<DungeonRunRecord>().HasKey(r => r.Id);
+        modelBuilder.Entity<WishlistTarget>().HasKey(w => w.Id);
 
         modelBuilder.Entity<CharacterSession>()
             .Property(c => c.Drops)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, jsonOptions),
                 v => JsonSerializer.Deserialize<Dictionary<DropType, int>>(v, jsonOptions) ?? new());
+
+        modelBuilder.Entity<CharacterSession>()
+            .Property(c => c.EquipmentIds)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, jsonOptions),
+                v => JsonSerializer.Deserialize<int[]>(v, jsonOptions) ?? new int[4]);
 
         modelBuilder.Entity<OpeningSession>()
             .Property(o => o.Chests)

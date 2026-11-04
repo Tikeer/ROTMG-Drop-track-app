@@ -4,10 +4,13 @@ public enum DropType
 {
     RegularWhite,
     LegendaryWhite,
+    EventWhite,
     ST,
+    UT,
     BPs,
     Tops,
     DivineGoodItem,
     Shiny,
-    Shivine
+    Shivine,
+    Tiered
 }

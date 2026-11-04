@@ -1,6 +1,8 @@
 ﻿@implements IDisposable
 @inject TrackerStateService State
 @inject RotmgSnifferService Sniffer
+@inject GameDataService GameData
+
 
 <div class="app-shell">
     <!-- COLLAPSIBLE LEFT SIDEBAR -->
@@ -64,9 +66,13 @@
     <main class="main-workspace">
         <!-- PASSIVE SNIFFER STATUS & SIMULATOR BAR -->
         <div class="char-bar" style="padding: 10px 16px;">
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <span style="width: 10px; height: 10px; border-radius: 50%; background: @(Sniffer.IsListening ? "var(--accent-green)" : "#ef4444"); display: inline-block;"></span>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">@Sniffer.StatusMessage</span>
+
+                <span class="badge-nossnl" title="@GameData.ExtractionStatus">
+                    Items DB: @GameData.GetAllKnownItems().Count
+                </span>
 
                 @if (!string.IsNullOrEmpty(State.LinkedAccountName))
                 {
@@ -77,6 +83,9 @@
             </div>
 
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-sm" @onclick="ScanGameFiles" title="@GameData.ExtractionStatus">
+                    🔄 Scan Game Files
+                </button>
                 <button class="btn btn-sm" @onclick="ToggleSniffer">
                     @(Sniffer.IsListening ? "Stop Sniffer" : "Start Sniffer")
                 </button>
@@ -573,5 +582,11 @@
     public void Dispose()
     {
         State.OnStateChanged -= HandleExternalStateChange;
+    }
+    
+    private void ScanGameFiles()
+    {
+        GameData.TryAutoExtractFromInstalledGame();
+        StateHasChanged();
     }
 }

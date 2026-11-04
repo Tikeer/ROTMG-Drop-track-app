@@ -14,6 +14,7 @@ public class Program
         var appBuilder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
         appBuilder.Services.AddSingleton<TrackerStateService>();
+        appBuilder.Services.AddSingleton<GameDataService>();
         appBuilder.Services.AddSingleton<RotmgSnifferService>();
         appBuilder.RootComponents.Add<Dashboard>("#app");
 
