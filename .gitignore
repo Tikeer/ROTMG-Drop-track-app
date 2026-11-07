@@ -39,6 +39,7 @@ artifacts/
 ## Local App Data 
 rotmg_data.json
 *.txt
+*.py
 
 ## OS Generated
 .DS_Store
