@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using RotmgTrackerV1.Core.Enums;
 
@@ -11,17 +12,59 @@ public record ItemMetadata(
     string Name,
     DropType Quality,
     int Tier,
-    string OriginDungeon,
     bool IsShiny = false,
-    int BagTypeId = 0);
+    int BagTypeId = 0,
+    int SlotType = 0,
+    string ForgeTier = "",
+    string TextureFile = "",
+    int TextureIndex = 0);
+
+public record EnemyMetadata(
+    int ObjectType,
+    string IdName,
+    string DisplayName,
+    bool IsBoss,
+    int MaxHp,
+    string TextureFile = "",
+    int TextureIndex = 0);
+
+public record PortalMetadata(
+    int ObjectType,
+    string PortalId,
+    string DungeonName,
+    double GraveDifficulty,
+    string TextureFile = "",
+    int TextureIndex = 0);
+
+public record MarkMetadata(
+    int ItemId,
+    string MarkName,
+    string BossName,
+    string DungeonName,
+    string TextureFile = "",
+    int TextureIndex = 0);
 
 public class GameDataService
 {
+    private sealed record ForgeXmlEntry(
+        int LegendaryDismantle,
+        int RareDismantle,
+        int CommonDismantle,
+        bool IsRealmWhite);
+
     private readonly string _appDataDir;
-    private readonly string _catalogFilePath;
+    private readonly string _itemCatalogPath;
+    private readonly string _enemyCatalogPath;
+    private readonly string _portalCatalogPath;
+    private readonly string _markCatalogPath;
     private readonly object _catalogLock = new();
 
     private readonly Dictionary<int, ItemMetadata> _items = new();
+    private readonly Dictionary<int, EnemyMetadata> _enemies = new();
+    private readonly Dictionary<string, PortalMetadata> _portalsByName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, MarkMetadata> _marks = new();
+    private readonly Dictionary<int, RotmgClass> _playerClasses = new();
+
     private readonly Dictionary<int, BagType> _bagContainers = new()
     {
         { 0x0500, BagType.BrownBag },
@@ -34,98 +77,29 @@ public class GameDataService
         { 0x050F, BagType.RedBag }
     };
 
-    // Pełna tabela wag trudności dungeonów
-    private static readonly Dictionary<string, DungeonDifficultyTier> DungeonTiers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Tier 6: Pinnacle Endgame (3.0x)
-        { "The Shatters", DungeonDifficultyTier.Tier6_PinnacleEndgame },
-        { "Moonlight Village", DungeonDifficultyTier.Tier6_PinnacleEndgame },
+    private static readonly HashSet<int> ValidEquipmentSlotTypes =
+    [
+        1, 2, 3, 4, 5, 6, 7, 8, 9,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        27, 28, 29, 30, 31, 32, 33, 34
+    ];
 
-        // Tier 5: High Exaltation (2.5x)
-        { "Oryx's Sanctuary", DungeonDifficultyTier.Tier5_HighExalt },
-        { "Advanced Kogbold Steamworks", DungeonDifficultyTier.Tier5_HighExalt },
-        { "Advanced Nest", DungeonDifficultyTier.Tier5_HighExalt },
-        { "Plagued Nest", DungeonDifficultyTier.Tier5_HighExalt },
+    private static readonly string[] ExcludedItemKeywords =
+    [
+        "Rehearsal", "(Rehearsal)", "Admin", "Test ", " Test", "Cheat",
+        "Deprecated", "Placeholder", "Shard", "Token", "Mark of ",
+        "Mystery ", "Skin", "Pet Stone", "Dye", "Cloth", "Key",
+        "Tincture", "Effusion", "Elixir", "Drake Egg", " Shot "
+    ];
 
-        // Tier 4: Standard Exaltation & Hard Event Dungeons (1.8x)
-        { "The Void", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Lost Halls", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Cultist Hideout", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Fungal Cavern", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Crystal Cavern", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Kogbold Steamworks", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Spectral Penitentiary", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Ice Citadel", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "The Nest", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Neo Katalund", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Neo Malogia", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Neo Untaris", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Neo Forax", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Infernal Abyss of Demons", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Heroic Undead Lair", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-        { "Hidden Interregnum", DungeonDifficultyTier.Tier4_ExaltAndHardEvent },
-
-        // Tier 3: Epic Dungeons & Realm Events (1.4x)
-        { "Davy Jones' Locker", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Ice Cave", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Parasite Chambers", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Tomb of the Ancients", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Ocean Trench", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Realm Event", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Oryx's Chamber", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Wine Cellar", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Oryx's Castle", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "The Crawling Depths", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Woodland Labyrinth", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Deadwater Docks", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Puppet Master's Encore", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Cnidarian Reef", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "The Tavern", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Sulfurous Wetlands", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Mountain Temple", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Lair of Draconis", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "The Third Dimension", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Lair of Shaitan", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Secluded Thicket", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "High Tech Terror", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Legacy Heroic Undead Lair", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Legacy Heroic Abyss of Demons", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Mad God Mayhem", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Battle for the Nexus", DungeonDifficultyTier.Tier3_EpicAndRealm },
-        { "Belladonna's Garden", DungeonDifficultyTier.Tier3_EpicAndRealm },
-
-        // Tier 2: Godlands (1.0x)
-        { "Undead Lair", DungeonDifficultyTier.Tier2_Godlands },
-        { "Abyss of Demons", DungeonDifficultyTier.Tier2_Godlands },
-        { "Toxic Sewers", DungeonDifficultyTier.Tier2_Godlands },
-        { "Puppet Master's Theatre", DungeonDifficultyTier.Tier2_Godlands },
-        { "Mad Lab", DungeonDifficultyTier.Tier2_Godlands },
-        { "Cave of a Thousand Treasures", DungeonDifficultyTier.Tier2_Godlands },
-        { "Ancient Ruins", DungeonDifficultyTier.Tier2_Godlands },
-        { "Magic Woods", DungeonDifficultyTier.Tier2_Godlands },
-        { "Sprite World", DungeonDifficultyTier.Tier2_Godlands },
-        { "Candyland Hunting Grounds", DungeonDifficultyTier.Tier2_Godlands },
-        { "Cursed Library", DungeonDifficultyTier.Tier2_Godlands },
-        { "Manor of the Immortals", DungeonDifficultyTier.Tier2_Godlands },
-        { "Haunted Cemetery", DungeonDifficultyTier.Tier2_Godlands },
-        { "The Machine", DungeonDifficultyTier.Tier2_Godlands },
-        { "The Inner Workings", DungeonDifficultyTier.Tier2_Godlands },
-        { "Malogia", DungeonDifficultyTier.Tier2_Godlands },
-        { "Untaris", DungeonDifficultyTier.Tier2_Godlands },
-        { "Katalund", DungeonDifficultyTier.Tier2_Godlands },
-        { "Forax", DungeonDifficultyTier.Tier2_Godlands },
-        { "Rainbow Road", DungeonDifficultyTier.Tier2_Godlands },
-        { "Santa's Workshop", DungeonDifficultyTier.Tier2_Godlands },
-
-        // Tier 1: Early (0.8x)
-        { "Snake Pit", DungeonDifficultyTier.Tier1_Early },
-        { "Pirate Cave", DungeonDifficultyTier.Tier1_Early },
-        { "Forest Maze", DungeonDifficultyTier.Tier1_Early },
-        { "Spider Den", DungeonDifficultyTier.Tier1_Early },
-        { "Forbidden Jungle", DungeonDifficultyTier.Tier1_Early },
-        { "The Hive", DungeonDifficultyTier.Tier1_Early },
-        { "Beachzone", DungeonDifficultyTier.Tier1_Early }
-    };
+    private static readonly string[] ExcludedPortalKeywords =
+    [
+        "Rehearsal", "Legacy ", "(Heroic)", "Arena", "Test",
+        "Treasure Room", "Consolation", "Gates", "Graves",
+        "Final Battle", "Wine Cellar Short", "Cowardice",
+        "Glowing Realm", "Snowball", "Encounter", "Oryxmania",
+        "Oryx Mania", "LOD Rock Dragon", "Chicken Chamber"
+    ];
 
     public string ExtractionStatus { get; private set; } = "Not initialized";
 
@@ -135,58 +109,80 @@ public class GameDataService
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "RotmgTracker");
         Directory.CreateDirectory(_appDataDir);
-        _catalogFilePath = Path.Combine(_appDataDir, "item_catalog.json");
 
-        LoadCachedCatalog();
+        // Wersja v6 wymusza przebudowanie katalogów z <CommonDungeon diff="..."> i czystym filtrem <BagType> + <Description>
+        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v6.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v4.json");
+        _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
+        _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
 
-        // Jeśli katalog jest pusty (pierwszy start), automatycznie wyciągnij dane z zainstalowanego RotMG Exalt
-        if (_items.Count == 0)
+        LoadCachedCatalogs();
+
+        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0)
         {
             TryAutoExtractFromInstalledGame();
         }
     }
 
     public IReadOnlyCollection<ItemMetadata> GetAllKnownItems() => _items.Values;
-    public IReadOnlyCollection<string> GetAllKnownDungeons() => DungeonTiers.Keys;
+    public IReadOnlyCollection<EnemyMetadata> GetAllKnownBosses() => _enemies.Values.Where(e => e.IsBoss).ToList();
+    public IReadOnlyCollection<MarkMetadata> GetAllKnownMarks() => _marks.Values;
+    public IReadOnlyCollection<PortalMetadata> GetAllKnownPortals() => _portalsByName.Values;
+    public IReadOnlyCollection<string> GetAllKnownDungeons() => _portalsByName.Keys.ToList();
+
+    public bool TryResolvePlayerClass(int objectType, out RotmgClass rotmgClass) =>
+        _playerClasses.TryGetValue(objectType, out rotmgClass);
+
+    public bool TryResolveEnemy(int objectType, out EnemyMetadata enemy) =>
+        _enemies.TryGetValue(objectType, out enemy!);
+
+    public bool TryResolveMark(int itemId, out MarkMetadata mark) =>
+        _marks.TryGetValue(itemId, out mark!);
 
     public BagType ResolveBagType(int containerObjectType) =>
         _bagContainers.GetValueOrDefault(containerObjectType, BagType.WhiteBag);
-
-    public DungeonDifficultyTier ResolveDungeonDifficulty(string dungeonName)
-    {
-        if (string.IsNullOrWhiteSpace(dungeonName))
-            return DungeonDifficultyTier.Tier2_Godlands;
-
-        string normalized = dungeonName.Trim().Replace('’', '\'');
-        if (DungeonTiers.TryGetValue(normalized, out var tier))
-            return tier;
-
-        if (normalized.Contains("Shatters", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("Moonlight", StringComparison.OrdinalIgnoreCase))
-            return DungeonDifficultyTier.Tier6_PinnacleEndgame;
-
-        if (normalized.Contains("Sanctuary", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("Advanced", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("Plagued", StringComparison.OrdinalIgnoreCase))
-            return DungeonDifficultyTier.Tier5_HighExalt;
-
-        return DungeonDifficultyTier.Tier2_Godlands;
-    }
 
     public ItemMetadata ResolveItem(int itemId)
     {
         if (_items.TryGetValue(itemId, out var meta))
             return meta;
 
-        return new ItemMetadata(itemId, $"Unknown Item (0x{itemId:X4})", DropType.RegularWhite, -1, "RotMG");
+        return new ItemMetadata(itemId, $"Unknown Item (0x{itemId:X4})", DropType.RegularWhite, -1);
     }
-    
+
+    public PortalMetadata? ResolvePortalByDungeonName(string dungeonName)
+    {
+        if (string.IsNullOrWhiteSpace(dungeonName)) return null;
+        string normalized = dungeonName.Trim().Replace('’', '\'');
+        return _portalsByName.GetValueOrDefault(normalized);
+    }
+
+    public double ResolveDungeonGraveDifficulty(string dungeonName, double mapInfoDifficulty = 0)
+    {
+        if (!string.IsNullOrWhiteSpace(dungeonName))
+        {
+            string normalized = dungeonName.Trim().Replace('’', '\'');
+            if (_portalsByName.TryGetValue(normalized, out var portal) && portal.GraveDifficulty > 0)
+            {
+                return Math.Max(portal.GraveDifficulty, mapInfoDifficulty);
+            }
+        }
+
+        return mapInfoDifficulty > 0 ? mapInfoDifficulty : 3.0;
+    }
+
+    public DungeonDifficultyTier ResolveDungeonDifficulty(string dungeonName, double mapInfoDifficulty = 0)
+    {
+        double graves = ResolveDungeonGraveDifficulty(dungeonName, mapInfoDifficulty);
+        return RarityScoreEngine.GraveCountToTier(graves);
+    }
+
     public int TryAutoExtractFromInstalledGame(string? customResourcesAssetsPath = null)
     {
         string? assetsPath = customResourcesAssetsPath ?? FindRotmgResourcesAssetsPath();
         if (string.IsNullOrWhiteSpace(assetsPath) || !File.Exists(assetsPath))
         {
-            ExtractionStatus = "RotMG installation not found in Documents/RealmOfTheMadGod/Production";
+            ExtractionStatus = "RotMG installation not found";
             return 0;
         }
 
@@ -196,40 +192,143 @@ public class GameDataService
             byte[] startPattern = "<Objects>"u8.ToArray();
             byte[] endPattern = "</Objects>"u8.ToArray();
 
-            int totalImported = 0;
+            var xmlDocuments = new List<XDocument>();
             int searchIndex = 0;
+
+            while (searchIndex < rawBytes.Length)
+            {
+                int startIdx = rawBytes.AsSpan(searchIndex).IndexOf(startPattern);
+                if (startIdx < 0) break;
+                startIdx += searchIndex;
+
+                int endIdx = rawBytes.AsSpan(startIdx).IndexOf(endPattern);
+                if (endIdx < 0) break;
+                endIdx += startIdx + endPattern.Length;
+
+                int length = endIdx - startIdx;
+                if (length is > 20 and < 25_000_000)
+                {
+                    string xmlChunk = Encoding.UTF8.GetString(rawBytes, startIdx, length);
+                    string sanitized = Regex.Replace(
+                        xmlChunk,
+                        @"&(?!(?:amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)",
+                        "&amp;");
+
+                    try
+                    {
+                        var doc = XDocument.Parse(sanitized);
+                        if (doc.Root != null)
+                            xmlDocuments.Add(doc);
+                    }
+                    catch { }
+                }
+
+                searchIndex = endIdx;
+            }
 
             lock (_catalogLock)
             {
-                while (searchIndex < rawBytes.Length)
+                _items.Clear();
+                _enemies.Clear();
+                _portalsByName.Clear();
+                _marks.Clear();
+
+                var forgeMap = new Dictionary<int, ForgeXmlEntry>();
+                var xmlGraveMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+                // PRZEBIEG 1: Zbierz <ForgeProperties>, <DungeonDifficulty> z kluczy oraz <CommonDungeon diff="..."> z potionów
+                foreach (var doc in xmlDocuments)
                 {
-                    int startIdx = rawBytes.AsSpan(searchIndex).IndexOf(startPattern);
-                    if (startIdx < 0) break;
-                    startIdx += searchIndex;
-
-                    int endIdx = rawBytes.AsSpan(startIdx).IndexOf(endPattern);
-                    if (endIdx < 0) break;
-                    endIdx += startIdx + endPattern.Length;
-
-                    int length = endIdx - startIdx;
-                    // Pojedynczy plik XML w resources.assets ma zazwyczaj od kilku KB do ~15 MB
-                    if (length is > 20 and < 25_000_000)
+                    foreach (var fp in doc.Root!.Elements("ForgeProperties"))
                     {
-                        string xmlChunk = Encoding.UTF8.GetString(rawBytes, startIdx, length);
-                        totalImported += ParseObjectsXmlContent(xmlChunk);
+                        string? typeHex = fp.Attribute("type")?.Value;
+                        if (string.IsNullOrWhiteSpace(typeHex) || !TryParseHexOrDec(typeHex, out int itemType))
+                            continue;
+
+                        var dismantle = fp.Element("DismantleRequirements");
+                        int leg = 0, rare = 0, com = 0;
+                        if (dismantle != null)
+                        {
+                            int.TryParse(dismantle.Attribute("legendary")?.Value, out leg);
+                            int.TryParse(dismantle.Attribute("rare")?.Value, out rare);
+                            int.TryParse(dismantle.Attribute("common")?.Value, out com);
+                        }
+
+                        bool isRealmWhite = fp.Elements("RequireDismantleWithLabel")
+                            .Any(e => string.Equals(e.Value.Trim(), "REALMWHITE", StringComparison.OrdinalIgnoreCase));
+
+                        forgeMap[itemType] = new ForgeXmlEntry(leg, rare, com, isRealmWhite);
                     }
 
-                    searchIndex = endIdx;
+                    foreach (var obj in doc.Root.Elements("Object"))
+                    {
+                        // 1A. <CommonDungeon diff="9.5">Oryx's Sanctuary</CommonDungeon> wewnątrz potionów statystyk
+                        foreach (var cd in obj.Elements("CommonDungeon"))
+                        {
+                            string dungName = cd.Value.Trim().Replace('’', '\'');
+                            string? diffAttr = cd.Attribute("diff")?.Value;
+                            if (!string.IsNullOrWhiteSpace(dungName) &&
+                                !string.IsNullOrWhiteSpace(diffAttr) &&
+                                double.TryParse(diffAttr, NumberStyles.Float, CultureInfo.InvariantCulture, out double cdGraves) &&
+                                cdGraves > 0)
+                            {
+                                if (!xmlGraveMap.TryGetValue(dungName, out double prev) || cdGraves > prev)
+                                    xmlGraveMap[dungName] = cdGraves;
+                            }
+                        }
+
+                        // 1B. <DungeonDifficulty> wewnątrz obiektów <Key />
+                        if (obj.Element("Key") != null)
+                        {
+                            string? diffStr = obj.Element("DungeonDifficulty")?.Value;
+                            if (!string.IsNullOrWhiteSpace(diffStr) &&
+                                double.TryParse(diffStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double keyGraves) &&
+                                keyGraves > 0)
+                            {
+                                var createPortalNode = obj.Elements("Activate")
+                                    .FirstOrDefault(a => string.Equals(a.Value.Trim(), "CreatePortal", StringComparison.OrdinalIgnoreCase));
+
+                                string? targetPortalId = createPortalNode?.Attribute("id")?.Value;
+                                if (!string.IsNullOrWhiteSpace(targetPortalId))
+                                {
+                                    xmlGraveMap[targetPortalId.Trim()] = keyGraves;
+                                    string cleanFromPortal = targetPortalId.Replace(" Portal", "", StringComparison.OrdinalIgnoreCase).Trim();
+                                    xmlGraveMap[cleanFromPortal] = keyGraves;
+                                }
+
+                                string? keyId = obj.Attribute("id")?.Value;
+                                if (!string.IsNullOrWhiteSpace(keyId))
+                                {
+                                    string cleanFromKey = keyId
+                                        .Replace(" Solo Key", "", StringComparison.OrdinalIgnoreCase)
+                                        .Replace(" Key", "", StringComparison.OrdinalIgnoreCase)
+                                        .Trim();
+                                    xmlGraveMap[cleanFromKey] = keyGraves;
+                                }
+                            }
+                        }
+                    }
                 }
 
-                if (totalImported > 0)
+                // PRZEBIEG 2: Parsuj Portale, Klasy, Bossów, Marki i Przedmioty
+                foreach (var doc in xmlDocuments)
                 {
-                    SaveCachedCatalog();
-                    ExtractionStatus = $"Loaded {_items.Count} items directly from RotMG resources.assets";
+                    foreach (var obj in doc.Root!.Elements("Object"))
+                    {
+                        ParseGameObjectElement(obj, forgeMap, xmlGraveMap);
+                    }
+                }
+
+                if (_items.Count > 0)
+                {
+                    SaveCachedCatalogs();
+                    int bossCount = _enemies.Values.Count(e => e.IsBoss);
+                    int shinyCount = _items.Values.Count(i => i.IsShiny);
+                    ExtractionStatus = $"Extracted {_items.Count} items ({shinyCount} shinies), {bossCount} bosses, {_portalsByName.Count} portals & {_marks.Count} marks from XML";
                 }
             }
 
-            return totalImported;
+            return _items.Count;
         }
         catch (Exception ex)
         {
@@ -238,12 +337,319 @@ public class GameDataService
         }
     }
 
+    private void ParseGameObjectElement(
+        XElement obj,
+        Dictionary<int, ForgeXmlEntry> forgeMap,
+        Dictionary<string, double> xmlGraveMap)
+    {
+        string? typeHex = obj.Attribute("type")?.Value;
+        string? idName = obj.Attribute("id")?.Value?.Trim();
+        if (string.IsNullOrWhiteSpace(typeHex) || string.IsNullOrWhiteSpace(idName))
+            return;
+
+        if (!TryParseHexOrDec(typeHex, out int objectType))
+            return;
+
+        string displayName = (obj.Element("DisplayId")?.Value ?? idName).Trim();
+        (string texFile, int texIndex) = ExtractTextureInfo(obj);
+
+        // 1. Klasy postaci (<Player />)
+        if (obj.Element("Player") != null && Enum.TryParse<RotmgClass>(idName, true, out var parsedClass))
+        {
+            _playerClasses[objectType] = parsedClass;
+            return;
+        }
+
+        // 2. Portale dungeonów (<DungeonPortal />)
+        if (obj.Element("DungeonPortal") != null)
+        {
+            string? dungName = obj.Element("DungeonName")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(dungName))
+                return;
+
+            string cleanDung = dungName.Replace(" Portal", "", StringComparison.OrdinalIgnoreCase).Trim().Replace('’', '\'');
+            if (cleanDung is "Nexus" or "Vault" or "Daily Quest Room" or "Pet Yard" or "Guild Hall" or "Cloth Bazaar")
+                return;
+
+            foreach (var excluded in ExcludedPortalKeywords)
+            {
+                if (idName.Contains(excluded, StringComparison.OrdinalIgnoreCase) ||
+                    cleanDung.Contains(excluded, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            double graves = 0;
+            string? portalDiffStr = obj.Element("DungeonDifficulty")?.Value ?? obj.Element("Difficulty")?.Value;
+            if (!string.IsNullOrWhiteSpace(portalDiffStr))
+                double.TryParse(portalDiffStr, NumberStyles.Float, CultureInfo.InvariantCulture, out graves);
+
+            if (graves <= 0 && xmlGraveMap.TryGetValue(idName, out double gFromId))
+                graves = gFromId;
+            if (graves <= 0 && xmlGraveMap.TryGetValue(cleanDung, out double gFromName))
+                graves = gFromName;
+
+            if (!_portalsByName.TryGetValue(cleanDung, out var existingPortal) || graves > existingPortal.GraveDifficulty)
+            {
+                _portalsByName[cleanDung] = new PortalMetadata(objectType, idName, cleanDung, graves, texFile, texIndex);
+            }
+            return;
+        }
+
+        // 3. Bossowie i Przeciwnicy (<Enemy />)
+        if (obj.Element("Enemy") != null)
+        {
+            if (idName.Contains("Rehearsal", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            int maxHp = 0;
+            int.TryParse(obj.Element("MaxHitPoints")?.Value, out maxHp);
+
+            // Prawdziwy Boss w XML gry ma <KeepDamageRecord />, <Oryx /> lub <Quest /> (z wyłączeniem zwykłych mobków <God /> z Godlandsów)
+            bool isBoss = obj.Element("KeepDamageRecord") != null ||
+                          obj.Element("Oryx") != null ||
+                          (obj.Element("Quest") != null && obj.Element("God") == null) ||
+                          idName.Contains(" Loot Chest", StringComparison.OrdinalIgnoreCase) ||
+                          displayName.Contains(" Chest", StringComparison.OrdinalIgnoreCase);
+
+            if (isBoss || maxHp >= 5000)
+            {
+                _enemies[objectType] = new EnemyMetadata(
+                    objectType,
+                    idName,
+                    displayName,
+                    isBoss,
+                    maxHp,
+                    texFile,
+                    texIndex);
+            }
+            return;
+        }
+
+        // 4. Marki u Tinkerera (<Mark />) oraz Przedmioty (<Item />)
+        if (obj.Element("Item") != null)
+        {
+            string labels = obj.Element("Labels")?.Value ?? string.Empty;
+            var labelTokens = labels
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // 4A. Mark u Tinkerera (<Mark /> lub etykieta MARK)
+            if (obj.Element("Mark") != null || labelTokens.Contains("MARK"))
+            {
+                (string bossName, string dungeonName) = ParseMarkDropLocationFromXml(obj, displayName);
+                _marks[objectType] = new MarkMetadata(objectType, displayName, bossName, dungeonName, texFile, texIndex);
+                return;
+            }
+
+            // 4B. Ekwipunek i Blueprinty (wymaga <BagType> > 0 oraz <Description>, co wycina "SpecPen OA Shot 1"!)
+            if (!IsValidCollectibleEquipment(obj, idName, displayName, labelTokens, out int slotType, out int xmlBagType))
+                return;
+
+            bool isShiny = labelTokens.Contains("SHINY") ||
+                           (texFile.Contains("Shiny", StringComparison.OrdinalIgnoreCase) && idName.EndsWith(" Shiny", StringComparison.OrdinalIgnoreCase));
+
+            string finalItemName = displayName;
+            if (isShiny)
+            {
+                string baseClean = displayName.Replace(" Shiny", "", StringComparison.OrdinalIgnoreCase).Trim();
+                finalItemName = baseClean.StartsWith("Shiny ", StringComparison.OrdinalIgnoreCase)
+                    ? baseClean
+                    : $"Shiny {baseClean}";
+            }
+            else if (labelTokens.Contains("RESKIN") ||
+                     idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase) ||
+                     idName.Contains("- Midas", StringComparison.OrdinalIgnoreCase))
+            {
+                finalItemName = idName;
+            }
+
+            int tier = -1;
+            string? tierStr = obj.Element("Tier")?.Value;
+            if (!string.IsNullOrWhiteSpace(tierStr) && int.TryParse(tierStr, out int parsedTier))
+                tier = parsedTier;
+
+            forgeMap.TryGetValue(objectType, out var forgeEntry);
+            string forgeTier = ResolveItemForgeTier(forgeEntry, labelTokens);
+            DropType quality = DetermineDropQuality(obj, xmlBagType, tier, isShiny, forgeEntry, forgeTier, labelTokens, finalItemName);
+
+            _items[objectType] = new ItemMetadata(
+                objectType,
+                finalItemName,
+                quality,
+                tier,
+                isShiny,
+                xmlBagType,
+                slotType,
+                forgeTier,
+                texFile,
+                texIndex);
+        }
+    }
+
+    private static (string BossName, string DungeonName) ParseMarkDropLocationFromXml(XElement markObj, string markName)
+    {
+        var dropLocationNode = markObj.Element("ExtraTooltipData")?
+            .Elements("EffectInfo")
+            .FirstOrDefault(e => string.Equals(e.Attribute("name")?.Value, "Drop location", StringComparison.OrdinalIgnoreCase));
+
+        string? desc = dropLocationNode?.Attribute("description")?.Value;
+        if (!string.IsNullOrWhiteSpace(desc))
+        {
+            var match = Regex.Match(desc, @"defeating\s+(?<boss>.+?)\s+in\s+(?:the\s+)?(?<dungeon>.+?)\.?$", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                string boss = match.Groups["boss"].Value.Trim();
+                string dungeon = match.Groups["dungeon"].Value.Trim().Replace('’', '\'');
+                return (boss, dungeon);
+            }
+        }
+
+        string fallbackBoss = markName.Replace("Mark of ", "", StringComparison.OrdinalIgnoreCase).Trim();
+        return (fallbackBoss, "Unknown Dungeon");
+    }
+
+    private static string ResolveItemForgeTier(ForgeXmlEntry? forge, HashSet<string> labelTokens)
+    {
+        if (forge != null)
+        {
+            if (forge.LegendaryDismantle >= 15) return "S";
+            if (forge.RareDismantle >= 30) return "A";
+            if (forge.RareDismantle >= 15) return "B";
+            if (forge.RareDismantle >= 5) return "C";
+            if (forge.CommonDismantle >= 15) return "D";
+        }
+
+        if (labelTokens.Contains("POWERTIER_SS") || labelTokens.Contains("POWERTIER_S")) return "S";
+        if (labelTokens.Contains("POWERTIER_A")) return "A";
+        if (labelTokens.Contains("POWERTIER_B")) return "B";
+        if (labelTokens.Contains("POWERTIER_C")) return "C";
+        if (labelTokens.Contains("POWERTIER_D")) return "D";
+
+        return string.Empty;
+    }
+
+    private static DropType DetermineDropQuality(
+        XElement obj,
+        int xmlBagType,
+        int tier,
+        bool isShiny,
+        ForgeXmlEntry? forge,
+        string forgeTier,
+        HashSet<string> labelTokens,
+        string name)
+    {
+        if (isShiny) return DropType.Shiny;
+
+        if (name.Contains("Schematic", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("Blueprint", StringComparison.OrdinalIgnoreCase))
+            return DropType.BPs;
+
+        if (xmlBagType == 8 || labelTokens.Contains("TAB_ST") || labelTokens.Contains("ST") || obj.Attribute("setName") != null)
+            return DropType.ST;
+
+        if (xmlBagType == 6)
+        {
+            if (forge is { IsRealmWhite: true } || labelTokens.Contains("REALMWHITE"))
+                return DropType.EventWhite;
+
+            if (forgeTier == "S")
+                return DropType.LegendaryWhite;
+
+            return DropType.RegularWhite;
+        }
+
+        if (tier >= 13)
+            return DropType.Tops;
+
+        if (tier > 0)
+            return DropType.Tiered;
+
+        return DropType.UT;
+    }
+
+    private static (string File, int Index) ExtractTextureInfo(XElement obj)
+    {
+        var texNode = obj.Element("Texture") ?? obj.Element("AnimatedTexture");
+        if (texNode == null) return (string.Empty, 0);
+
+        string file = texNode.Element("File")?.Value ?? string.Empty;
+        string? indexHex = texNode.Element("Index")?.Value;
+        int index = 0;
+        if (!string.IsNullOrWhiteSpace(indexHex))
+            TryParseHexOrDec(indexHex, out index);
+
+        return (file, index);
+    }
+
+    private static bool IsValidCollectibleEquipment(
+        XElement obj,
+        string idName,
+        string displayName,
+        HashSet<string> labelTokens,
+        out int slotType,
+        out int xmlBagType)
+    {
+        slotType = 0;
+        xmlBagType = 0;
+
+        if (!int.TryParse(obj.Element("SlotType")?.Value, out slotType))
+            return false;
+
+        // Każdy prawdziwy przedmiot w grze musi mieć <BagType> > 0 oraz niepusty <Description>
+        // (eliminuje to techniczne obiekty strzałów typu "SpecPen OA Shot 1")
+        if (!int.TryParse(obj.Element("BagType")?.Value, out xmlBagType) || xmlBagType <= 0)
+            return false;
+
+        if (string.IsNullOrWhiteSpace(obj.Element("Description")?.Value))
+            return false;
+
+        if (obj.Element("Quantity") != null ||
+            obj.Element("Consumable") != null ||
+            obj.Element("Key") != null ||
+            obj.Element("Mark") != null ||
+            obj.Element("PetFood") != null ||
+            obj.Element("Treasure") != null)
+        {
+            return false;
+        }
+
+        if (Regex.IsMatch(displayName, @"^x\d+\s", RegexOptions.IgnoreCase) ||
+            Regex.IsMatch(idName, @"^x\d+\s", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
+        foreach (var keyword in ExcludedItemKeywords)
+        {
+            if (idName.Contains(keyword, StringComparison.OrdinalIgnoreCase) ||
+                displayName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        if (labelTokens.Contains("PET") || labelTokens.Contains("CONSUMABLE") ||
+            labelTokens.Contains("TOKEN") || labelTokens.Contains("MARK") || labelTokens.Contains("KEY"))
+        {
+            return false;
+        }
+
+        bool isBlueprint = displayName.Contains("Blueprint", StringComparison.OrdinalIgnoreCase) ||
+                           displayName.Contains("Schematic", StringComparison.OrdinalIgnoreCase);
+
+        if (!isBlueprint && !ValidEquipmentSlotTypes.Contains(slotType))
+            return false;
+
+        return true;
+    }
+
     private static string? FindRotmgResourcesAssetsPath()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-        // Wszystkie lokalizacje głównego folderu gry na macOS, Windows i Linux (w tym Steam Proton AppID 200210)
         string[] candidateRealmRoots =
         [
             Path.Combine(home, ".local", "share", "RealmOfTheMadGod"),
@@ -252,15 +658,13 @@ public class GameDataService
             Path.Combine(home, "OneDrive", "Documents", "RealmOfTheMadGod"),
             Path.Combine(home, "OneDrive", "Dokumenty", "RealmOfTheMadGod"),
             Path.Combine(home, ".steam", "steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod"),
-            Path.Combine(home, ".local", "share", "Steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod"),
-            Path.Combine(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod")
+            Path.Combine(home, ".local", "share", "Steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod")
         ];
 
         foreach (var root in candidateRealmRoots.Distinct())
         {
             if (!Directory.Exists(root)) continue;
 
-            // Szukamy najpierw w Production, a potem w całym folderze RealmOfTheMadGod
             string prodDir = Path.Combine(root, "Production");
             string searchDir = Directory.Exists(prodDir) ? prodDir : root;
 
@@ -272,91 +676,10 @@ public class GameDataService
                 if (!string.IsNullOrWhiteSpace(found))
                     return found;
             }
-            catch
-            {
-                // Ignoruj foldery bez uprawnień odczytu
-            }
+            catch { }
         }
 
         return null;
-    }
-
-    private int ParseObjectsXmlContent(string xmlContent)
-    {
-        int count = 0;
-
-        // Naprawa niezakodowanych znaków '&' w opisach przedmiotów DECA, które psują standardowy parser XML
-        string sanitizedXml = System.Text.RegularExpressions.Regex.Replace(
-            xmlContent,
-            @"&(?!(?:amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)",
-            "&amp;");
-
-        try
-        {
-            var doc = XDocument.Parse(sanitizedXml);
-            if (doc.Root == null) return 0;
-
-            foreach (var obj in doc.Root.Elements("Object"))
-            {
-                string? typeHex = obj.Attribute("type")?.Value;
-                string? idName = obj.Attribute("id")?.Value;
-                if (string.IsNullOrWhiteSpace(typeHex) || string.IsNullOrWhiteSpace(idName))
-                    continue;
-
-                if (!TryParseHexOrDec(typeHex, out int objectType))
-                    continue;
-
-                if (obj.Element("Item") != null)
-                {
-                    string displayName = obj.Element("DisplayId")?.Value ?? idName;
-                    bool isShiny = obj.Element("Shiny") != null ||
-                                   idName.Contains("Shiny", StringComparison.OrdinalIgnoreCase) ||
-                                   displayName.Contains("Shiny", StringComparison.OrdinalIgnoreCase);
-
-                    int tier = -1;
-                    string? tierStr = obj.Element("Tier")?.Value;
-                    if (!string.IsNullOrWhiteSpace(tierStr) && int.TryParse(tierStr, out int parsedTier))
-                        tier = parsedTier;
-
-                    int xmlBagType = 0;
-                    int.TryParse(obj.Element("BagType")?.Value, out xmlBagType);
-
-                    string labels = obj.Element("Labels")?.Value ?? string.Empty;
-                    DropType quality = DetermineDropQuality(xmlBagType, tier, isShiny, labels, displayName);
-
-                    _items[objectType] = new ItemMetadata(objectType, displayName, quality, tier, "RotMG", isShiny, xmlBagType);
-                    count++;
-                }
-            }
-        }
-        catch
-        {
-            // Ignoruj bloki binarne niebędące poprawnym XML-em
-        }
-
-        return count;
-    }
-
-    private static DropType DetermineDropQuality(int xmlBagType, int tier, bool isShiny, string labels, string name)
-    {
-        if (isShiny) return DropType.Shiny;
-        if (name.Contains("Schematic", StringComparison.OrdinalIgnoreCase) ||
-            name.Contains("Blueprint", StringComparison.OrdinalIgnoreCase))
-            return DropType.BPs;
-
-        if (xmlBagType == 8 || labels.Contains("ST", StringComparison.OrdinalIgnoreCase))
-            return DropType.ST;
-
-        if (xmlBagType == 6)
-            return DropType.RegularWhite;
-
-        if (tier >= 13)
-            return DropType.Tops;
-
-        if (tier > 0)
-            return DropType.Tiered;
-
-        return DropType.UT;
     }
 
     private static bool TryParseHexOrDec(string raw, out int result)
@@ -368,32 +691,57 @@ public class GameDataService
         return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
     }
 
-    private void LoadCachedCatalog()
+    private void LoadCachedCatalogs()
     {
-        if (!File.Exists(_catalogFilePath)) return;
-
         try
         {
-            string json = File.ReadAllText(_catalogFilePath);
-            var loaded = JsonSerializer.Deserialize<List<ItemMetadata>>(json);
-            if (loaded == null) return;
+            if (File.Exists(_itemCatalogPath))
+            {
+                var loadedItems = JsonSerializer.Deserialize<List<ItemMetadata>>(File.ReadAllText(_itemCatalogPath));
+                if (loadedItems != null)
+                    foreach (var item in loadedItems) _items[item.ItemId] = item;
+            }
 
-            foreach (var item in loaded)
-                _items[item.ItemId] = item;
+            if (File.Exists(_enemyCatalogPath))
+            {
+                var loadedEnemies = JsonSerializer.Deserialize<List<EnemyMetadata>>(File.ReadAllText(_enemyCatalogPath));
+                if (loadedEnemies != null)
+                    foreach (var enemy in loadedEnemies) _enemies[enemy.ObjectType] = enemy;
+            }
+
+            if (File.Exists(_portalCatalogPath))
+            {
+                var loadedPortals = JsonSerializer.Deserialize<List<PortalMetadata>>(File.ReadAllText(_portalCatalogPath));
+                if (loadedPortals != null)
+                    foreach (var portal in loadedPortals) _portalsByName[portal.DungeonName] = portal;
+            }
+
+            if (File.Exists(_markCatalogPath))
+            {
+                var loadedMarks = JsonSerializer.Deserialize<List<MarkMetadata>>(File.ReadAllText(_markCatalogPath));
+                if (loadedMarks != null)
+                    foreach (var mark in loadedMarks) _marks[mark.ItemId] = mark;
+            }
 
             if (_items.Count > 0)
-                ExtractionStatus = $"Loaded {_items.Count} items from local cache (item_catalog.json)";
+            {
+                int bossCount = _enemies.Values.Count(e => e.IsBoss);
+                int shinyCount = _items.Values.Count(i => i.IsShiny);
+                ExtractionStatus = $"Loaded {_items.Count} items ({shinyCount} shinies), {bossCount} bosses, {_portalsByName.Count} portals & {_marks.Count} marks";
+            }
         }
         catch { }
     }
 
-    private void SaveCachedCatalog()
+    private void SaveCachedCatalogs()
     {
         try
         {
             var options = new JsonSerializerOptions { WriteIndented = true };
-            string json = JsonSerializer.Serialize(_items.Values.ToList(), options);
-            File.WriteAllText(_catalogFilePath, json);
+            File.WriteAllText(_itemCatalogPath, JsonSerializer.Serialize(_items.Values.ToList(), options));
+            File.WriteAllText(_enemyCatalogPath, JsonSerializer.Serialize(_enemies.Values.ToList(), options));
+            File.WriteAllText(_portalCatalogPath, JsonSerializer.Serialize(_portalsByName.Values.ToList(), options));
+            File.WriteAllText(_markCatalogPath, JsonSerializer.Serialize(_marks.Values.ToList(), options));
         }
         catch { }
     }

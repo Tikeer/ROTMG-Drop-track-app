@@ -12,6 +12,9 @@
     --accent-green: #22c55e;
     --accent-danger: #ef4444;
     --accent-purple: #a855f7;
+    --accent-gold: #f59e0b;
+    --bg-input: #1e2230;
+    --border-color: #2f3548;
     --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
 }
 

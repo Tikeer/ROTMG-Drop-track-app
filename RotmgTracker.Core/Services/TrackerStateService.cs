@@ -17,6 +17,7 @@ public class TrackerSaveData
     public List<OpeningSession> Openings { get; set; } = new();
     public List<LootDropRecord> LootHistory { get; set; } = new();
     public List<DungeonRunRecord> DungeonRuns { get; set; } = new();
+    public List<CombatSessionRecord> CombatHistory { get; set; } = new();
     public List<WishlistTarget> Wishlist { get; set; } = new();
 }
 
@@ -36,6 +37,9 @@ public class TrackerStateService
     public bool PendingAccountSeasonal { get; private set; } = true;
 
     public string CurrentDungeonName { get; private set; } = "Nexus";
+    public double CurrentDungeonGraves { get; private set; } = 0.0;
+    public int CurrentDungeonPortalType { get; private set; } = 0;
+    public Guid? LastCompletedCombatSessionId { get; private set; }
     public Dictionary<int, PlayerDpsEntry> CurrentDungeonPlayers { get; } = new();
 
     public event Action? OnStateChanged;
@@ -92,6 +96,7 @@ public class TrackerStateService
         Data.Openings = db.Openings.OrderByDescending(o => o.CreatedAt).ToList();
         Data.LootHistory = db.LootHistory.OrderByDescending(l => l.DroppedAt).ToList();
         Data.DungeonRuns = db.DungeonRuns.OrderByDescending(r => r.CompletedAt).ToList();
+        Data.CombatHistory = db.CombatSessions.OrderByDescending(c => c.EndedAt).ToList();
         Data.Wishlist = db.WishlistTargets.OrderByDescending(w => w.CreatedAt).ToList();
 
         var activeSetting = db.Settings.FirstOrDefault(s => s.Key == "ActiveCharacterId");
@@ -105,12 +110,12 @@ public class TrackerStateService
         EnsureDropsInitialized();
     }
 
-    // Automatycznie aktualizuje istniejący plik SQLite o nowe kolumny i tabele bez utraty danych
     private static void EnsureSchemaUpgraded(TrackerDbContext db)
     {
         string[] migrations =
         [
             "CREATE TABLE IF NOT EXISTS DungeonRuns (Id TEXT PRIMARY KEY, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, DungeonName TEXT NOT NULL, DifficultyTier INTEGER NOT NULL, ServerName TEXT NOT NULL, IsSeasonal INTEGER NOT NULL, SeasonTag TEXT NOT NULL, CompletedAt TEXT NOT NULL);",
+            "CREATE TABLE IF NOT EXISTS CombatSessions (Id TEXT PRIMARY KEY, DungeonName TEXT NOT NULL, BossName TEXT NOT NULL, BossObjectType INTEGER NOT NULL, GraveDifficulty REAL NOT NULL, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, TotalBossDamage INTEGER NOT NULL, MyDamage INTEGER NOT NULL, Participants TEXT NOT NULL, EndedAt TEXT NOT NULL);",
             "CREATE TABLE IF NOT EXISTS WishlistTargets (Id TEXT PRIMARY KEY, ItemId INTEGER NOT NULL, ItemName TEXT NOT NULL, TargetDungeonName TEXT NOT NULL, MinimumRarity INTEGER NOT NULL, RequireShiny INTEGER NOT NULL, DesiredEnchantments TEXT NOT NULL, EstimatedDropRate REAL NOT NULL, CreatedAt TEXT NOT NULL, CompletedAt TEXT NULL, IsCompleted INTEGER NOT NULL);"
         ];
 
@@ -133,18 +138,35 @@ public class TrackerStateService
             "ALTER TABLE Characters ADD COLUMN DeathServer TEXT NULL;",
             "ALTER TABLE Characters ADD COLUMN DeathDungeon TEXT NULL;",
             "ALTER TABLE Characters ADD COLUMN KilledBy TEXT NULL;",
+            "ALTER TABLE LootHistory ADD COLUMN BagInstanceId TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';",
+            "ALTER TABLE LootHistory ADD COLUMN CombatSessionId TEXT NULL;",
             "ALTER TABLE LootHistory ADD COLUMN CharacterId TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';",
+            "ALTER TABLE LootHistory ADD COLUMN CharacterSkinId INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE LootHistory ADD COLUMN CharacterMaxedStatsAtDrop INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE LootHistory ADD COLUMN BaseFameAtDrop INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE LootHistory ADD COLUMN SeasonTag TEXT NOT NULL DEFAULT 'S1';",
             "ALTER TABLE LootHistory ADD COLUMN ItemTier INTEGER NOT NULL DEFAULT -1;",
             "ALTER TABLE LootHistory ADD COLUMN PhysicalBag INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE LootHistory ADD COLUMN BagObjectType INTEGER NOT NULL DEFAULT 1289;",
             "ALTER TABLE LootHistory ADD COLUMN Rarity INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE LootHistory ADD COLUMN Enchantments TEXT NOT NULL DEFAULT '';",
             "ALTER TABLE LootHistory ADD COLUMN IsShiny INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE LootHistory ADD COLUMN DungeonPortalObjectType INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE LootHistory ADD COLUMN GraveDifficulty REAL NOT NULL DEFAULT 3.0;",
             "ALTER TABLE LootHistory ADD COLUMN DungeonDifficulty INTEGER NOT NULL DEFAULT 2;",
+            "ALTER TABLE LootHistory ADD COLUMN BossName TEXT NOT NULL DEFAULT 'Unknown Boss';",
+            "ALTER TABLE LootHistory ADD COLUMN BossObjectType INTEGER NOT NULL DEFAULT 0;",
             "ALTER TABLE LootHistory ADD COLUMN ServerName TEXT NOT NULL DEFAULT 'EUWest';",
-            "ALTER TABLE LootHistory ADD COLUMN RarityScore REAL NOT NULL DEFAULT 100.0;"
+            "ALTER TABLE LootHistory ADD COLUMN RarityScore REAL NOT NULL DEFAULT 100.0;",
+            "ALTER TABLE Quests ADD COLUMN QuestTitle TEXT NOT NULL DEFAULT 'Daily Tinkerer Quest';",
+            "ALTER TABLE Quests ADD COLUMN MarkItemId INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE Quests ADD COLUMN MarkName TEXT NOT NULL DEFAULT '';",
+            "ALTER TABLE Quests ADD COLUMN DungeonPortalObjectType INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE Quests ADD COLUMN BossName TEXT NOT NULL DEFAULT 'Dungeon Boss';",
+            "ALTER TABLE Quests ADD COLUMN RealmBiomeSource TEXT NOT NULL DEFAULT 'Realm / Godlands';",
+            "ALTER TABLE Quests ADD COLUMN RewardName TEXT NOT NULL DEFAULT 'Quest Chest';",
+            "ALTER TABLE Quests ADD COLUMN RewardItemId INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE Quests ADD COLUMN IsAutoTracked INTEGER NOT NULL DEFAULT 1;"
         ];
 
         foreach (var alter in alterColumns)
@@ -153,7 +175,6 @@ public class TrackerStateService
         }
     }
 
-    // --- 1. IDENTYFIKACJA POSTACI I AUTOMATYCZNA NUMERACJA SLOTÓW (np. Archer #1, Archer #2) ---
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
     {
         int nextClassSlot = Data.ActiveCharacters.Concat(Data.Graveyard)
@@ -176,7 +197,7 @@ public class TrackerStateService
         return ch;
     }
 
-    // --- 2. REJESTRACJA DROPÓW + DYNAMICZNA SYNCHRONIZACJA LICZNIKÓW + RARITY SCORE ---
+    // Rejestruje drop powiązany z workiem (BagInstanceId), trudnością w nagrobkach (1-10) i walką DPS (CombatSessionId)
     public void RecordLootDrop(
         string itemName,
         int itemId,
@@ -187,16 +208,27 @@ public class TrackerStateService
         DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands,
         BagType physicalBag = BagType.WhiteBag,
         int itemTier = -1,
-        string enchantments = "")
+        string enchantments = "",
+        string bossName = "Unknown Boss",
+        int bossObjectType = 0,
+        double graveDifficulty = 3.5,
+        int bagObjectType = 0x0509,
+        int dungeonPortalObjectType = 0,
+        Guid? bagInstanceId = null,
+        Guid? combatSessionId = null)
     {
         var current = ActiveCharacter;
-        double score = RarityScoreEngine.CalculateIntrinsicScore(bagQuality, rarity, isShiny, difficulty);
+        double effectiveGraves = graveDifficulty > 0 ? graveDifficulty : CurrentDungeonGraves;
+        double score = RarityScoreEngine.CalculateIntrinsicScore(bagQuality, rarity, isShiny, effectiveGraves, difficulty);
 
         var record = new LootDropRecord
         {
+            BagInstanceId = bagInstanceId ?? Guid.NewGuid(),
+            CombatSessionId = combatSessionId ?? LastCompletedCombatSessionId,
             CharacterId = current.Id,
             CharacterName = current.FormattedTitle,
             CharacterClass = current.Class,
+            CharacterSkinId = current.SkinId,
             CharacterMaxedStatsAtDrop = current.MaxedStats,
             BaseFameAtDrop = current.BaseFame,
             AccountName = LinkedAccountName,
@@ -206,12 +238,17 @@ public class TrackerStateService
             ItemName = itemName,
             ItemTier = itemTier,
             PhysicalBag = physicalBag,
+            BagObjectType = bagObjectType,
             BagType = bagQuality,
             Rarity = rarity,
             Enchantments = enchantments,
             IsShiny = isShiny || bagQuality is DropType.Shiny or DropType.Shivine,
             DungeonName = string.IsNullOrWhiteSpace(dungeonName) ? CurrentDungeonName : dungeonName,
-            DungeonDifficulty = difficulty,
+            DungeonPortalObjectType = dungeonPortalObjectType > 0 ? dungeonPortalObjectType : CurrentDungeonPortalType,
+            GraveDifficulty = effectiveGraves,
+            DungeonDifficulty = RarityScoreEngine.GraveCountToTier(effectiveGraves),
+            BossName = string.IsNullOrWhiteSpace(bossName) ? "Unknown Boss" : bossName,
+            BossObjectType = bossObjectType,
             ServerName = CurrentServerName,
             RarityScore = score,
             DroppedAt = DateTime.Now
@@ -220,7 +257,6 @@ public class TrackerStateService
         Data.LootHistory.Insert(0, record);
         RecalculateCharacterDrops(current);
 
-        // Automatyczne odhaczenie celu na Wishliście, jeśli wypadł szukany przedmiot
         foreach (var wish in Data.Wishlist.Where(w => !w.IsCompleted))
         {
             if ((wish.ItemId > 0 && wish.ItemId == itemId) ||
@@ -245,7 +281,6 @@ public class TrackerStateService
 
         Data.LootHistory.Remove(record);
 
-        // Natychmiastowe przeliczenie licznika postaci na podstawie LootHistory (Single Source of Truth)
         var owner = Data.ActiveCharacters.Concat(Data.Graveyard).FirstOrDefault(c => c.Id == record.CharacterId);
         if (owner != null)
             RecalculateCharacterDrops(owner);
@@ -257,15 +292,49 @@ public class TrackerStateService
     private void RecalculateCharacterDrops(CharacterSession character)
     {
         var charLoot = Data.LootHistory.Where(l => l.CharacterId == character.Id).ToList();
-        if (charLoot.Count == 0) return;
-
         foreach (var type in Enum.GetValues<DropType>())
         {
             character.Drops[type] = charLoot.Count(l => l.BagType == type);
         }
     }
 
-    // --- 3. LICZNIK UKOŃCZONYCH DUNGEONÓW & INTEGRACJA Z WISHLISTĄ ---
+    // Zapisuje tabelę obrażeń z walki z bossem i zwraca jej ID do przypięcia pod wypadający worek
+    public Guid? ArchiveCurrentCombatSession(string bossName, int bossObjectType, double graveDifficulty)
+    {
+        if (CurrentDungeonPlayers.Count == 0) return null;
+
+        var current = ActiveCharacter;
+        var participants = CurrentDungeonPlayers.Values
+            .OrderByDescending(p => p.TotalDamage)
+            .ToList();
+
+        int totalDmg = participants.Sum(p => p.TotalDamage);
+        int myDmg = participants.FirstOrDefault(p => p.IsMe)?.TotalDamage ?? 0;
+
+        var session = new CombatSessionRecord
+        {
+            DungeonName = CurrentDungeonName,
+            BossName = bossName,
+            BossObjectType = bossObjectType,
+            GraveDifficulty = graveDifficulty,
+            CharacterId = current.Id,
+            CharacterName = current.FormattedTitle,
+            CharacterClass = current.Class,
+            TotalBossDamage = totalDmg,
+            MyDamage = myDmg,
+            Participants = participants,
+            EndedAt = DateTime.Now
+        };
+
+        Data.CombatHistory.Insert(0, session);
+        LastCompletedCombatSessionId = session.Id;
+        SaveAsync();
+        return session.Id;
+    }
+
+    public CombatSessionRecord? GetCombatSession(Guid? sessionId) =>
+        sessionId.HasValue ? Data.CombatHistory.FirstOrDefault(c => c.Id == sessionId.Value) : null;
+
     public void RecordDungeonCompletion(string dungeonName, DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands)
     {
         if (string.IsNullOrWhiteSpace(dungeonName)) return;
@@ -284,6 +353,45 @@ public class TrackerStateService
             CompletedAt = DateTime.Now
         });
 
+        SaveAsync();
+        NotifyStateChanged();
+    }
+
+    // Automatycznie aktualizuje postęp questów, gdy sniffer wykryje Marki w plecaku / Vaulcie
+    public void SyncMarkPickedUp(MarkMetadata mark, int portalObjectType = 0)
+    {
+        var quest = Data.ActiveQuests.FirstOrDefault(q =>
+            q.MarkItemId == mark.ItemId ||
+            string.Equals(q.DungeonName, mark.DungeonName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(q.MarkName, mark.MarkName, StringComparison.OrdinalIgnoreCase));
+
+        if (quest != null)
+        {
+            quest.MarkItemId = mark.ItemId;
+            quest.MarkName = mark.MarkName;
+            quest.BossName = mark.BossName;
+            quest.DungeonName = mark.DungeonName;
+            if (portalObjectType > 0) quest.DungeonPortalObjectType = portalObjectType;
+            quest.CurrentMarks = Math.Min(quest.TargetMarks, quest.CurrentMarks + 1);
+            SaveAsync();
+            NotifyStateChanged();
+        }
+    }
+
+    public void AddMarkQuestWithMetadata(MarkMetadata mark, int targetMarks, string rewardName = "Mighty Quest Chest", int portalObjectType = 0)
+    {
+        Data.ActiveQuests.Add(new DungeonMarkQuest
+        {
+            QuestTitle = $"Defeat {mark.BossName}",
+            DungeonName = mark.DungeonName,
+            MarkItemId = mark.ItemId,
+            MarkName = mark.MarkName,
+            BossName = mark.BossName,
+            DungeonPortalObjectType = portalObjectType,
+            RewardName = rewardName,
+            TargetMarks = Math.Max(1, targetMarks),
+            IsAutoTracked = true
+        });
         SaveAsync();
         NotifyStateChanged();
     }
@@ -313,7 +421,6 @@ public class TrackerStateService
         NotifyStateChanged();
     }
 
-    // --- 4. OBSŁUGA KONTA, POSTACI I GRAVEYARDU (WZOROWANE NA REALMEYE) ---
     public void HandleNexusPlayerDetected(string accountName, RotmgClass charClass, bool isSeasonal, int rotmgCharId = 0)
     {
         if (string.IsNullOrWhiteSpace(accountName)) return;
@@ -365,22 +472,20 @@ public class TrackerStateService
         existing ??= Data.ActiveCharacters.FirstOrDefault(c => c.Class == charClass && c.IsSeasonal == isSeasonal);
 
         if (existing != null)
-        {
             Data.ActiveCharacterId = existing.Id;
-        }
         else
-        {
             AddNewCharacter($"{charClass}", charClass, isSeasonal, rotmgCharId);
-        }
     }
 
-    public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null)
+    public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null, int skinId = 0)
     {
         var current = ActiveCharacter;
         current.MaxedStats = Math.Clamp(maxedStats, 0, 8);
         current.BaseFame = Math.Max(0, baseFame);
         if (equipment is { Length: 4 })
             current.EquipmentIds = equipment;
+        if (skinId > 0)
+            current.SkinId = skinId;
 
         SaveAsync();
         NotifyStateChanged();
@@ -398,7 +503,6 @@ public class TrackerStateService
         deadChar.DeathServer = CurrentServerName;
         deadChar.TotalFame = Math.Max(deadChar.BaseFame, totalDeathFame);
 
-        // Postać przechodzi do Graveyardu, ale jej UUID i powiązane z nią dropy w LootHistory pozostają nienaruszone!
         Data.Graveyard.Insert(0, deadChar);
         Data.ActiveCharacters.Remove(deadChar);
 
@@ -413,10 +517,12 @@ public class TrackerStateService
         NotifyStateChanged();
     }
 
-    // --- 5. LIVE DUNGEON DPS ---
-    public void EnterDungeon(string dungeonName)
+    public void EnterDungeon(string dungeonName, double graveDifficulty = 3.5, int portalObjectType = 0)
     {
         CurrentDungeonName = string.IsNullOrWhiteSpace(dungeonName) ? "Unknown Dungeon" : dungeonName;
+        CurrentDungeonGraves = graveDifficulty;
+        CurrentDungeonPortalType = portalObjectType;
+        LastCompletedCombatSessionId = null;
         CurrentDungeonPlayers.Clear();
         NotifyStateChanged();
     }
@@ -449,7 +555,6 @@ public class TrackerStateService
         NotifyStateChanged();
     }
 
-    // --- POZOSTAŁE METODY POMOCNICZE ---
     private void TryMigrateLegacyJson()
     {
         string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rotmg_data.json");
@@ -634,6 +739,7 @@ public class TrackerStateService
             db.Openings.RemoveRange(db.Openings);
             db.LootHistory.RemoveRange(db.LootHistory);
             db.DungeonRuns.RemoveRange(db.DungeonRuns);
+            db.CombatSessions.RemoveRange(db.CombatSessions);
             db.WishlistTargets.RemoveRange(db.WishlistTargets);
             db.Settings.RemoveRange(db.Settings);
 
@@ -643,6 +749,7 @@ public class TrackerStateService
             db.Openings.AddRange(Data.Openings);
             db.LootHistory.AddRange(Data.LootHistory);
             db.DungeonRuns.AddRange(Data.DungeonRuns);
+            db.CombatSessions.AddRange(Data.CombatHistory);
             db.WishlistTargets.AddRange(Data.Wishlist);
 
             db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = Data.ActiveCharacterId.ToString() });

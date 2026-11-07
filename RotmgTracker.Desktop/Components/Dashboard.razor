@@ -3,80 +3,59 @@
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
 
-
-<div class="app-shell">
-    <!-- COLLAPSIBLE LEFT SIDEBAR -->
-    <aside class="sidebar @(_sidebarCollapsed ? "collapsed" : "")">
-        <div class="sidebar-top">
-            <button class="hamburger-btn" @onclick="ToggleSidebar" title="Toggle Menu">
-                ☰
-            </button>
-            <span class="sidebar-brand">RotMG Tracker</span>
+<div class="app-layout">
+    <!-- LEFT NAVIGATION SIDEBAR -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon"></div>
+            <h1>RotMG Tracker</h1>
         </div>
 
-        <div class="sidebar-section-label">Sniffer & Live</div>
-
-        <button class="nav-item @(_activeTab == "loot" ? "active" : "")"
-                @onclick='() => _activeTab = "loot"'>
-            <span class="nav-icon">💎</span>
-            <span class="nav-label">Loot History</span>
-            <span class="nav-badge">@State.Data.LootHistory.Count</span>
+        <button class="nav-btn @(ActiveTab == "dashboard" ? "active" : "")" @onclick='() => SetTab("dashboard")'>
+            📊 Dashboard (X/8)
         </button>
-
-        <button class="nav-item @(_activeTab == "dps" ? "active" : "")"
-                @onclick='() => _activeTab = "dps"'>
-            <span class="nav-icon">📊</span>
-            <span class="nav-label">Live Dungeon DPS</span>
-            <span class="nav-badge">@State.CurrentDungeonPlayers.Count</span>
+        <button class="nav-btn @(ActiveTab == "showcase" ? "active" : "")" @onclick='() => SetTab("showcase")'>
+            🏆 Showcase & Trophy Case
         </button>
-
-        <div class="sidebar-section-label" style="margin-top: 8px;">Characters & Tasks</div>
-
-        <button class="nav-item @(_activeTab == "tracker" ? "active" : "")"
-                @onclick='() => _activeTab = "tracker"'>
-            <span class="nav-icon">⚔</span>
-            <span class="nav-label">Characters & Quests</span>
-            <span class="nav-badge">@State.Data.ActiveCharacters.Count</span>
+        <button class="nav-btn @(ActiveTab == "loot" ? "active" : "")" @onclick='() => SetTab("loot")'>
+            💎 Loot History (@State.Data.LootHistory.Count)
         </button>
-
-        <button class="nav-item @(_activeTab == "openings" ? "active" : "")"
-                @onclick='() => _activeTab = "openings"'>
-            <span class="nav-icon">📦</span>
-            <span class="nav-label">Chest Openings</span>
-            <span class="nav-badge">@State.Data.Openings.Count</span>
+        <button class="nav-btn @(ActiveTab == "dps" ? "active" : "")" @onclick='() => SetTab("dps")'>
+            ⚔️ Live DPS & Fights (@State.Data.CombatHistory.Count)
         </button>
-
-        <button class="nav-item @(_activeTab == "graveyard" ? "active" : "")"
-                @onclick='() => _activeTab = "graveyard"'>
-            <span class="nav-icon">💀</span>
-            <span class="nav-label">Graveyard</span>
-            <span class="nav-badge">@State.Data.Graveyard.Count</span>
+        <button class="nav-btn @(ActiveTab == "counters" ? "active" : "")" @onclick='() => SetTab("counters")'>
+            📈 Counters & Dungeons (@State.Data.DungeonRuns.Count)
         </button>
-
-        <div class="sidebar-section-label" style="margin-top: 8px;">Planned</div>
-
-        <button class="nav-item disabled">
-            <span class="nav-icon">🛡</span>
-            <span class="nav-label">Item Collection</span>
-            <span class="nav-badge soon">SOON</span>
+        <button class="nav-btn @(ActiveTab == "collection" ? "active" : "")" @onclick='() => SetTab("collection")'>
+            📖 Item Collection
+        </button>
+        <button class="nav-btn @(ActiveTab == "wishlist" ? "active" : "")" @onclick='() => SetTab("wishlist")'>
+            🎯 Target Wishlist (@State.Data.Wishlist.Count(w => !w.IsCompleted))
+        </button>
+        <button class="nav-btn @(ActiveTab == "quests" ? "active" : "")" @onclick='() => SetTab("quests")'>
+            📜 Quests & Openings
+        </button>
+        <button class="nav-btn @(ActiveTab == "graveyard" ? "active" : "")" @onclick='() => SetTab("graveyard")'>
+            🪦 Graveyard (@State.Data.Graveyard.Count)
         </button>
     </aside>
 
-    <!-- MAIN WORKSPACE -->
-    <main class="main-workspace">
-        <!-- PASSIVE SNIFFER STATUS & SIMULATOR BAR -->
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+        <!-- PASSIVE SNIFFER STATUS BAR -->
         <div class="char-bar" style="padding: 10px 16px;">
             <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <span style="width: 10px; height: 10px; border-radius: 50%; background: @(Sniffer.IsListening ? "var(--accent-green)" : "#ef4444"); display: inline-block;"></span>
                 <span style="font-size: 0.85rem; color: var(--text-muted);">@Sniffer.StatusMessage</span>
 
                 <span class="badge-nossnl" title="@GameData.ExtractionStatus">
-                    Items DB: @GameData.GetAllKnownItems().Count
+                    Items DB: @GameData.GetAllKnownItems().Count (✨ @GameData.GetAllKnownItems().Count(i => i.IsShiny) Shinies) • Portals: @GameData.GetAllKnownDungeons().Count • Bosses: @GameData.GetAllKnownBosses().Count • Marks: @GameData.GetAllKnownMarks().Count
                 </span>
 
                 @if (!string.IsNullOrEmpty(State.LinkedAccountName))
                 {
-                    <span class="badge-ssnl" title="Click to unlink account" @onclick="State.UnlinkAccount">
+                    <span class="badge-ssnl" title="Click to unlink account" style="cursor: pointer;" @onclick="State.UnlinkAccount">
                         Account: @State.LinkedAccountName ✕
                     </span>
                 }
@@ -89,14 +68,8 @@
                 <button class="btn btn-sm" @onclick="ToggleSniffer">
                     @(Sniffer.IsListening ? "Stop Sniffer" : "Start Sniffer")
                 </button>
-                <button class="btn btn-sm" title="Test Nexus Account Detection" @onclick='() => Sniffer.SimulateNexusDetection("Tikeer", RotmgClass.Wizard)'>
-                    ⚡ Sim Nexus Join
-                </button>
-                <button class="btn btn-sm" title="Test Bag Drop Packet" @onclick="Sniffer.SimulateBagDrop">
-                    ⚡ Sim Bag Drop
-                </button>
                 <button class="btn btn-sm" title="Test Boss Damage Packets" @onclick="Sniffer.SimulateDungeonDpsFight">
-                    ⚡ Sim Boss DPS
+                    ⚡ Test Boss DPS
                 </button>
             </div>
         </div>
@@ -104,428 +77,979 @@
         <!-- NEXUS ACCOUNT DETECTION BANNER -->
         @if (!string.IsNullOrEmpty(State.PendingAccountName))
         {
-            <div class="section-card" style="border-color: var(--accent-white); background: rgba(56, 189, 248, 0.08); padding: 14px 18px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-                    <div>
-                        <strong style="color: var(--accent-white);">Nexus Player Detected:</strong>
-                        <span style="margin-left: 8px;">
-                            Joined as <strong>@State.PendingAccountName</strong> (@State.PendingAccountClass). Is this your account?
-                        </span>
-                    </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-primary btn-sm" @onclick="State.ConfirmPendingAccount">Yes, Link Account</button>
-                        <button class="btn btn-sm" @onclick="State.DismissPendingAccount">Ignore</button>
-                    </div>
+            <div class="char-bar" style="border-color: var(--accent-gold); background: rgba(245, 158, 11, 0.12);">
+                <div>
+                    <strong style="color: var(--accent-gold);">🎯 Detected Player in Nexus:</strong>
+                    <span style="margin-left: 8px;">Joined as <strong>@State.PendingAccountName</strong> (@State.PendingAccountClass). Is this your account?</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary btn-sm" @onclick="State.ConfirmPendingAccount">Yes, Link Account</button>
+                    <button class="btn btn-sm" @onclick="State.DismissPendingAccount">Ignore</button>
                 </div>
             </div>
         }
 
-        @if (_activeTab == "loot")
-        {
-            <!-- AUTOMATED LOOT HISTORY TAB -->
-            <div class="page-view">
-                <div class="section-card">
-                    <div class="section-header">
-                        <div class="section-title">Loot History (@FilteredLoot.Count())</div>
-                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <input class="input-dark" placeholder="Search item or dungeon..." @bind="_lootSearchQuery" @bind:event="oninput" />
-                            <select class="input-dark" @bind="_selectedBagFilter">
-                                <option value="ALL">All Bag Types</option>
-                                @foreach (var bag in Enum.GetValues<DropType>())
-                                {
-                                    <option value="@bag.ToString()">@FormatDropName(bag)</option>
-                                }
-                            </select>
-                        </div>
-                    </div>
+        <!-- GLOBAL CHARACTER & SEASON BAR -->
+        <div class="char-bar">
+            <div class="char-selector-group">
+                <select class="select" style="width: 85px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged" title="Active Season Tag">
+                    <option value="S1">S1</option>
+                    <option value="S2">S2</option>
+                    <option value="S3">S3</option>
+                    <option value="S4">S4</option>
+                </select>
 
-                    @if (!FilteredLoot.Any())
+                <select class="select char-select" value="@State.ActiveCharacter.Id" @onchange="OnCharacterSelected">
+                    @foreach (var ch in State.Data.ActiveCharacters)
                     {
-                        <div style="padding: 36px; text-align: center; color: var(--text-muted);">
-                            No loot drops recorded yet. Enter a dungeon or click "⚡ Sim Bag Drop" above to test!
-                        </div>
+                        <option value="@ch.Id">@ch.FormattedTitle — Total: @ch.TotalDrops</option>
                     }
-                    else
-                    {
-                        <div class="row-list">
-                            @foreach (var loot in FilteredLoot)
-                            {
-                                <div class="list-row" @key="loot.Id">
-                                    <div style="display: flex; align-items: center; gap: 14px;">
-                                        <span class="badge-ssnl" style="min-width: 115px; text-align: center;">
-                                            @FormatDropName(loot.BagType)
-                                        </span>
-                                        <div>
-                                            <strong style="font-size: 1rem; color: var(--accent-white);">@loot.ItemName</strong>
-                                            <div style="font-size: 0.8rem; color: var(--text-muted);">
-                                                @loot.DungeonName • @loot.CharacterName (@loot.CharacterClass)
-                                            </div>
-                                        </div>
-                                    </div>
+                </select>
 
-                                    <div style="display: flex; align-items: center; gap: 12px;">
-                                        <span style="font-size: 0.8rem; color: var(--text-muted);">
-                                            @loot.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")
-                                        </span>
-                                        <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveLootRecord(loot.Id)">✕</button>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-        else if (_activeTab == "dps")
-        {
-            <!-- LIVE DUNGEON DPS METER TAB -->
-            <div class="page-view">
-                <div class="section-card">
-                    <div class="section-header">
-                        <div>
-                            <div class="section-title">Live Dungeon Damage — @State.CurrentDungeonName</div>
-                            <span style="font-size: 0.82rem; color: var(--text-muted);">
-                                Total Boss Damage: <strong style="color: var(--text-primary);">@TotalDungeonDamage.ToString("N0")</strong>
-                            </span>
-                        </div>
-                        <button class="btn btn-danger btn-sm" @onclick="State.ClearDungeonDps">Reset Fight</button>
-                    </div>
+                <span class="@(State.ActiveCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
+                      title="Click to toggle Seasonal / Regular"
+                      @onclick="State.ToggleSeasonal">
+                    @(State.ActiveCharacter.IsSeasonal ? $"SSNL ({State.ActiveCharacter.SeasonTag})" : "NOSSNL")
+                </span>
 
-                    @if (State.CurrentDungeonPlayers.Count == 0)
-                    {
-                        <div style="padding: 36px; text-align: center; color: var(--text-muted);">
-                            Waiting for dungeon boss damage packets... (Click "⚡ Sim Boss DPS" above to test!)
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="row-list">
-                            @{ int rank = 1; }
-                            @foreach (var player in SortedDpsPlayers)
-                            {
-                                double share = TotalDungeonDamage > 0 ? (double)player.TotalDamage / TotalDungeonDamage * 100.0 : 0;
-                                <div class="list-row @(player.IsMe ? "completed" : "")" @key="player.ObjectId">
-                                    <div style="flex: 1; padding-right: 18px;">
-                                        <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
-                                            <div>
-                                                <strong style="color: var(--text-muted); margin-right: 8px;">#@rank</strong>
-                                                <strong style="font-size: 0.98rem; color: @(player.IsMe ? "var(--accent-green)" : "var(--text-primary)");">
-                                                    @player.PlayerName
-                                                </strong>
-                                                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 6px;">
-                                                    (@player.Class • @player.HitsCount hits)
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <strong style="color: var(--accent-white);">@player.TotalDamage.ToString("N0")</strong>
-                                                <span style="color: var(--text-muted); font-size: 0.85rem; margin-left: 8px;">
-                                                    (@share.ToString("0.0")%)
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="quest-progress-bg" style="width: 100%;">
-                                            <div class="quest-progress-fill" style="width: @(share.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                rank++;
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-        }
-        else if (_activeTab == "tracker")
-        {
-            <!-- CHARACTERS & QUESTS -->
-            <div class="page-view">
-                <div class="char-bar">
-                    <div class="char-pills">
-                        @foreach (var ch in State.Data.ActiveCharacters)
+                <!-- X/8 MAXED STATS SELECTOR & BASE FAME -->
+                <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-input); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">Stats:</span>
+                    <select class="select" style="padding: 2px 6px; font-weight: 700; color: var(--accent-gold);"
+                            value="@State.ActiveCharacter.MaxedStats"
+                            @onchange="OnMaxedStatsChanged">
+                        @for (int s = 0; s <= 8; s++)
                         {
-                            <div class="char-pill @(ch.Id == State.ActiveCharacter.Id ? "active" : "")"
-                                 @onclick="() => State.SelectCharacter(ch.Id)">
-                                <span>@ch.Name (@ch.Class)</span>
-                                <span class="@(ch.IsSeasonal ? "badge-ssnl" : "badge-nossnl")" style="font-size: 0.68rem; padding: 2px 7px;">
-                                    @(ch.IsSeasonal ? "SSNL" : "NS")
-                                </span>
-                            </div>
+                            <option value="@s">@s/8</option>
                         }
-                        <button class="btn btn-primary btn-sm" @onclick="() => _showNewCharForm = !_showNewCharForm">
-                            @(_showNewCharForm ? "Cancel" : "+ New Character")
-                        </button>
-                    </div>
-
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="@(State.ActiveCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
-                              @onclick="State.ToggleSeasonal">
-                            @(State.ActiveCharacter.IsSeasonal ? "SSNL" : "NON-SSNL")
-                        </span>
-
-                        @if (State.Data.ActiveCharacters.Count > 1)
-                        {
-                            <button class="btn btn-sm" @onclick="() => State.DeleteActiveCharacter(State.ActiveCharacter.Id)">
-                                Delete
-                            </button>
-                        }
-
-                        <button class="btn btn-danger btn-sm" @onclick="State.ArchiveAndResetCharacter">
-                            💀 RIP
-                        </button>
-                    </div>
+                    </select>
+                    <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: 6px;">Fame:</span>
+                    <input class="input" type="number" style="width: 80px; padding: 2px 6px; font-weight: 700;"
+                           value="@State.ActiveCharacter.BaseFame"
+                           @onchange="OnBaseFameChanged" />
                 </div>
 
-                @if (_showNewCharForm)
+                @if (!IsAddingCharacter)
                 {
-                    <div class="section-card" style="border-color: var(--accent-white);">
-                        <div class="section-header" style="margin-bottom: 12px;">
-                            <div class="section-title" style="color: var(--accent-white);">Create New Character</div>
+                    <button class="btn btn-primary btn-sm" @onclick="() => IsAddingCharacter = true">+ New Character</button>
+                }
+            </div>
+
+            <div class="char-selector-group">
+                @if (State.Data.ActiveCharacters.Count > 1)
+                {
+                    <button class="btn btn-sm" title="Delete character without moving to graveyard"
+                            @onclick="() => State.DeleteActiveCharacter(State.ActiveCharacter.Id)">
+                        🗑️
+                    </button>
+                }
+                <button class="btn btn-danger btn-sm" @onclick="State.ArchiveAndResetCharacter">
+                    💀 RIP (Move to Graveyard)
+                </button>
+            </div>
+        </div>
+
+        @if (IsAddingCharacter)
+        {
+            <div class="new-char-panel">
+                <input class="input" placeholder="Character alias (e.g. O3 Rusher)" @bind="NewCharName" />
+                <select class="select" @bind="NewCharClass">
+                    @foreach (var c in Enum.GetValues<RotmgClass>())
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="NewCharSeasonal" /> Seasonal (SSNL)
+                </label>
+                <button class="btn btn-primary btn-sm" @onclick="CreateCharacter">Create</button>
+                <button class="btn btn-sm" @onclick="() => IsAddingCharacter = false">Cancel</button>
+            </div>
+        }
+
+        <!-- ==================== TAB 1: DASHBOARD ==================== -->
+        @if (ActiveTab == "dashboard")
+        {
+            <div class="section-header">
+                <h2>@State.ActiveCharacter.FormattedTitle — Drop Counters</h2>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <span class="badge-nossnl">
+                        📍 Map: @State.CurrentDungeonName
+                        @if (State.CurrentDungeonGraves > 0)
+                        {
+                            <span>(@State.CurrentDungeonGraves/10 💀)</span>
+                        }
+                    </span>
+                    <span style="color: var(--text-muted); font-size: 0.9rem;">
+                        Total Drops: <strong style="color: var(--accent-gold);">@State.ActiveCharacter.TotalDrops</strong>
+                    </span>
+                </div>
+            </div>
+
+            <div class="drops-grid">
+                @foreach (var dropType in Enum.GetValues<DropType>())
+                {
+                    int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
+                    <div class="drop-card">
+                        <div class="drop-card-header">
+                            <span class="drop-title">@FormatDropType(dropType)</span>
+                            <span class="bag-dot @GetDotClass(dropType)"></span>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                            <input class="input-dark" placeholder="Name / Note (e.g. PPE Wizard)" @bind="_newCharName" />
-
-                            <select class="input-dark" @bind="_newCharClass">
-                                @foreach (var rotmgClass in Enum.GetValues<RotmgClass>())
-                                {
-                                    <option value="@rotmgClass">@rotmgClass</option>
-                                }
-                            </select>
-
-                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer;">
-                                <input type="checkbox" @bind="_newCharSsnl" />
-                                Seasonal (SSNL)
-                            </label>
-
-                            <button class="btn btn-primary btn-sm" @onclick="CreateCharacter">Create & Select</button>
+                        <div class="drop-value">@val</div>
+                        <div class="drop-actions">
+                            <button class="btn" @onclick="() => State.ChangeDropCount(dropType, -1)">−</button>
+                            <button class="btn" @onclick="() => State.ChangeDropCount(dropType, 1)">+</button>
                         </div>
                     </div>
                 }
+            </div>
 
-                <div class="section-card">
-                    <div class="section-header">
-                        <div class="section-title">
-                            @State.ActiveCharacter.Name (@State.ActiveCharacter.Class) — Summary
-                        </div>
-                        <span style="color: var(--text-muted); font-size: 0.85rem;">
-                            Total Logged: <strong style="color: var(--text-primary);">@State.ActiveCharacter.TotalDrops</strong>
-                        </span>
-                    </div>
-                    <div class="drops-grid">
-                        @foreach (var drop in State.ActiveCharacter.Drops)
-                        {
-                            <div class="drop-item" @key="drop.Key">
-                                <div class="drop-header">
-                                    <span class="drop-name">@FormatDropName(drop.Key)</span>
-                                    <span class="drop-value">@drop.Value</span>
-                                </div>
+            <div class="section-header" style="margin-top: 8px;">
+                <h2>Recent Bag Drops (Grouped by Physical Bag)</h2>
+                <button class="btn btn-sm" @onclick='() => SetTab("loot")'>View Full Loot History →</button>
+            </div>
+            
+            var recentBagGroups = GroupLoidByBagInstance(State.Data.LootHistory.Take(12));
+
+            if (recentBagGroups.Count == 0)
+            {
+                <div class="empty-state">No bag drops recorded yet.</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var bagGroup in recentBagGroups)
+                    {
+                        var first = bagGroup[0];
+                        <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @GetRarityBorderColor(first.Rarity, first.IsShiny);">
+                            <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
+                                <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                                <div>⭐ Fame: <strong>@first.BaseFameAtDrop</strong> • @first.ServerName</div>
                             </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="section-card">
-                    <div class="section-header">
-                        <div class="section-title">Daily Quests / Marks To-Do</div>
-                        <div style="display: flex; gap: 8px;">
-                            <input class="input-dark" placeholder="Dungeon (e.g. Nest)" @bind="_newQuestName" />
-                            <input class="input-dark" type="number" style="width: 68px;" min="1" max="20" @bind="_newQuestTarget" />
-                            <button class="btn btn-primary btn-sm" @onclick="AddNewQuest">+ Add Quest</button>
-                        </div>
-                    </div>
-
-                    <div class="row-list">
-                        @foreach (var quest in State.Data.ActiveQuests)
-                        {
-                            int pct = quest.TargetMarks > 0 ? Math.Min(100, (int)((double)quest.CurrentMarks / quest.TargetMarks * 100)) : 0;
-                            <div class="list-row @(quest.IsCompleted ? "completed" : "")" @key="quest.Id">
-                                <div>
-                                    <div>
-                                        <strong style="font-size: 1rem;">@quest.TargetMarks x @quest.DungeonName</strong>
-                                        <span style="margin-left: 12px; color: @(quest.IsCompleted ? "var(--accent-green)" : "var(--text-muted)"); font-weight: 600;">
-                                            [ @quest.CurrentMarks / @quest.TargetMarks ]
-                                            @(quest.IsCompleted ? "✔ COMPLETED" : "")
+                            <div class="badge-nossnl" title="Bag Sprite ObjectType: 0x@(first.BagObjectType.ToString("X4"))">
+                                🎒 @first.PhysicalBag
+                            </div>
+                            <div class="badge-ssnl" title="Character SkinId: @first.CharacterSkinId">
+                                🧙 @first.CharacterName
+                            </div>
+                            <div class="badge-nossnl" title="Portal ObjectType: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
+                                🌀 @first.DungeonName (@first.GraveDifficulty/10 💀)
+                            </div>
+                            <div class="badge-nossnl" title="Boss ObjectType: 0x@(first.BossObjectType.ToString("X4"))">
+                                👾 @first.BossName
+                            </div>
+                            <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                                @foreach (var item in bagGroup)
+                                {
+                                    <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
+                                        <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
+                                            @(item.IsShiny ? "✨ " : "")@item.ItemName
+                                        </strong>
+                                        <span style="font-size: 0.75rem; color: #c084fc;">
+                                            [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
                                         </span>
                                     </div>
-                                    <div class="quest-progress-bg">
-                                        <div class="quest-progress-fill" style="width: @(pct)%;"></div>
-                                    </div>
-                                </div>
-                                <div style="display: flex; gap: 6px;">
-                                    <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, -1)">-</button>
-                                    <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, 1)">+1 Mark</button>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveQuest(quest.Id)">✕</button>
-                                </div>
+                                }
                             </div>
-                        }
-                    </div>
+                            @if (first.CombatSessionId.HasValue)
+                            {
+                                <button class="btn btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                                        @onclick="() => OpenLinkedCombatSession(first.CombatSessionId.Value)">
+                                    ⚔️ View Fight DPS
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        <!-- ==================== TAB 2: SHOWCASE & TROPHY CASE ==================== -->
+        @if (ActiveTab == "showcase")
+        {
+            <div class="section-header">
+                <h2>🏆 Account Showcase & Trophy Case</h2>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">Filter Season:</span>
+                    <select class="select" @bind="ShowcaseSeasonFilter">
+                        <option value="ALL">All-Time</option>
+                        <option value="SSNL">Seasonal Only</option>
+                        <option value="NOSSNL">Regular Only</option>
+                    </select>
                 </div>
             </div>
-        }
-        else if (_activeTab == "openings")
-        {
-            <!-- CHEST OPENINGS -->
-            <div class="page-view">
-                <div class="section-card">
-                    <div class="section-header">
-                        <div class="section-title">Chest Openings</div>
-                        <div style="display: flex; gap: 8px;">
-                            <input class="input-dark" placeholder="Opening title (optional)" @bind="_newOpeningTitle" />
-                            <button class="btn btn-primary btn-sm" @onclick="CreateNewOpening">+ New Opening</button>
-                        </div>
+
+            <div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+                <div class="drop-card">
+                    <span class="drop-title">Active Characters</span>
+                    <div class="drop-value">@State.Data.ActiveCharacters.Count</div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Highest Fame: @(State.Data.ActiveCharacters.MaxBy(c => c.BaseFame)?.BaseFame ?? 0)</span>
+                </div>
+                <div class="drop-card">
+                    <span class="drop-title">Total Logged Drops</span>
+                    <div class="drop-value" style="color: var(--accent-white);">@GetFilteredShowcaseLoot().Count()</div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">✨ Shinies: @GetFilteredShowcaseLoot().Count(l => l.IsShiny)</span>
+                </div>
+                <div class="drop-card">
+                    <span class="drop-title">Dungeons Completed</span>
+                    <div class="drop-value" style="color: var(--accent-green);">@State.Data.DungeonRuns.Count</div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Tracked via Boss Kills</span>
+                </div>
+                <div class="drop-card">
+                    <span class="drop-title">Collection Progress</span>
+                    <div class="drop-value" style="color: var(--accent-gold);">
+                        @State.Data.LootHistory.Select(l => l.ItemName.ToLowerInvariant()).Distinct().Count() / @GameData.GetAllKnownItems().Count(i => !i.IsShiny && i.Tier <= 0)
                     </div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">Unique UT/ST/White Items</span>
+                </div>
+            </div>
 
-                    @foreach (var opening in State.Data.Openings)
+            <div class="section-header" style="margin-top: 10px;">
+                <h2>💎 Trophy Case (Sorted by Rarity Score Engine • 1–10 Graves + Rarity + Shiny)</h2>
+            </div>
+            
+            var trophies = RarityScoreEngine.BuildTrophyCase(GetFilteredShowcaseLoot(), 30);
+
+            if (trophies.Count == 0)
+            {
+                <div class="empty-state">No drops in Trophy Case yet. Drops from dungeons will automatically rank here!</div>
+            }
+            else
+            {
+                <div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));">
+                    @foreach (var trophy in trophies)
                     {
-                        <div class="opening-box" @key="opening.Id">
-                            <div class="opening-header">
-                                <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;"
-                                     @onclick="() => State.ToggleOpeningExpanded(opening.Id)">
-                                    <span style="color: var(--text-muted);">@(opening.IsExpanded ? "▼" : "▶")</span>
-                                    <strong style="font-size: 1.05rem;">@opening.Title</strong>
-                                </div>
-
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="color: var(--text-muted); font-size: 0.85rem;">Total Chests:</span>
-                                    <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(opening.Id, -1)">-</button>
-                                    <input class="input-dark" type="number" min="0" style="width: 72px; text-align: center; font-weight: 700;"
-                                           value="@opening.TotalChests"
-                                           @onchange="(e) => OnChestCountInput(opening.Id, e.Value)" />
-                                    <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(opening.Id, 1)">+</button>
-                                </div>
-
-                                <div style="display: flex; align-items: center; gap: 14px;">
-                                    <span>
-                                        Whites / ST :
-                                        <strong style="color: var(--accent-white);">@opening.TotalWhites</strong> /
-                                        <strong style="color: var(--accent-st);">@opening.TotalSTs</strong>
+                        var drop = trophy.BestRollDrop;
+                        var meta = GameData.ResolveItem(drop.ItemId);
+                        <div class="drop-card" style="border-color: @GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
+                            <div class="drop-card-header">
+                                <span class="badge-ssnl" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-white);">
+                                    @trophy.DisplayScore pts
+                                </span>
+                                @if (trophy.DuplicateCount > 1)
+                                {
+                                    <span class="badge-nossnl" style="font-weight: 800; color: var(--accent-gold);">
+                                        [x@(trophy.DuplicateCount)]
                                     </span>
-                                    <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveOpeningSession(opening.Id)">✕</button>
-                                </div>
+                                }
                             </div>
 
-                            @if (opening.IsExpanded)
-                            {
-                                <div class="row-list" style="margin-top: 14px;">
-                                    @foreach (var chest in opening.Chests)
+                            <div style="margin: 6px 0;">
+                                <div style="font-size: 1.05rem; font-weight: 800; color: @(drop.IsShiny ? "#f472b6" : "var(--text-primary)");">
+                                    @(drop.IsShiny ? "✨ " : "")@drop.ItemName
+                                </div>
+                                <div style="font-size: 0.78rem; color: #c084fc; margin-top: 2px;">
+                                    @drop.Rarity (@drop.EnchantmentSlots slots) • @FormatDropType(drop.BagType)
+                                    @if (!string.IsNullOrEmpty(meta.ForgeTier))
                                     {
-                                        <div class="list-row" @key="chest.Key">
-                                            <span style="width: 110px; font-weight: 600; text-transform: capitalize;">@chest.Key</span>
-                                            <span>
-                                                <strong style="color: var(--accent-white);">@chest.Value.Whites</strong> /
-                                                <strong style="color: var(--accent-st);">@chest.Value.STs</strong>
-                                            </span>
-                                            <div style="display: flex; gap: 6px;">
-                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, -1)">-W</button>
-                                                <button class="btn btn-sm" style="color: var(--accent-white);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, true, 1)">+White</button>
-                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, -1)">-ST</button>
-                                                <button class="btn btn-sm" style="color: var(--accent-st);" @onclick="() => State.ChangeChestDrop(opening.Id, chest.Key, false, 1)">+ST</button>
-                                            </div>
-                                        </div>
+                                        <span> • Forge Tier @meta.ForgeTier</span>
                                     }
                                 </div>
+                            </div>
+
+                            <div style="font-size: 0.78rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 8px; display: flex; flex-direction: column; gap: 3px;">
+                                <span>📍 <strong>@drop.DungeonName</strong> (@drop.GraveDifficulty/10 💀)</span>
+                                <span>👾 Boss: <strong>@drop.BossName</strong></span>
+                                <span>🧙 By: <strong>@drop.CharacterName</strong> (@drop.BaseFameAtDrop Fame)</span>
+                                <span>🕒 @drop.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss") • @drop.ServerName</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        <!-- ==================== TAB 3: LOOT HISTORY ==================== -->
+        @if (ActiveTab == "loot")
+        {
+            <div class="section-header">
+                <h2>💎 Rich Bag & Loot History</h2>
+            </div>
+
+            <div class="quest-add-bar" style="flex-wrap: wrap;">
+                <input class="input" list="xml-items-list" style="min-width: 220px;" placeholder="Item name (from 2191 XML items)..." @bind="ManualDropItemName" />
+                <datalist id="xml-items-list">
+                    @foreach (var item in GameData.GetAllKnownItems().Take(600))
+                    {
+                        <option value="@item.Name">@FormatDropType(item.Quality) @(string.IsNullOrEmpty(item.ForgeTier) ? "" : $"[Tier {item.ForgeTier}]")</option>
+                    }
+                </datalist>
+
+                <input class="input" list="xml-dungeons-list" style="max-width: 200px;" placeholder="Dungeon..." @bind="ManualDropDungeon" />
+                <datalist id="xml-dungeons-list">
+                    @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+                    {
+                        <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
+                    }
+                </datalist>
+
+                <input class="input" list="xml-bosses-list" style="max-width: 190px;" placeholder="Boss / Entity..." @bind="ManualDropBoss" />
+                <datalist id="xml-bosses-list">
+                    @foreach (var b in GameData.GetAllKnownBosses().Take(300))
+                    {
+                        <option value="@b.DisplayName"></option>
+                    }
+                </datalist>
+
+                <select class="select" @bind="ManualDropRarity">
+                    @foreach (var r in Enum.GetValues<ItemRarity>())
+                    {
+                        <option value="@r">@r (@((int)r) slots)</option>
+                    }
+                </select>
+
+                <button class="btn btn-primary" @onclick="AddManualRealDrop">+ Log Drop</button>
+            </div>
+
+            <div class="quest-add-bar">
+                <input class="input" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
+                <select class="select" @bind="LootFilterType">
+                    <option value="">All Qualities</option>
+                    @foreach (var dt in Enum.GetValues<DropType>())
+                    {
+                        <option value="@dt">@FormatDropType(dt)</option>
+                    }
+                </select>
+                <select class="select" @bind="LootFilterRarity">
+                    <option value="">All Rarities</option>
+                    @foreach (var r in Enum.GetValues<ItemRarity>())
+                    {
+                        <option value="@r">@r (@((int)r) slots)</option>
+                    }
+                </select>
+            </div>
+            
+            var filteredBagGroups = GroupLoidByBagInstance(GetFilteredLootHistory());
+
+            if (filteredBagGroups.Count == 0)
+            {
+                <div class="empty-state">No bag drops match the current filters.</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var bagGroup in filteredBagGroups)
+                    {
+                        var first = bagGroup[0];
+                        <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @GetRarityBorderColor(first.Rarity, first.IsShiny);">
+                            <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
+                                <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                                <div>⭐ Fame: <strong>@first.BaseFameAtDrop</strong> • @first.ServerName</div>
+                            </div>
+                            <div class="badge-nossnl" title="Bag Sprite ObjectType: 0x@(first.BagObjectType.ToString("X4"))">
+                                🎒 @first.PhysicalBag
+                            </div>
+                            <div class="badge-ssnl" title="Character SkinId: @first.CharacterSkinId">
+                                🧙 @first.CharacterName
+                            </div>
+                            <div class="badge-nossnl" title="Portal ObjectType: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
+                                🌀 @first.DungeonName (@first.GraveDifficulty/10 💀)
+                            </div>
+                            <div class="badge-nossnl" title="Boss ObjectType: 0x@(first.BossObjectType.ToString("X4"))">
+                                👾 @first.BossName
+                            </div>
+                            <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                                @foreach (var item in bagGroup)
+                                {
+                                    <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
+                                        <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
+                                            @(item.IsShiny ? "✨ " : "")@item.ItemName
+                                        </strong>
+                                        <span style="font-size: 0.75rem; color: #c084fc;">
+                                            [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
+                                        </span>
+                                        <button class="btn btn-danger btn-sm" style="padding: 1px 6px;" @onclick="() => State.RemoveLootRecord(item.Id)">✕</button>
+                                    </div>
+                                }
+                            </div>
+                            @if (first.CombatSessionId.HasValue)
+                            {
+                                <button class="btn btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                                        @onclick="() => OpenLinkedCombatSession(first.CombatSessionId.Value)">
+                                    ⚔️ View Fight DPS
+                                </button>
                             }
                         </div>
                     }
                 </div>
+            }
+        }
+
+        <!-- ==================== TAB 4: LIVE DPS & COMBAT HISTORY ==================== -->
+        @if (ActiveTab == "dps")
+        {
+            <div class="section-header">
+                <h2>
+                    ⚔️ Live Dungeon Damage — @State.CurrentDungeonName
+                    @if (State.CurrentDungeonGraves > 0)
+                    {
+                        <span style="font-size: 0.9rem; color: var(--accent-gold);">(@State.CurrentDungeonGraves/10 💀)</span>
+                    }
+                </h2>
+                <div style="display: flex; gap: 8px;">
+                    @if (State.CurrentDungeonPlayers.Count > 0)
+                    {
+                        <button class="btn btn-primary btn-sm" @onclick="ArchiveTestFight">💾 Save Fight to History</button>
+                    }
+                    <button class="btn btn-sm" @onclick="State.ClearDungeonDps">Clear Live Meter</button>
+                </div>
+            </div>
+
+            @if (State.CurrentDungeonPlayers.Count == 0)
+            {
+                <div class="empty-state">
+                    Waiting for boss damage packets (`DAMAGE` on TCP:2050)... Enter a dungeon or click "⚡ Test Boss DPS" on the top bar.
+                </div>
+            }
+            else
+            {
+                int totalBossHpDamage = State.CurrentDungeonPlayers.Values.Sum(p => p.TotalDamage);
+                int rank = 1;
+
+                <div class="quest-list">
+                    @foreach (var player in State.CurrentDungeonPlayers.Values.OrderByDescending(p => p.TotalDamage))
+                    {
+                        double pct = totalBossHpDamage > 0 ? (double)player.TotalDamage / totalBossHpDamage * 100.0 : 0;
+                        <div class="quest-row" style="@(player.IsMe ? "border-color: var(--accent-green);" : "")">
+                            <div style="min-width: 240px;">
+                                <span style="color: var(--text-muted); font-weight: 700; margin-right: 8px;">#@rank</span>
+                                <strong>@player.PlayerName</strong>
+                                <span class="badge-nossnl" style="margin-left: 8px;">@player.Class</span>
+                                @if (player.IsMe)
+                                {
+                                    <span class="badge-ssnl" style="margin-left: 6px;">YOU</span>
+                                }
+                            </div>
+                            <div class="quest-progress-bar">
+                                <div class="quest-progress-fill" style="width: @pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                            </div>
+                            <div style="min-width: 190px; text-align: right; font-weight: 700;">
+                                @player.TotalDamage.ToString("N0") DMG
+                                <span style="color: var(--accent-gold); margin-left: 6px;">(@pct.ToString("0.1")%)</span>
+                            </div>
+                        </div>
+                        rank++;
+                    }
+                </div>
+            }
+
+            <div class="section-header" style="margin-top: 16px;">
+                <h2>📜 Recorded Boss Fights (Combat History)</h2>
+                @if (HighlightedCombatSessionId.HasValue)
+                {
+                    <button class="btn btn-sm" @onclick="() => HighlightedCombatSessionId = null">Show All Fights</button>
+                }
+            </div>
+            
+            var fights = HighlightedCombatSessionId.HasValue
+                ? State.Data.CombatHistory.Where(c => c.Id == HighlightedCombatSessionId.Value).ToList()
+                : State.Data.CombatHistory;
+
+            if (fights.Count == 0)
+            {
+                <div class="empty-state">No recorded boss fights yet. Defeating a boss automatically archives the damage breakdown and links it to dropped bags!</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var fight in fights)
+                    {
+                        bool isHighlighted = HighlightedCombatSessionId == fight.Id;
+                        <div class="opening-card" style="@(isHighlighted ? "border: 2px solid var(--accent-gold);" : "")">
+                            <div class="opening-header">
+                                <div>
+                                    <strong style="font-size: 1.05rem;">👾 @fight.BossName</strong>
+                                    <span class="badge-nossnl" style="margin-left: 8px;">📍 @fight.DungeonName (@fight.GraveDifficulty/10 💀)</span>
+                                    <span style="color: var(--text-muted); font-size: 0.82rem; margin-left: 10px;">
+                                        🧙 @fight.CharacterName • @fight.EndedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                                    </span>
+                                </div>
+                                <div style="font-weight: 800; color: var(--accent-green);">
+                                    Your DMG: @fight.MyDamage.ToString("N0") / @fight.TotalBossDamage.ToString("N0") (@fight.MySharePercent%)
+                                </div>
+                            </div>
+                            <div class="opening-body" style="padding: 10px 16px;">
+                                @foreach (var p in fight.Participants.Take(10))
+                                {
+                                    double pPct = fight.TotalBossDamage > 0 ? (double)p.TotalDamage / fight.TotalBossDamage * 100.0 : 0;
+                                    <div style="display: flex; justify-content: space-between; font-size: 0.82rem; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+                                        <span>
+                                            <strong style="color: @(p.IsMe ? "var(--accent-green)" : "var(--text-primary)");">@p.PlayerName</strong> (@p.Class)
+                                        </span>
+                                        <span>@p.TotalDamage.ToString("N0") DMG (@pPct.ToString("0.1")%)</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        <!-- ==================== TAB 5: COUNTERS & DUNGEONS COMPLETED ==================== -->
+        @if (ActiveTab == "counters")
+        {
+            <div class="section-header">
+                <h2>📈 Dungeon Completion Counter & Analytics</h2>
+                <div style="display: flex; gap: 8px;">
+                    <select class="select" @bind="CounterScopeFilter">
+                        <option value="ALL">All-Time (Global)</option>
+                        <option value="SEASON">Current Season (@State.CurrentSeasonTag)</option>
+                        <option value="CHAR">Active Character (@State.ActiveCharacter.FormattedTitle)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="quest-add-bar">
+                <input class="input" list="xml-dungeons-list" placeholder="Select dungeon from 90 extracted portals..." @bind="ManualRunDungeonName" />
+                <button class="btn btn-primary" @onclick="AddManualDungeonRun">+1 Completed Run</button>
+            </div>
+            
+                var scopedRuns = GetScopedDungeonRuns().ToList();
+                var groupedRuns = scopedRuns
+                    .GroupBy(r => r.DungeonName, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new
+                    {
+                        DungeonName = g.Key,
+                        Count = g.Count(),
+                        Graves = GameData.ResolveDungeonGraveDifficulty(g.Key),
+                        Portal = GameData.ResolvePortalByDungeonName(g.Key),
+                        LastRun = g.Max(x => x.CompletedAt)
+                    })
+                    .OrderByDescending(x => x.Count)
+                    .ThenByDescending(x => x.Graves)
+                    .ToList();
+
+            <div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));">
+                @foreach (var d in groupedRuns)
+                {
+                    <div class="drop-card">
+                        <div class="drop-card-header">
+                            <span class="drop-title" style="color: var(--text-primary); font-weight: 700;">@d.DungeonName</span>
+                            <span class="badge-nossnl">@d.Graves/10 💀</span>
+                        </div>
+                        <div class="drop-value" style="color: var(--accent-green);">@d.Count</div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
+                            <span>Portal ID: 0x@((d.Portal?.ObjectType ?? 0).ToString("X4"))</span>
+                            <button class="btn btn-sm" @onclick="() => QuickIncrementDungeon(d.DungeonName)">+1</button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (groupedRuns.Count == 0)
+            {
+                <div class="empty-state">No dungeon runs logged for this filter yet.</div>
+            }
+        }
+
+        <!-- ==================== TAB 6: ITEM COLLECTION ==================== -->
+        @if (ActiveTab == "collection")
+        {
+            <div class="section-header">
+                <h2>📖 Item Collection & Checklist (@GameData.GetAllKnownItems().Count XML Items)</h2>
+            </div>
+
+            <div class="quest-add-bar" style="flex-wrap: wrap; gap: 14px;">
+                <input class="input" style="max-width: 240px;" placeholder="Search item name..." @bind="CollectionSearch" @bind:event="oninput" />
+
+                <select class="select" @bind="CollectionCategoryFilter">
+                    <option value="ALL">All Categories</option>
+                    <option value="LEGENDARY_WHITE">Legendary Whites (Forge Tier S)</option>
+                    <option value="EVENT_WHITE">Event Whites (Realm Whites)</option>
+                    <option value="REGULAR_WHITE">Regular Whites (Tier A–D)</option>
+                    <option value="ST">ST Sets</option>
+                    <option value="SHINY">✨ Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
+                    <option value="BP">Blueprints</option>
+                </select>
+
+                <select class="select" @bind="CollectionOwnershipFilter">
+                    <option value="ALL">Show All (Owned & Missing)</option>
+                    <option value="OWNED">Owned Only</option>
+                    <option value="MISSING">Missing Only</option>
+                </select>
+
+                <label class="checkbox-label" style="background: var(--bg-input); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <input type="checkbox" @bind="CollectionIncludeTiered" />
+                    Include Tiered Items
+                </label>
+
+                @if (CollectionIncludeTiered)
+                {
+                    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+                        <span>Min Tier:</span>
+                        <select class="select" style="padding: 4px 8px;" @bind="CollectionMinTier">
+                            @for (int t = 1; t <= 14; t++)
+                            {
+                                <option value="@t">T@(t)+</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+            
+                var filteredCollection = GetFilteredCollectionItems().ToList();
+                var ownedCountsById = State.Data.LootHistory
+                    .GroupBy(l => l.ItemId)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var ownedCountsByName = State.Data.LootHistory
+                    .GroupBy(l => l.ItemName, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+                int ownedInView = filteredCollection.Count(i =>
+                    ownedCountsById.ContainsKey(i.ItemId) || ownedCountsByName.ContainsKey(i.Name));
+
+            <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
+                Showing <strong>@filteredCollection.Count</strong> items • Collected in this view:
+                <strong style="color: var(--accent-green);">@ownedInView / @filteredCollection.Count</strong>
+                (@(filteredCollection.Count > 0 ? Math.Round((double)ownedInView / filteredCollection.Count * 100.0, 1) : 0)%)
+            </div>
+
+            <div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+                @foreach (var item in filteredCollection.Take(120))
+                {
+                    int count = ownedCountsById.GetValueOrDefault(item.ItemId, ownedCountsByName.GetValueOrDefault(item.Name, 0));
+                    bool isOwned = count > 0;
+
+                    <div class="drop-card" style="opacity: @(isOwned ? "1.0" : "0.55"); border-color: @(isOwned ? "var(--accent-green)" : "var(--border-color)");">
+                        <div class="drop-card-header">
+                            <span class="drop-title">
+                                @FormatDropType(item.Quality)
+                                @if (!string.IsNullOrEmpty(item.ForgeTier))
+                                {
+                                    <span>• Forge @item.ForgeTier</span>
+                                }
+                            </span>
+                            @if (isOwned)
+                            {
+                                <span class="badge-ssnl">[Owned x@(count)]</span>
+                            }
+                            else
+                            {
+                                <span class="badge-nossnl">Missing</span>
+                            }
+                        </div>
+
+                        <div style="font-weight: 700; font-size: 0.95rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); margin: 4px 0;">
+                            @(item.IsShiny ? "✨ " : "")@item.Name
+                        </div>
+
+                        <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                            <span>ID: 0x@(item.ItemId.ToString("X4"))</span>
+                            <span>Sprite: @item.TextureFile #@item.TextureIndex</span>
+                        </div>
+                    </div>
+                }
             </div>
         }
-        else if (_activeTab == "graveyard")
+
+        <!-- ==================== TAB 7: TARGET WISHLIST ==================== -->
+        @if (ActiveTab == "wishlist")
         {
-            <!-- GRAVEYARD -->
-            <div class="page-view">
-                <div class="section-card">
-                    <div class="section-header">
-                        <div class="section-title">Fallen Characters (Graveyard)</div>
-                        <span style="color: var(--text-muted); font-size: 0.85rem;">
-                            Total Fallen: <strong>@State.Data.Graveyard.Count</strong>
-                        </span>
-                    </div>
+            <div class="section-header">
+                <h2>🎯 Target Wishlist & Run Probability Tracker</h2>
+            </div>
 
-                    @if (State.Data.Graveyard.Count == 0)
+            <div class="quest-add-bar" style="flex-wrap: wrap;">
+                <input class="input" list="xml-items-list" style="min-width: 220px;" placeholder="Target item name..." @bind="WishItemName" />
+                <input class="input" list="xml-dungeons-list" style="max-width: 200px;" placeholder="Target dungeon..." @bind="WishDungeonName" />
+
+                <select class="select" @bind="WishMinRarity">
+                    @foreach (var r in Enum.GetValues<ItemRarity>())
                     {
-                        <div style="padding: 36px; text-align: center; color: var(--text-muted);">
-                            No fallen characters yet. Stay safe in the Nexus!
-                        </div>
+                        <option value="@r">Min: @r (@((int)r)+ slots)</option>
                     }
-                    else
-                    {
-                        <div class="graveyard-grid">
-                            @foreach (var dead in State.Data.Graveyard)
-                            {
-                                <div class="grave-card" @key="dead.Id">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <div>
-                                            <strong style="font-size: 1.05rem;">@dead.Name (@dead.Class)</strong>
-                                            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
-                                                Died: @(dead.DiedAt?.ToString("yyyy-MM-dd HH:mm") ?? "Unknown")
-                                            </div>
-                                        </div>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl")">
-                                                @(dead.IsSeasonal ? "SSNL" : "NS")
-                                            </span>
-                                            <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveGraveyardEntry(dead.Id)">✕</button>
-                                        </div>
-                                    </div>
+                </select>
 
-                                    <div style="border-top: 1px solid var(--border-subtle); padding-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
-                                        @foreach (var d in dead.Drops.Where(x => x.Value > 0))
-                                        {
-                                            <span style="background: #18181f; border: 1px solid var(--border-subtle); padding: 4px 9px; border-radius: 6px; font-size: 0.8rem;">
-                                                @FormatDropName(d.Key): <strong style="color: var(--accent-white);">@d.Value</strong>
-                                            </span>
-                                        }
-                                    </div>
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+                    <span>Drop Rate (1/X):</span>
+                    <input class="input" type="number" style="width: 80px;" @bind="WishOneInX" min="1" max="10000" />
+                </div>
+
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="WishRequireShiny" /> ✨ Shiny Only
+                </label>
+
+                <button class="btn btn-primary" @onclick="CreateWishlistTarget">+ Add Target</button>
+            </div>
+
+            @if (State.Data.Wishlist.Count == 0)
+            {
+                <div class="empty-state">No wishlist targets yet. Add an item above to track dungeon attempts and cumulative drop probability!</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var wish in State.Data.Wishlist)
+                    {
+                        int runsDone = State.GetRunsSinceWishlistTargetCreated(wish);
+                        double cumulativeChance = CalculateWishProbabilityPercent(wish, runsDone);
+                        double graves = GameData.ResolveDungeonGraveDifficulty(wish.TargetDungeonName);
+
+                        <div class="quest-row" style="@(wish.IsCompleted ? "border-color: var(--accent-green); background: rgba(34, 197, 94, 0.08);" : "")">
+                            <div style="min-width: 260px;">
+                                <strong style="font-size: 1rem; color: @(wish.RequireShiny ? "#f472b6" : "var(--accent-white)");">
+                                    @(wish.RequireShiny ? "✨ " : "")@wish.ItemName
+                                </strong>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                                    📍 @wish.TargetDungeonName (@graves/10 💀) • Min: @wish.MinimumRarity
                                 </div>
-                            }
+                            </div>
+
+                            <div class="quest-progress-bar">
+                                <div class="quest-progress-fill" style="width: @Math.Min(100, cumulativeChance).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                            </div>
+
+                            <div style="min-width: 240px; text-align: right; font-size: 0.85rem;">
+                                <div>Runs Since Added: <strong>@runsDone</strong></div>
+                                <div style="color: var(--accent-gold);">Chance so far: <strong>@cumulativeChance.ToString("0.1")%</strong></div>
+                            </div>
+
+                            <div style="display: flex; gap: 6px;">
+                                @if (!wish.IsCompleted)
+                                {
+                                    <button class="btn btn-sm" title="+1 Run of this dungeon" @onclick="() => QuickIncrementDungeon(wish.TargetDungeonName)">+1 Run</button>
+                                }
+                                else
+                                {
+                                    <span class="badge-ssnl">COMPLETED ✓</span>
+                                }
+                                <button class="btn btn-danger btn-sm" @onclick="() => RemoveWishlistItem(wish.Id)">✕</button>
+                            </div>
                         </div>
                     }
                 </div>
+            }
+        }
+
+        <!-- ==================== TAB 8: AUTOMATED TINKERER QUESTS & OPENINGS ==================== -->
+        @if (ActiveTab == "quests")
+        {
+            <div class="section-header">
+                <h2>📜 Automated Tinkerer Mark Quests (59 Marks from XML)</h2>
             </div>
+
+            <div class="quest-add-bar" style="flex-wrap: wrap;">
+                <select class="select" style="min-width: 260px;" @bind="SelectedMarkIdForQuest">
+                    <option value="0">-- Select Mark from Game XML --</option>
+                    @foreach (var m in GameData.GetAllKnownMarks().OrderBy(m => m.MarkName))
+                    {
+                        <option value="@m.ItemId">@m.MarkName (👾 @m.BossName • 📍 @m.DungeonName)</option>
+                    }
+                </select>
+                <input class="input" type="number" style="max-width: 90px;" min="1" max="8" @bind="NewQuestTarget" title="Marks Required" />
+                <input class="input" style="max-width: 200px;" placeholder="Reward (e.g. Mighty Quest Chest)" @bind="NewQuestRewardName" />
+                <button class="btn btn-primary" @onclick="CreateXmlMarkQuest">+ Add Daily Quest</button>
+            </div>
+
+            @if (State.Data.ActiveQuests.Count == 0)
+            {
+                <div class="empty-state">No active Tinkerer quests. Select a Mark above — when a Mark drops in a bag in-game, the sniffer increments it automatically!</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var quest in State.Data.ActiveQuests)
+                    {
+                        double pct = Math.Min(100, (double)quest.CurrentMarks / quest.TargetMarks * 100);
+                        double graves = GameData.ResolveDungeonGraveDifficulty(quest.DungeonName);
+
+                        <div class="quest-row" title="Tooltip: Drops from @quest.BossName in @quest.DungeonName (@graves/10 Graves)">
+                            <div style="min-width: 270px;">
+                                <strong>@(string.IsNullOrEmpty(quest.MarkName) ? quest.DungeonName : quest.MarkName)</strong>
+                                @if (quest.IsCompleted)
+                                {
+                                    <span style="color: var(--accent-green); margin-left: 8px; font-weight: 700;">✓ READY!</span>
+                                }
+                                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                                    👾 Boss: <strong>@quest.BossName</strong> • 📍 Dungeon: <strong>@quest.DungeonName</strong> (@graves/10 💀) • 🎁 @quest.RewardName
+                                </div>
+                            </div>
+                            <div class="quest-progress-bar">
+                                <div class="quest-progress-fill" style="width: @(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            </div>
+                            <div style="min-width: 70px; text-align: right; font-weight: 700;">
+                                @quest.CurrentMarks / @quest.TargetMarks
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, -1)">−</button>
+                                <button class="btn btn-sm" @onclick="() => State.ChangeQuestMark(quest.Id, 1)">+</button>
+                                <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveQuest(quest.Id)">✕</button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="section-header" style="margin-top: 20px;">
+                <h2>📦 Chest Openings</h2>
+            </div>
+
+            <div class="quest-add-bar">
+                <input class="input" placeholder="Opening session title (e.g. Season 1 End Vault Opening)..." @bind="NewOpeningTitle" />
+                <button class="btn btn-primary" @onclick="CreateOpening">+ New Opening Session</button>
+            </div>
+
+            @foreach (var op in State.Data.Openings)
+            {
+                int opWhites = GetOpeningWhites(op);
+                int opSTs = GetOpeningSTs(op);
+                double opRatio = GetOpeningRatioPercent(op);
+
+                <div class="opening-card">
+                    <div class="opening-header" @onclick="() => State.ToggleOpeningExpanded(op.Id)">
+                        <div>
+                            <strong>@(op.IsExpanded ? "▼" : "▶") @op.Title</strong>
+                            <span style="color: var(--text-muted); font-size: 0.82rem; margin-left: 12px;">
+                                @op.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                            </span>
+                        </div>
+                        <div class="opening-summary">
+                            <span>Chests: <strong>@op.TotalChests</strong></span>
+                            <span style="color: var(--accent-white);">Whites: <strong>@opWhites</strong></span>
+                            <span style="color: var(--accent-st);">STs: <strong>@opSTs</strong></span>
+                            <span style="color: var(--accent-gold);">Ratio: <strong>@opRatio.ToString("0.00")%</strong></span>
+                            <button class="btn btn-danger btn-sm" @onclick:stopPropagation="true" @onclick="() => State.RemoveOpeningSession(op.Id)">🗑️</button>
+                        </div>
+                    </div>
+
+                    @if (op.IsExpanded)
+                    {
+                        <div class="opening-body">
+                            <div class="total-chests-row">
+                                <span>Total Opened Chests:</span>
+                                <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(op.Id, -10)">−10</button>
+                                <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(op.Id, -1)">−1</button>
+                                <input class="input" type="number" style="width: 90px; text-align: center; font-weight: 700;"
+                                       value="@op.TotalChests"
+                                       @onchange="(e) => OnTotalChestsInput(op.Id, e)" />
+                                <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(op.Id, 1)">+1</button>
+                                <button class="btn btn-sm" @onclick="() => State.ChangeOpeningTotalChests(op.Id, 10)">+10</button>
+                            </div>
+
+                            <div class="chest-grid">
+                                @foreach (var ct in Enum.GetValues<ChestType>())
+                                {
+                                    var stats = op.Chests.GetValueOrDefault(ct) ?? new ChestDropStats();
+                                    <div class="chest-box">
+                                        <h4>@ct</h4>
+                                        <div class="chest-stat-line">
+                                            <span style="color: var(--accent-white);">White Bags: <strong>@stats.Whites</strong></span>
+                                            <div style="display: flex; gap: 4px;">
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(op.Id, ct, true, -1)">−</button>
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(op.Id, ct, true, 1)">+</button>
+                                            </div>
+                                        </div>
+                                        <div class="chest-stat-line">
+                                            <span style="color: var(--accent-st);">ST Bags: <strong>@stats.STs</strong></span>
+                                            <div style="display: flex; gap: 4px;">
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(op.Id, ct, false, -1)">−</button>
+                                                <button class="btn btn-sm" @onclick="() => State.ChangeChestDrop(op.Id, ct, false, 1)">+</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        }
+
+        <!-- ==================== TAB 9: GRAVEYARD ==================== -->
+        @if (ActiveTab == "graveyard")
+        {
+            <div class="section-header">
+                <h2>🪦 Fallen Characters (RealmEye Standard • Never Deletes Loot History)</h2>
+            </div>
+
+            @if (State.Data.Graveyard.Count == 0)
+            {
+                <div class="empty-state">No fallen characters in the Graveyard yet. Stay safe in the Nexus!</div>
+            }
+            else
+            {
+                <div class="quest-list">
+                    @foreach (var dead in State.Data.Graveyard)
+                    {
+                        <div class="opening-card">
+                            <div class="opening-header" style="cursor: default;">
+                                <div>
+                                    <strong style="font-size: 1.05rem;">💀 @dead.FormattedTitle</strong>
+                                    <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl")" style="margin-left: 8px;">
+                                        @(dead.IsSeasonal ? $"SSNL ({dead.SeasonTag})" : "NOSSNL")
+                                    </span>
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                                        Killed by <strong style="color: #ef4444;">@(dead.KilledBy ?? "Unknown")</strong>
+                                        in <strong>@(dead.DeathDungeon ?? "Unknown")</strong> (@(dead.DeathServer ?? "EUWest"))
+                                        • @dead.DiedAt?.ToString("yyyy-MM-dd HH:mm")
+                                    </div>
+                                </div>
+                                <div class="opening-summary">
+                                    <span>Base Fame: <strong>@dead.BaseFame</strong></span>
+                                    <span style="color: var(--accent-gold);">Total Fame: <strong>@dead.TotalFame</strong></span>
+                                    <span>Logged Drops: <strong style="color: var(--accent-white);">@dead.TotalDrops</strong></span>
+                                    <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveGraveyardEntry(dead.Id)">✕</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
         }
     </main>
 </div>
 
 @code {
-    private bool _sidebarCollapsed = false;
-    private string _activeTab = "loot";
+    private string ActiveTab { get; set; } = "dashboard";
 
-    // Filter state for Loot History
-    private string _lootSearchQuery = string.Empty;
-    private string _selectedBagFilter = "ALL";
+    private bool IsAddingCharacter { get; set; }
+    private string NewCharName { get; set; } = "";
+    private RotmgClass NewCharClass { get; set; } = RotmgClass.Wizard;
+    private bool NewCharSeasonal { get; set; } = true;
 
-    // New Character state
-    private bool _showNewCharForm = false;
-    private string _newCharName = string.Empty;
-    private RotmgClass _newCharClass = RotmgClass.Wizard;
-    private bool _newCharSsnl = true;
+    private string ShowcaseSeasonFilter { get; set; } = "ALL";
 
-    // Quest & Opening state
-    private string _newQuestName = string.Empty;
-    private int _newQuestTarget = 4;
-    private string _newOpeningTitle = string.Empty;
+    private string ManualDropItemName { get; set; } = "";
+    private string ManualDropDungeon { get; set; } = "";
+    private string ManualDropBoss { get; set; } = "";
+    private ItemRarity ManualDropRarity { get; set; } = ItemRarity.Common;
+    private string LootSearchQuery { get; set; } = "";
+    private string LootFilterType { get; set; } = "";
+    private string LootFilterRarity { get; set; } = "";
 
-    private IEnumerable<LootDropRecord> FilteredLoot => State.Data.LootHistory.Where(l =>
-        (_selectedBagFilter == "ALL" || l.BagType.ToString() == _selectedBagFilter) &&
-        (string.IsNullOrWhiteSpace(_lootSearchQuery) ||
-         l.ItemName.Contains(_lootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
-         l.DungeonName.Contains(_lootSearchQuery, StringComparison.OrdinalIgnoreCase)));
+    private Guid? HighlightedCombatSessionId { get; set; }
 
-    private int TotalDungeonDamage => State.CurrentDungeonPlayers.Values.Sum(p => p.TotalDamage);
+    private string CounterScopeFilter { get; set; } = "ALL";
+    private string ManualRunDungeonName { get; set; } = "";
 
-    private IEnumerable<PlayerDpsEntry> SortedDpsPlayers =>
-        State.CurrentDungeonPlayers.Values.OrderByDescending(p => p.TotalDamage);
+    private string CollectionSearch { get; set; } = "";
+    private string CollectionCategoryFilter { get; set; } = "ALL";
+    private string CollectionOwnershipFilter { get; set; } = "ALL";
+    private bool CollectionIncludeTiered { get; set; } = false;
+    private int CollectionMinTier { get; set; } = 12;
+
+    private string WishItemName { get; set; } = "";
+    private string WishDungeonName { get; set; } = "";
+    private ItemRarity WishMinRarity { get; set; } = ItemRarity.Common;
+    private int WishOneInX { get; set; } = 100;
+    private bool WishRequireShiny { get; set; }
+
+    private int SelectedMarkIdForQuest { get; set; }
+    private int NewQuestTarget { get; set; } = 3;
+    private string NewQuestRewardName { get; set; } = "Mighty Quest Chest";
+    private string NewOpeningTitle { get; set; } = "";
 
     protected override void OnInitialized()
     {
-        State.OnStateChanged += HandleExternalStateChange;
-        Sniffer.StartListening();
+        State.OnStateChanged += HandleExternalStateChanged;
+        if (!Sniffer.IsListening)
+            Sniffer.StartListening();
     }
 
-    private void HandleExternalStateChange()
-    {
-        InvokeAsync(StateHasChanged);
-    }
+    private void HandleExternalStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void SetTab(string tab) => ActiveTab = tab;
 
     private void ToggleSniffer()
     {
@@ -533,60 +1057,281 @@
         else Sniffer.StartListening();
     }
 
-    private void ToggleSidebar() => _sidebarCollapsed = !_sidebarCollapsed;
-
-    private void CreateCharacter()
-    {
-        string name = string.IsNullOrWhiteSpace(_newCharName) ? _newCharClass.ToString() : _newCharName;
-        State.AddNewCharacter(name, _newCharClass, _newCharSsnl);
-        _newCharName = string.Empty;
-        _showNewCharForm = false;
-    }
-
-    private void CreateNewOpening()
-    {
-        string title = string.IsNullOrWhiteSpace(_newOpeningTitle)
-            ? $"{State.Data.Openings.Count + 1} opening"
-            : _newOpeningTitle.Trim();
-
-        State.AddOpeningSession(title);
-        _newOpeningTitle = string.Empty;
-    }
-
-    private void OnChestCountInput(Guid openingId, object? value)
-    {
-        if (int.TryParse(value?.ToString(), out int parsed))
-            State.SetOpeningTotalChests(openingId, parsed);
-    }
-
-    private void AddNewQuest()
-    {
-        if (string.IsNullOrWhiteSpace(_newQuestName)) return;
-        State.AddQuest(_newQuestName, _newQuestTarget);
-        _newQuestName = string.Empty;
-    }
-
-    private string FormatDropName(DropType type) => type switch
-    {
-        DropType.RegularWhite => "Regular White",
-        DropType.LegendaryWhite => "Legendary White",
-        DropType.ST => "ST",
-        DropType.BPs => "BPs",
-        DropType.Tops => "Tops",
-        DropType.DivineGoodItem => "Divine Good Item",
-        DropType.Shiny => "Shiny",
-        DropType.Shivine => "Shiny Divine Item",
-        _ => type.ToString()
-    };
-
-    public void Dispose()
-    {
-        State.OnStateChanged -= HandleExternalStateChange;
-    }
-    
     private void ScanGameFiles()
     {
         GameData.TryAutoExtractFromInstalledGame();
         StateHasChanged();
+    }
+
+    private void OnSeasonChanged(ChangeEventArgs e)
+    {
+        if (e.Value is string s && !string.IsNullOrWhiteSpace(s))
+        {
+            State.ActiveCharacter.SeasonTag = s;
+            State.SaveAsync();
+        }
+    }
+
+    private void OnCharacterSelected(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out Guid id))
+            State.SelectCharacter(id);
+    }
+
+    private void OnMaxedStatsChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int maxed))
+            State.UpdateActiveCharacterStats(maxed, State.ActiveCharacter.BaseFame);
+    }
+
+    private void OnBaseFameChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int fame))
+            State.UpdateActiveCharacterStats(State.ActiveCharacter.MaxedStats, fame);
+    }
+
+    private void CreateCharacter()
+    {
+        State.AddNewCharacter(NewCharName, NewCharClass, NewCharSeasonal);
+        NewCharName = "";
+        IsAddingCharacter = false;
+    }
+
+    private static List<List<LootDropRecord>> GroupLoidByBagInstance(IEnumerable<LootDropRecord> records)
+    {
+        return records
+            .GroupBy(r => r.BagInstanceId == Guid.Empty ? r.Id : r.BagInstanceId)
+            .Select(g => g.ToList())
+            .ToList();
+    }
+
+    private static double CalculateWishProbabilityPercent(WishlistTarget wish, int runs)
+    {
+        if (runs <= 0 || wish.EstimatedDropRate <= 0) return 0.0;
+        double p = Math.Clamp(wish.EstimatedDropRate, 0.00001, 1.0);
+        return Math.Round((1.0 - Math.Pow(1.0 - p, runs)) * 100.0, 2);
+    }
+
+    private static int GetOpeningWhites(OpeningSession op) => op.Chests.Values.Sum(c => c.Whites);
+
+    private static int GetOpeningSTs(OpeningSession op) => op.Chests.Values.Sum(c => c.STs);
+
+    private static double GetOpeningRatioPercent(OpeningSession op)
+    {
+        if (op.TotalChests <= 0) return 0.0;
+        int totalDrops = GetOpeningWhites(op) + GetOpeningSTs(op);
+        return Math.Round((double)totalDrops / op.TotalChests * 100.0, 2);
+    }
+
+    private void OnTotalChestsInput(Guid openingId, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int val))
+            State.SetOpeningTotalChests(openingId, val);
+    }
+
+    private void OpenLinkedCombatSession(Guid sessionId)
+    {
+        HighlightedCombatSessionId = sessionId;
+        ActiveTab = "dps";
+    }
+
+    private void ArchiveTestFight()
+    {
+        var firstBoss = GameData.GetAllKnownBosses().FirstOrDefault();
+        State.ArchiveCurrentCombatSession(
+            firstBoss?.DisplayName ?? "Oryx the Mad God 3",
+            firstBoss?.ObjectType ?? 0,
+            State.CurrentDungeonGraves > 0 ? State.CurrentDungeonGraves : 9.5);
+    }
+
+    private void AddManualRealDrop()
+    {
+        if (string.IsNullOrWhiteSpace(ManualDropItemName)) return;
+
+        var matchedItem = GameData.GetAllKnownItems()
+            .FirstOrDefault(i => string.Equals(i.Name, ManualDropItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        string dung = string.IsNullOrWhiteSpace(ManualDropDungeon) ? State.CurrentDungeonName : ManualDropDungeon.Trim();
+        double graves = GameData.ResolveDungeonGraveDifficulty(dung);
+        var portal = GameData.ResolvePortalByDungeonName(dung);
+        var matchedBoss = GameData.GetAllKnownBosses()
+            .FirstOrDefault(b => string.Equals(b.DisplayName, ManualDropBoss.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        DropType quality = matchedItem?.Quality ?? DropType.RegularWhite;
+        BagType physBag = quality == DropType.ST ? BagType.OrangeBag : BagType.WhiteBag;
+
+        State.RecordLootDrop(
+            itemName: matchedItem?.Name ?? ManualDropItemName.Trim(),
+            itemId: matchedItem?.ItemId ?? 0,
+            bagQuality: quality,
+            dungeonName: dung,
+            rarity: ManualDropRarity,
+            isShiny: matchedItem?.IsShiny ?? false,
+            difficulty: RarityScoreEngine.GraveCountToTier(graves),
+            physicalBag: physBag,
+            itemTier: matchedItem?.Tier ?? -1,
+            bossName: matchedBoss?.DisplayName ?? (string.IsNullOrWhiteSpace(ManualDropBoss) ? "Dungeon Boss" : ManualDropBoss.Trim()),
+            bossObjectType: matchedBoss?.ObjectType ?? 0,
+            graveDifficulty: graves,
+            dungeonPortalObjectType: portal?.ObjectType ?? 0);
+
+        ManualDropItemName = "";
+    }
+
+    private IEnumerable<LootDropRecord> GetFilteredShowcaseLoot()
+    {
+        var query = State.Data.LootHistory.AsEnumerable();
+        if (ShowcaseSeasonFilter == "SSNL") query = query.Where(l => l.IsSeasonal);
+        else if (ShowcaseSeasonFilter == "NOSSNL") query = query.Where(l => !l.IsSeasonal);
+        return query;
+    }
+
+    private IEnumerable<LootDropRecord> GetFilteredLootHistory()
+    {
+        var query = State.Data.LootHistory.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(LootSearchQuery))
+        {
+            query = query.Where(l =>
+                l.ItemName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.DungeonName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.BossName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.CharacterName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(LootFilterType) && Enum.TryParse<DropType>(LootFilterType, out var dt))
+            query = query.Where(l => l.BagType == dt);
+
+        if (!string.IsNullOrWhiteSpace(LootFilterRarity) && Enum.TryParse<ItemRarity>(LootFilterRarity, out var r))
+            query = query.Where(l => l.Rarity == r);
+
+        return query;
+    }
+
+    private IEnumerable<DungeonRunRecord> GetScopedDungeonRuns()
+    {
+        return CounterScopeFilter switch
+        {
+            "SEASON" => State.Data.DungeonRuns.Where(r => r.IsSeasonal && r.SeasonTag == State.CurrentSeasonTag),
+            "CHAR" => State.Data.DungeonRuns.Where(r => r.CharacterId == State.ActiveCharacter.Id),
+            _ => State.Data.DungeonRuns
+        };
+    }
+
+    private void AddManualDungeonRun()
+    {
+        if (string.IsNullOrWhiteSpace(ManualRunDungeonName)) return;
+        QuickIncrementDungeon(ManualRunDungeonName.Trim());
+        ManualRunDungeonName = "";
+    }
+
+    private void QuickIncrementDungeon(string dungeonName)
+    {
+        var tier = GameData.ResolveDungeonDifficulty(dungeonName);
+        State.RecordDungeonCompletion(dungeonName, tier);
+    }
+
+    private IEnumerable<ItemMetadata> GetFilteredCollectionItems()
+    {
+        var items = GameData.GetAllKnownItems().AsEnumerable();
+
+        if (!CollectionIncludeTiered)
+            items = items.Where(i => i.Tier <= 0);
+        else
+            items = items.Where(i => i.Tier <= 0 || i.Tier >= CollectionMinTier);
+
+        items = CollectionCategoryFilter switch
+        {
+            "LEGENDARY_WHITE" => items.Where(i => i.Quality == DropType.LegendaryWhite && !i.IsShiny),
+            "EVENT_WHITE" => items.Where(i => i.Quality == DropType.EventWhite && !i.IsShiny),
+            "REGULAR_WHITE" => items.Where(i => i.Quality == DropType.RegularWhite && !i.IsShiny),
+            "ST" => items.Where(i => i.Quality == DropType.ST),
+            "SHINY" => items.Where(i => i.IsShiny),
+            "BP" => items.Where(i => i.Quality == DropType.BPs),
+            _ => items
+        };
+
+        if (!string.IsNullOrWhiteSpace(CollectionSearch))
+            items = items.Where(i => i.Name.Contains(CollectionSearch, StringComparison.OrdinalIgnoreCase));
+
+        if (CollectionOwnershipFilter != "ALL")
+        {
+            var ownedIds = State.Data.LootHistory.Select(l => l.ItemId).ToHashSet();
+            var ownedNames = State.Data.LootHistory.Select(l => l.ItemName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (CollectionOwnershipFilter == "OWNED")
+                items = items.Where(i => ownedIds.Contains(i.ItemId) || ownedNames.Contains(i.Name));
+            else if (CollectionOwnershipFilter == "MISSING")
+                items = items.Where(i => !ownedIds.Contains(i.ItemId) && !ownedNames.Contains(i.Name));
+        }
+
+        return items.OrderByDescending(i => i.IsShiny).ThenBy(i => i.Name);
+    }
+
+    private void CreateWishlistTarget()
+    {
+        if (string.IsNullOrWhiteSpace(WishItemName)) return;
+        double rate = 1.0 / Math.Max(1, WishOneInX);
+        State.AddWishlistTarget(WishItemName, WishDungeonName, WishMinRarity, WishRequireShiny, rate);
+        WishItemName = "";
+    }
+
+    private void RemoveWishlistItem(Guid id)
+    {
+        State.Data.Wishlist.RemoveAll(w => w.Id == id);
+        State.SaveAsync();
+    }
+
+    private void CreateXmlMarkQuest()
+    {
+        if (SelectedMarkIdForQuest > 0 && GameData.TryResolveMark(SelectedMarkIdForQuest, out var markMeta))
+        {
+            var portal = GameData.ResolvePortalByDungeonName(markMeta.DungeonName);
+            State.AddMarkQuestWithMetadata(markMeta, NewQuestTarget, NewQuestRewardName, portal?.ObjectType ?? 0);
+            SelectedMarkIdForQuest = 0;
+        }
+    }
+
+    private void CreateOpening()
+    {
+        State.AddOpeningSession(NewOpeningTitle);
+        NewOpeningTitle = "";
+    }
+
+    private static string GetRarityBorderColor(ItemRarity rarity, bool isShiny)
+    {
+        if (isShiny) return "#f472b6";
+        return rarity switch
+        {
+            ItemRarity.Divine => "#f59e0b",
+            ItemRarity.Legendary => "#a855f7",
+            ItemRarity.Rare => "#38bdf8",
+            ItemRarity.Uncommon => "#22c55e",
+            _ => "var(--border-color)"
+        };
+    }
+
+    private static string FormatDropType(DropType t) => t switch
+    {
+        DropType.RegularWhite => "Regular White",
+        DropType.LegendaryWhite => "Legendary White",
+        DropType.DivineGoodItem => "Divine Good Item",
+        DropType.EventWhite => "Event White",
+        _ => t.ToString()
+    };
+
+    private static string GetDotClass(DropType t) => t switch
+    {
+        DropType.RegularWhite or DropType.LegendaryWhite or DropType.EventWhite => "dot-white",
+        DropType.ST => "dot-st",
+        DropType.UT or DropType.DivineGoodItem => "dot-ut",
+        DropType.Shiny or DropType.Shivine => "dot-shiny",
+        DropType.Tops or DropType.Tiered => "dot-tops",
+        _ => "dot-bp"
+    };
+
+    public void Dispose()
+    {
+        State.OnStateChanged -= HandleExternalStateChanged;
     }
 }
