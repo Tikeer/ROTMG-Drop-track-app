@@ -1,6 +1,7 @@
 using PacketDotNet;
 using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Services;
+using RotmgTrackerV1.Sniffer.Diagnostics;
 using RotmgTrackerV1.Sniffer.Protocol;
 using SharpPcap;
 
@@ -16,6 +17,26 @@ public class RotmgSnifferService : IDisposable
     public bool IsListening { get; private set; }
     public string StatusMessage { get; private set; } = "Sniffer Idle";
     public int PacketsCaptured { get; private set; }
+
+    public PacketCaptureLogger Capture { get; } = new();
+    public bool CaptureEnabled => Capture.IsActive;
+
+    // Wlacza/wylacza zapis diagnostyki ramek do pliku (patrz PacketCaptureLogger)
+    public void ToggleCapture()
+    {
+        if (Capture.IsActive)
+        {
+            _streamProcessor.Capture = null;
+            Capture.Stop();
+            StatusMessage = $"Capture saved: {Capture.FilePath}";
+        }
+        else
+        {
+            Capture.Start();
+            _streamProcessor.Capture = Capture;
+            StatusMessage = $"Capturing to: {Capture.FilePath}";
+        }
+    }
 
     public RotmgSnifferService(TrackerStateService state, GameDataService gameData)
     {
@@ -125,5 +146,9 @@ public class RotmgSnifferService : IDisposable
         _state.RecordPlayerDamage(104, "BlueStarKnight", RotmgClass.Knight, Random.Shared.Next(6000, 16000));
     }
 
-    public void Dispose() => StopListening();
+    public void Dispose()
+    {
+        StopListening();
+        Capture.Dispose();
+    }
 }

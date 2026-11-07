@@ -1,6 +1,7 @@
 using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Services;
 using RotmgTrackerV1.Sniffer.Crypto;
+using RotmgTrackerV1.Sniffer.Diagnostics;
 
 namespace RotmgTrackerV1.Sniffer.Protocol;
 
@@ -45,6 +46,9 @@ public class RotmgStreamProcessor
     private readonly Dictionary<int, TrackedMapEnemy> _enemiesOnMap = new();
     private EnemyMetadata? _lastDamagedBossOnMap;
 
+    // Tryb przechwytywania (diagnostyka); null = wylaczony
+    public PacketCaptureLogger? Capture { get; set; }
+
     public int DecodedPacketsCount { get; private set; }
 
     public RotmgStreamProcessor(TrackerStateService state, GameDataService gameData)
@@ -55,6 +59,7 @@ public class RotmgStreamProcessor
 
     public void ResetStream()
     {
+        Capture?.Note("STREAM_RESET");
         _serverCipher = new Rc4Cipher(Rc4Cipher.ServerToClientKeyHex);
         _clientCipher = new Rc4Cipher(Rc4Cipher.ClientToServerKeyHex);
         _serverBuffer.Clear();
@@ -101,6 +106,7 @@ public class RotmgStreamProcessor
 
             if (packetLength is < 5 or > 500_000)
             {
+                Capture?.LogBadFrame(isServerToClient, buffer.Count, buffer.GetRange(0, 5).ToArray());
                 buffer.Clear();
                 return;
             }
@@ -114,6 +120,7 @@ public class RotmgStreamProcessor
             buffer.RemoveRange(0, packetLength);
 
             cipher.Cipher(body.AsSpan());
+            Capture?.LogFrame(isServerToClient, packetId, packetLength, body);
             DecodedPacketsCount++;
 
             try

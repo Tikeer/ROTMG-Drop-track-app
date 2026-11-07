@@ -71,6 +71,9 @@
                 <button class="btn btn-sm" title="Test Boss Damage Packets" @onclick="Sniffer.SimulateDungeonDpsFight">
                     ⚡ Test Boss DPS
                 </button>
+                <button class="btn btn-sm" @onclick="ToggleCapture" title="@Sniffer.Capture.FilePath">
+                    @(Sniffer.CaptureEnabled ? "⏹ Stop capture" : "⏺ Start capture")
+                </button>
             </div>
         </div>
 
@@ -1039,6 +1042,8 @@
     private int NewQuestTarget { get; set; } = 3;
     private string NewQuestRewardName { get; set; } = "Mighty Quest Chest";
     private string NewOpeningTitle { get; set; } = "";
+    
+    private void ToggleCapture() { Sniffer.ToggleCapture(); StateHasChanged(); }
 
     protected override void OnInitialized()
     {
