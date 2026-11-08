@@ -8,5 +8,7 @@ public enum BagType
     CyanBag,
     BlueBag,
     PurpleBag,
-    BrownBag
+    BrownBag,
+    PinkBag,
+    EggBag
 }

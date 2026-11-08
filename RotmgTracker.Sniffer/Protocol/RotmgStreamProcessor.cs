@@ -403,15 +403,20 @@ public class RotmgStreamProcessor
 
             if (!_gameData.TryGetItem(itemId, out var itemMeta))
             {
-                // Nieznany przedmiot: nie zgadujemy jakosci (wczesniej trafial jako RegularWhite)
                 Capture?.Note($"BAG_ITEM_UNKNOWN: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4}");
                 continue;
             }
 
-            // NOTE: Wykryty przedmiot w worku
-            Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality})");
+            // Zwykłe potki/śmieci z niebieskich i cyan worków nas nie interesują
+            bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
+            if (itemMeta.BagTypeId < 6 && !special)
+                continue;
 
-            if (itemMeta.Quality == DropType.Tiered && physicalBag is not (BagType.WhiteBag or BagType.OrangeBag))
+            BagType itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
+
+            Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+
+            if (itemMeta.Quality == DropType.Tiered && itemBag is not (BagType.WhiteBag or BagType.OrangeBag))
                 continue;
 
             // Jeśli to White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv), nadaj jakość LegendaryWhite
@@ -429,7 +434,7 @@ public class RotmgStreamProcessor
                 rarity: ItemRarity.Common,
                 isShiny: itemMeta.IsShiny,
                 difficulty: tier,
-                physicalBag: physicalBag,
+                physicalBag: itemBag,
                 itemTier: itemMeta.Tier,
                 bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
                 bossObjectType: matchedBoss?.ObjectType ?? 0,
@@ -489,7 +494,8 @@ public class RotmgStreamProcessor
             _lastDamagedBossOnMap = targetEnemy.Metadata;
         }
 
-        if (_enemiesOnMap.ContainsKey(targetObjectId) && _playersOnMap.TryGetValue(attackerObjectId, out var attacker))
+        if (_enemiesOnMap.TryGetValue(targetObjectId, out var dmgTarget) && dmgTarget.Metadata.IsBoss &&
+            _playersOnMap.TryGetValue(attackerObjectId, out var attacker))
         {
             _state.RecordPlayerDamage(attackerObjectId, attacker.Name, attacker.Class, damageAmount);
         }

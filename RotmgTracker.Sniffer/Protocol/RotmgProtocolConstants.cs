@@ -31,14 +31,15 @@ public static class RotmgProtocolConstants
     // Które statystyki w protokole RotMG są przesyłane jako UTF String zamiast CompressedInt
     public static bool IsStringStat(int statType) =>
         statType is 6 or 31 or 38 or 54 or 62 or 80 or 115 or 121 or 127 or 128 or 147;
-
-    // Czy dany ObjectType to worek z lootem na ziemi
+    
+    // Wszystkie worki z lootem ("Loot Bag N" w XML = BagType N)
     public static bool IsLootBagContainer(int objectType) =>
-        objectType is 0x0500 or 0x0506 or 0x0507 or 0x0508 or 0x0509 or 0x050B or 0x050E or 0x050F;
+        objectType is 0x0500 or 0x0506 or 0x0507 or 0x0508 or 0x0509
+            or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
-    // Czy worek to cenny drop (White, Orange/ST, Red, Cyan, Blue), który chcemy logować
+// Śledzimy: cyan/niebieski (tylko Marki), biały (+Boost), czerwony, pomarańczowy
     public static bool IsTrackedBagContainer(int objectType) =>
-        objectType is 0x0507 or 0x0508 or 0x0509 or 0x050B or 0x050E or 0x050F;
+        objectType is 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
     // Mapowanie wewnętrznych ObjectType klas w RotMG na nasz enum RotmgClass
     private static readonly Dictionary<int, RotmgClass> ClassObjectTypes = new()

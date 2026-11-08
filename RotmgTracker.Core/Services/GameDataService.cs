@@ -68,13 +68,15 @@ public class GameDataService
     private readonly Dictionary<int, BagType> _bagContainers = new()
     {
         { 0x0500, BagType.BrownBag },
-        { 0x0506, BagType.PurpleBag },
-        { 0x0507, BagType.CyanBag },
-        { 0x0508, BagType.BlueBag },
-        { 0x0509, BagType.WhiteBag },
-        { 0x050B, BagType.WhiteBag },
-        { 0x050E, BagType.OrangeBag },
-        { 0x050F, BagType.RedBag }
+        { 0x0506, BagType.PinkBag },
+        { 0x0507, BagType.PurpleBag },
+        { 0x0508, BagType.EggBag },
+        { 0x0509, BagType.CyanBag },
+        { 0x050B, BagType.BlueBag },
+        { 0x050C, BagType.WhiteBag },
+        { 0x0510, BagType.WhiteBag },
+        { 0x050E, BagType.RedBag },
+        { 0x050F, BagType.OrangeBag }
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =
@@ -112,7 +114,7 @@ public class GameDataService
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
         _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
-        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v5.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v6.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
 
@@ -140,7 +142,22 @@ public class GameDataService
         _marks.TryGetValue(itemId, out mark!);
 
     public BagType ResolveBagType(int containerObjectType) =>
-        _bagContainers.GetValueOrDefault(containerObjectType, BagType.WhiteBag);
+        _bagContainers.GetValueOrDefault(containerObjectType, BagType.BrownBag); // wcześniej domyślnie White
+    
+    // Kolor worka wynikający z <BagType> przedmiotu w XML
+    public BagType ResolveBagTypeFromItem(int xmlBagType, BagType fallback) => xmlBagType switch
+    {
+        0 => BagType.BrownBag,
+        1 => BagType.PinkBag,
+        2 => BagType.PurpleBag,
+        3 => BagType.EggBag,
+        4 => BagType.CyanBag,
+        5 => BagType.BlueBag,
+        6 => BagType.WhiteBag,
+        7 => BagType.RedBag,
+        8 => BagType.OrangeBag,
+        _ => fallback
+    };
 
     // Zwraca false dla przedmiotow, ktorych nie ma w katalogu (nie zgadujemy ich jakosci)
     public bool TryGetItem(int itemId, out ItemMetadata item) =>
@@ -406,20 +423,19 @@ public class GameDataService
             int maxHp = 0;
             int.TryParse(obj.Element("MaxHitPoints")?.Value, out maxHp);
 
-            string labels = obj.Element("Labels")?.Value 
-                ?? obj.Attribute("labels")?.Value 
-                ?? string.Empty;
+            string labels = obj.Element("Labels")?.Value ?? obj.Attribute("labels")?.Value ?? string.Empty;
+            var enemyLabels = labels
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            bool hasBossLabels = labels.Contains("BOSS", StringComparison.OrdinalIgnoreCase) ||
-                                 labels.Contains("BOSSFIGHT", StringComparison.OrdinalIgnoreCase);
+            bool hasBossLabel = enemyLabels.Contains("BOSS") || enemyLabels.Contains("BOSSFIGHT") || enemyLabels.Contains("ENCOUNTER");
+            bool hasBossBar = obj.Element("HealthBarBoss") != null;
 
-            // Zaktualizowany warunek: Septavius i Malphas mają <Quest/> i <God/>, ale mają też <HealthBarBoss/> / BOSS
-            bool isBoss = obj.Element("KeepDamageRecord") != null ||
-                          obj.Element("Oryx") != null ||
-                          obj.Element("HealthBarBoss") != null ||
-                          hasBossLabels ||
-                          idName.Contains(" Loot Chest", StringComparison.OrdinalIgnoreCase) ||
-                          displayName.Contains(" Chest", StringComparison.OrdinalIgnoreCase);
+            // KeepDamageRecord ma 227 wrogów, więc samo nie wystarcza – wymagamy też Quest/Hero/Encounter
+            bool trackedEventBoss = obj.Element("KeepDamageRecord") != null &&
+                                    (obj.Element("Quest") != null || obj.Element("Hero") != null || obj.Element("Encounter") != null);
+
+            bool isBoss = obj.Element("Oryx") != null || hasBossBar || hasBossLabel || trackedEventBoss;
 
             if (isBoss || maxHp >= 5000)
             {
