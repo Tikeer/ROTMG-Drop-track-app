@@ -64,6 +64,7 @@ public class GameDataService
     private readonly Dictionary<string, PortalMetadata> _portalsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, MarkMetadata> _marks = new();
     private readonly Dictionary<int, RotmgClass> _playerClasses = new();
+    private readonly List<string> _bossReasons = new();
 
     private readonly Dictionary<int, BagType> _bagContainers = new()
     {
@@ -114,7 +115,7 @@ public class GameDataService
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
         _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
-        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v6.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v7.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
 
@@ -253,6 +254,7 @@ public class GameDataService
                 _enemies.Clear();
                 _portalsByName.Clear();
                 _marks.Clear();
+                _bossReasons.Clear();
 
                 var forgeMap = new Dictionary<int, ForgeXmlEntry>();
                 var xmlGraveMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -448,6 +450,14 @@ public class GameDataService
                     texFile,
                     texIndex);
             }
+            // w gałęzi <Enemy />, po policzeniu isBoss
+            var reasons = new List<string>();
+            if (obj.Element("Oryx") != null) reasons.Add("Oryx");
+            if (hasBossBar) reasons.Add("HealthBarBoss");
+            if (hasBossLabel) reasons.Add("Label:" + string.Join("/", enemyLabels.Where(l => l is "BOSS" or "BOSSFIGHT" or "ENCOUNTER")));
+            if (trackedEventBoss) reasons.Add("KeepDamageRecord+Quest/Hero/Encounter");
+            if (isBoss) _bossReasons.Add($"{displayName} | 0x{objectType:X4} | hp={maxHp} | {string.Join(",", reasons)} | labels={labels}");
+            
             return;
         }
 
@@ -775,6 +785,7 @@ public class GameDataService
             File.WriteAllText(_enemyCatalogPath, JsonSerializer.Serialize(_enemies.Values.ToList(), options));
             File.WriteAllText(_portalCatalogPath, JsonSerializer.Serialize(_portalsByName.Values.ToList(), options));
             File.WriteAllText(_markCatalogPath, JsonSerializer.Serialize(_marks.Values.ToList(), options));
+            File.WriteAllLines(Path.Combine(_appDataDir, "boss_reasons.txt"), _bossReasons.OrderBy(x => x));
         }
         catch { }
     }

@@ -236,6 +236,13 @@ public class RotmgStreamProcessor
             ushort objectType = reader.ReadUInt16();
             int objectId = reader.ReadCompressedInt();
             var (x, y) = reader.ReadWorldPosData();
+            
+            if (objectId < 0 || !float.IsFinite(x) || !float.IsFinite(y) || Math.Abs(x) > 5000 || Math.Abs(y) > 5000)
+            {
+                Capture?.Note($"UPDATE_DESYNC: object {i}/{newObjectsCount}, type=0x{objectType:X4}");
+                return;
+            }
+            
             var stats = reader.ReadStatDataList();
 
             InspectObjectStatus(objectType, objectId, x, y, stats);
@@ -248,6 +255,10 @@ public class RotmgStreamProcessor
             _activeBagsOnMap.Remove(id);
             _enemiesOnMap.Remove(id);
             _playersOnMap.Remove(id);
+            
+            if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
+                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\"");
+            
         }
     }
 
@@ -485,7 +496,8 @@ public class RotmgStreamProcessor
         reader.Skip(effectsCount);
 
         ushort damageAmount = reader.ReadUInt16();
-        bool killedTarget = reader.ReadBool();
+        byte killFlags = reader.ReadByte();
+        bool killedTarget = (killFlags & 0x01) != 0;
         reader.Skip(2);        // bulletId (ushort), nie 1 bajt
         int attackerObjectId = reader.ReadInt32();
 

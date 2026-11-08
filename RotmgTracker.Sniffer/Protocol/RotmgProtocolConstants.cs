@@ -30,7 +30,7 @@ public static class RotmgProtocolConstants
 
     // Które statystyki w protokole RotMG są przesyłane jako UTF String zamiast CompressedInt
     public static bool IsStringStat(int statType) =>
-        statType is 6 or 31 or 38 or 54 or 62 or 80 or 115 or 121 or 127 or 128 or 147;
+        statType is 6 or 31 or 38 or 54 or 62 or 80 or 82 or 115 or 121 or 127 or 128 or 147;
     
     // Wszystkie worki z lootem ("Loot Bag N" w XML = BagType N)
     public static bool IsLootBagContainer(int objectType) =>

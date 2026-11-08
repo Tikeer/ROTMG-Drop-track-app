@@ -17,9 +17,9 @@ namespace RotmgTrackerV1.Sniffer.Diagnostics;
 /// </summary>
 public sealed class PacketCaptureLogger : IDisposable
 {
-    private const int MaxLinesPerPacketId = 150;
+    private const int MaxLinesPerPacketId = 1500;
     private const int MaxBadFrameLines = 50;
-    private const int MaxEventLines = 200;
+    private const int MaxEventLines = 2000;
     private const int FullBodyIfShorterThan = 400;
     private const int TruncatedServerBodyBytes = 96;
     private const int ClientBodyBytes = 8;
