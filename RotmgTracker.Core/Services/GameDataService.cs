@@ -110,9 +110,9 @@ public class GameDataService
             "RotmgTracker");
         Directory.CreateDirectory(_appDataDir);
 
-        // Wersja v6 wymusza przebudowanie katalogów z <CommonDungeon diff="..."> i czystym filtrem <BagType> + <Description>
-        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v6.json");
-        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v4.json");
+        // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
+        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v5.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
 
@@ -236,7 +236,6 @@ public class GameDataService
                 var forgeMap = new Dictionary<int, ForgeXmlEntry>();
                 var xmlGraveMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
-                // PRZEBIEG 1: Zbierz <ForgeProperties>, <DungeonDifficulty> z kluczy oraz <CommonDungeon diff="..."> z potionów
                 foreach (var doc in xmlDocuments)
                 {
                     foreach (var fp in doc.Root!.Elements("ForgeProperties"))
@@ -262,7 +261,6 @@ public class GameDataService
 
                     foreach (var obj in doc.Root.Elements("Object"))
                     {
-                        // 1A. <CommonDungeon diff="9.5">Oryx's Sanctuary</CommonDungeon> wewnątrz potionów statystyk
                         foreach (var cd in obj.Elements("CommonDungeon"))
                         {
                             string dungName = cd.Value.Trim().Replace('’', '\'');
@@ -277,7 +275,6 @@ public class GameDataService
                             }
                         }
 
-                        // 1B. <DungeonDifficulty> wewnątrz obiektów <Key />
                         if (obj.Element("Key") != null)
                         {
                             string? diffStr = obj.Element("DungeonDifficulty")?.Value;
@@ -310,7 +307,6 @@ public class GameDataService
                     }
                 }
 
-                // PRZEBIEG 2: Parsuj Portale, Klasy, Bossów, Marki i Przedmioty
                 foreach (var doc in xmlDocuments)
                 {
                     foreach (var obj in doc.Root!.Elements("Object"))
@@ -406,10 +402,18 @@ public class GameDataService
             int maxHp = 0;
             int.TryParse(obj.Element("MaxHitPoints")?.Value, out maxHp);
 
-            // Prawdziwy Boss w XML gry ma <KeepDamageRecord />, <Oryx /> lub <Quest /> (z wyłączeniem zwykłych mobków <God /> z Godlandsów)
+            string labels = obj.Element("Labels")?.Value 
+                ?? obj.Attribute("labels")?.Value 
+                ?? string.Empty;
+
+            bool hasBossLabels = labels.Contains("BOSS", StringComparison.OrdinalIgnoreCase) ||
+                                 labels.Contains("BOSSFIGHT", StringComparison.OrdinalIgnoreCase);
+
+            // Zaktualizowany warunek: Septavius i Malphas mają <Quest/> i <God/>, ale mają też <HealthBarBoss/> / BOSS
             bool isBoss = obj.Element("KeepDamageRecord") != null ||
                           obj.Element("Oryx") != null ||
-                          (obj.Element("Quest") != null && obj.Element("God") == null) ||
+                          obj.Element("HealthBarBoss") != null ||
+                          hasBossLabels ||
                           idName.Contains(" Loot Chest", StringComparison.OrdinalIgnoreCase) ||
                           displayName.Contains(" Chest", StringComparison.OrdinalIgnoreCase);
 
@@ -443,7 +447,7 @@ public class GameDataService
                 return;
             }
 
-            // 4B. Ekwipunek i Blueprinty (wymaga <BagType> > 0 oraz <Description>, co wycina "SpecPen OA Shot 1"!)
+            // 4B. Ekwipunek i Blueprinty
             if (!IsValidCollectibleEquipment(obj, idName, displayName, labelTokens, out int slotType, out int xmlBagType))
                 return;
 
@@ -551,9 +555,7 @@ public class GameDataService
 
         if (xmlBagType == 6)
         {
-            if (forge is { IsRealmWhite: true } || labelTokens.Contains("REALMWHITE"))
-                return DropType.EventWhite;
-
+            // Usunięto sztuczne wymuszenie REALMWHITE -> Event White (pozostaje do decyzji sniffera na podstawie mapy)
             if (forgeTier == "S")
                 return DropType.LegendaryWhite;
 
@@ -594,19 +596,29 @@ public class GameDataService
         slotType = 0;
         xmlBagType = 0;
 
+        // Odrzucamy paczki schematiców w stosach (np. "Schematic x5")
+        if (Regex.IsMatch(displayName, @"Schematic\s*x\d+", RegexOptions.IgnoreCase) ||
+            Regex.IsMatch(idName, @"Schematic\s*x\d+", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
+        bool isBlueprintOrSchematic = displayName.Contains("Blueprint", StringComparison.OrdinalIgnoreCase) ||
+                                      displayName.Contains("Schematic", StringComparison.OrdinalIgnoreCase);
+
         if (!int.TryParse(obj.Element("SlotType")?.Value, out slotType))
             return false;
 
         // Każdy prawdziwy przedmiot w grze musi mieć <BagType> > 0 oraz niepusty <Description>
-        // (eliminuje to techniczne obiekty strzałów typu "SpecPen OA Shot 1")
         if (!int.TryParse(obj.Element("BagType")?.Value, out xmlBagType) || xmlBagType <= 0)
             return false;
 
         if (string.IsNullOrWhiteSpace(obj.Element("Description")?.Value))
             return false;
 
+        // Blueprinty ignorują blokadę na Consumable, ale pozostałe przedmioty jej podlegają
         if (obj.Element("Quantity") != null ||
-            obj.Element("Consumable") != null ||
+            (!isBlueprintOrSchematic && obj.Element("Consumable") != null) ||
             obj.Element("Key") != null ||
             obj.Element("Mark") != null ||
             obj.Element("PetFood") != null ||
@@ -630,16 +642,17 @@ public class GameDataService
             }
         }
 
-        if (labelTokens.Contains("PET") || labelTokens.Contains("CONSUMABLE") ||
-            labelTokens.Contains("TOKEN") || labelTokens.Contains("MARK") || labelTokens.Contains("KEY"))
+        // Blueprinty pomijają etykietę CONSUMABLE
+        if (labelTokens.Contains("PET") || 
+            (!isBlueprintOrSchematic && labelTokens.Contains("CONSUMABLE")) ||
+            labelTokens.Contains("TOKEN") || 
+            labelTokens.Contains("MARK") || 
+            labelTokens.Contains("KEY"))
         {
             return false;
         }
 
-        bool isBlueprint = displayName.Contains("Blueprint", StringComparison.OrdinalIgnoreCase) ||
-                           displayName.Contains("Schematic", StringComparison.OrdinalIgnoreCase);
-
-        if (!isBlueprint && !ValidEquipmentSlotTypes.Contains(slotType))
+        if (!isBlueprintOrSchematic && !ValidEquipmentSlotTypes.Contains(slotType))
             return false;
 
         return true;

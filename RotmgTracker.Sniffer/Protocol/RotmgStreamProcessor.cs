@@ -224,9 +224,11 @@ public class RotmgStreamProcessor
 
     private void ParseUpdate(ref RotmgPacketReader reader)
     {
+        reader.Skip(8);        // pozycja
+        reader.ReadByte();     // 0x19, stały w logu
+
         int tileCount = reader.ReadCompressedInt();
-        for (int i = 0; i < tileCount && reader.Remaining >= 6; i++)
-            reader.Skip(6);
+        reader.Skip(tileCount * 6);
 
         int newObjectsCount = reader.ReadCompressedInt();
         for (int i = 0; i < newObjectsCount && reader.Remaining > 0; i++)
@@ -238,16 +240,23 @@ public class RotmgStreamProcessor
 
             InspectObjectStatus(objectType, objectId, x, y, stats);
         }
+
+        int dropCount = reader.ReadCompressedInt();
+        for (int i = 0; i < dropCount && reader.Remaining > 0; i++)
+        {
+            int id = reader.ReadCompressedInt();
+            _activeBagsOnMap.Remove(id);
+            _enemiesOnMap.Remove(id);
+            _playersOnMap.Remove(id);
+        }
     }
 
     private void ParseNewTick(ref RotmgPacketReader reader)
     {
-        if (reader.Remaining < 6) return;
-        reader.Skip(6);
-        if (reader.Remaining >= 6)
-            reader.Skip(6);
+        if (reader.Remaining < 16) return;
+        reader.Skip(14);
 
-        int statusCount = reader.ReadCompressedInt();
+        int statusCount = reader.ReadUInt16();
         for (int i = 0; i < statusCount && reader.Remaining > 0; i++)
         {
             int objectId = reader.ReadCompressedInt();
@@ -282,6 +291,10 @@ public class RotmgStreamProcessor
 
             if (objectId == _myObjectId)
             {
+                // NOTE: Gracz lokalny (ObjectId, klasa, staty)
+                string statsSummary = string.Join(", ", stats.Select(s => $"{s.StatType}:{(string.IsNullOrEmpty(s.StringValue) ? s.IntValue : s.StringValue)}"));
+                Capture?.Note($"PLAYER_STATUS: Id={objectId}, Class={playerClass}, Stats=[{statsSummary}]");
+
                 if (!string.IsNullOrWhiteSpace(playerName))
                     _state.HandleNexusPlayerDetected(playerName, playerClass, true, _currentCharId);
 
@@ -301,7 +314,11 @@ public class RotmgStreamProcessor
             };
 
             if (enemyMeta.IsBoss)
+            {
                 _lastDamagedBossOnMap = enemyMeta;
+                // NOTE: Wykryty Boss na mapie
+                Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
+            }
 
             return;
         }
@@ -322,6 +339,9 @@ public class RotmgStreamProcessor
                     CombatSessionId = _state.LastCompletedCombatSessionId
                 };
                 _activeBagsOnMap[objectId] = trackedBag;
+
+                // NOTE: Zespawnowany worek na mapie
+                Capture?.Note($"BAG_SPAWN: Type=0x{objectType:X4}, Id={objectId}, Pos=({x:F1}, {y:F1})");
             }
 
             InspectBagContents(trackedBag, objectId, stats);
@@ -376,11 +396,16 @@ public class RotmgStreamProcessor
             // Sprawdź czy w worku wypadł Mark u Tinkerera -> automatycznie zaktualizuj Quest Tracker
             if (_gameData.TryResolveMark(itemId, out var markMeta))
             {
+                Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (MARK: {markMeta.MarkName})");
                 _state.SyncMarkPickedUp(markMeta, portal?.ObjectType ?? 0);
                 continue;
             }
 
             var itemMeta = _gameData.ResolveItem(itemId);
+
+            // NOTE: Wykryty przedmiot w worku
+            Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality})");
+
             if (itemMeta.Quality == DropType.Tiered && physicalBag is not (BagType.WhiteBag or BagType.OrangeBag))
                 continue;
 
@@ -443,7 +468,7 @@ public class RotmgStreamProcessor
 
     private void ParseDamage(ref RotmgPacketReader reader)
     {
-        if (reader.Remaining < 10) return;
+        if (reader.Remaining < 11) return;
 
         int targetObjectId = reader.ReadInt32();
         int effectsCount = reader.ReadByte();
@@ -451,7 +476,7 @@ public class RotmgStreamProcessor
 
         ushort damageAmount = reader.ReadUInt16();
         bool killedTarget = reader.ReadBool();
-        reader.Skip(1);
+        reader.Skip(2);        // bulletId (ushort), nie 1 bajt
         int attackerObjectId = reader.ReadInt32();
 
         if (_enemiesOnMap.TryGetValue(targetObjectId, out var targetEnemy) && targetEnemy.Metadata.IsBoss)
@@ -459,10 +484,12 @@ public class RotmgStreamProcessor
             _lastDamagedBossOnMap = targetEnemy.Metadata;
         }
 
-        if (_playersOnMap.TryGetValue(attackerObjectId, out var attacker))
+        if (_enemiesOnMap.ContainsKey(targetObjectId) && _playersOnMap.TryGetValue(attackerObjectId, out var attacker))
         {
             _state.RecordPlayerDamage(attackerObjectId, attacker.Name, attacker.Class, damageAmount);
         }
+        
+            
 
         // Gdy Boss ginie: zapisz ukończenie dungeona oraz zarchiwizuj sesję DPS pod wypadający za chwilę worek!
         if (killedTarget && _enemiesOnMap.TryGetValue(targetObjectId, out var deadEnemy) && deadEnemy.Metadata.IsBoss)

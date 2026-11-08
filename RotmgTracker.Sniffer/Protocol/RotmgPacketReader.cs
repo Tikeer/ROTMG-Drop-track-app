@@ -112,6 +112,9 @@ public ref struct RotmgPacketReader
                 int intVal = ReadCompressedInt();
                 list.Add(new StatEntry(statType, intVal, string.Empty));
             }
+
+            // Wartość dodatkowa (secondary) dodana w nowym protokole Exalta:
+            ReadCompressedInt();
         }
 
         return list;
