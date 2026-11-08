@@ -142,6 +142,10 @@ public class GameDataService
     public BagType ResolveBagType(int containerObjectType) =>
         _bagContainers.GetValueOrDefault(containerObjectType, BagType.WhiteBag);
 
+    // Zwraca false dla przedmiotow, ktorych nie ma w katalogu (nie zgadujemy ich jakosci)
+    public bool TryGetItem(int itemId, out ItemMetadata item) =>
+        _items.TryGetValue(itemId, out item!);
+
     public ItemMetadata ResolveItem(int itemId)
     {
         if (_items.TryGetValue(itemId, out var meta))

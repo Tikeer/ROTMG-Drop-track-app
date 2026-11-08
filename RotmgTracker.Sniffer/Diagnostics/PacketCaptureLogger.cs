@@ -189,7 +189,6 @@ public sealed class PacketCaptureLogger : IDisposable
     private static bool IsBodyAllowed(bool isServerToClient, byte id) =>
         isServerToClient
             ? id is RotmgProtocolConstants.PacketMapInfo
-                or RotmgProtocolConstants.PacketCreateSuccess
                 or RotmgProtocolConstants.PacketUpdate
                 or RotmgProtocolConstants.PacketNewTick
                 or RotmgProtocolConstants.PacketDamage

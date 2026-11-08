@@ -401,7 +401,12 @@ public class RotmgStreamProcessor
                 continue;
             }
 
-            var itemMeta = _gameData.ResolveItem(itemId);
+            if (!_gameData.TryGetItem(itemId, out var itemMeta))
+            {
+                // Nieznany przedmiot: nie zgadujemy jakosci (wczesniej trafial jako RegularWhite)
+                Capture?.Note($"BAG_ITEM_UNKNOWN: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4}");
+                continue;
+            }
 
             // NOTE: Wykryty przedmiot w worku
             Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality})");
