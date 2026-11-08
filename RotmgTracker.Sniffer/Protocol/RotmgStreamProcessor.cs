@@ -288,6 +288,12 @@ public class RotmgStreamProcessor
             {
                 InspectLocalPlayerStats(stats);
             }
+            
+            var hpStat = stats.FirstOrDefault(s => s.StatType == 1);
+            if (hpStat.IntValue > 0)
+            {
+                // opcjonalnie: trackedEnemy.CurrentHp = hpStat.IntValue;
+            }
         }
     }
 
@@ -328,7 +334,7 @@ public class RotmgStreamProcessor
             {
                 _lastDamagedBossOnMap = enemyMeta;
                 // NOTE: Wykryty Boss na mapie
-                Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
+                Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4},Category={enemyMeta.Category}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
             }
 
             return;
@@ -511,8 +517,6 @@ public class RotmgStreamProcessor
         {
             _state.RecordPlayerDamage(attackerObjectId, attacker.Name, attacker.Class, damageAmount);
         }
-        
-            
 
         // Gdy Boss ginie: zapisz ukończenie dungeona oraz zarchiwizuj sesję DPS pod wypadający za chwilę worek!
         if (killedTarget && _enemiesOnMap.TryGetValue(targetObjectId, out var deadEnemy) && deadEnemy.Metadata.IsBoss)
@@ -521,7 +525,8 @@ public class RotmgStreamProcessor
             var tier = RarityScoreEngine.GraveCountToTier(graves);
 
             _state.ArchiveCurrentCombatSession(deadEnemy.Metadata.DisplayName, deadEnemy.Metadata.ObjectType, graves);
-            _state.RecordDungeonCompletion(_state.CurrentDungeonName, tier);
+            if (deadEnemy.Metadata.Category == "DungeonBoss")
+                _state.RecordDungeonCompletion(_state.CurrentDungeonName, tier);
         }
     }
 

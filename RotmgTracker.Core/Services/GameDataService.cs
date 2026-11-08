@@ -26,7 +26,8 @@ public record EnemyMetadata(
     bool IsBoss,
     int MaxHp,
     string TextureFile = "",
-    int TextureIndex = 0);
+    int TextureIndex = 0,
+    string Category = "");   // "", "DungeonBoss", "AdeptEncounter", "VeteranEncounter"
 
 public record PortalMetadata(
     int ObjectType,
@@ -430,14 +431,23 @@ public class GameDataService
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            bool hasBossLabel = enemyLabels.Contains("BOSS") || enemyLabels.Contains("BOSSFIGHT") || enemyLabels.Contains("ENCOUNTER");
-            bool hasBossBar = obj.Element("HealthBarBoss") != null;
+            bool hasHealthBar = obj.Element("HealthBarBoss") != null;
+            bool excluded = enemyLabels.Contains("BEACON_GUARDIAN")
+                         || enemyLabels.Contains("LEGIONQUEST")
+                         || idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase);
 
-            // KeepDamageRecord ma 227 wrogów, więc samo nie wystarcza – wymagamy też Quest/Hero/Encounter
-            bool trackedEventBoss = obj.Element("KeepDamageRecord") != null &&
-                                    (obj.Element("Quest") != null || obj.Element("Hero") != null || obj.Element("Encounter") != null);
+            string category = string.Empty;
+            if (!excluded)
+            {
+                if (hasHealthBar && enemyLabels.Contains("VETERAN_ENCOUNTER")) category = "VeteranEncounter";
+                else if (hasHealthBar && enemyLabels.Contains("ADEPT_ENCOUNTER")) category = "AdeptEncounter";
+                else if (obj.Element("Oryx") != null
+                         || enemyLabels.Contains("BOSSFIGHT")
+                         || (hasHealthBar && enemyLabels.Contains("BOSS")))
+                    category = "DungeonBoss";
+            }
 
-            bool isBoss = obj.Element("Oryx") != null || hasBossBar || hasBossLabel || trackedEventBoss;
+            bool isBoss = category.Length > 0;
 
             if (isBoss || maxHp >= 5000)
             {
@@ -450,14 +460,12 @@ public class GameDataService
                     texFile,
                     texIndex);
             }
-            // w gałęzi <Enemy />, po policzeniu isBoss
-            var reasons = new List<string>();
-            if (obj.Element("Oryx") != null) reasons.Add("Oryx");
-            if (hasBossBar) reasons.Add("HealthBarBoss");
-            if (hasBossLabel) reasons.Add("Label:" + string.Join("/", enemyLabels.Where(l => l is "BOSS" or "BOSSFIGHT" or "ENCOUNTER")));
-            if (trackedEventBoss) reasons.Add("KeepDamageRecord+Quest/Hero/Encounter");
-            if (isBoss) _bossReasons.Add($"{displayName} | 0x{objectType:X4} | hp={maxHp} | {string.Join(",", reasons)} | labels={labels}");
-            
+
+            if (isBoss)
+            {
+                _bossReasons.Add($"{displayName} | 0x{objectType:X4} | hp={maxHp} | cat={category} | labels={labels}");
+            }
+
             return;
         }
 
