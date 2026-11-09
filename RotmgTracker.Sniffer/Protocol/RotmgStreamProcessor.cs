@@ -45,6 +45,10 @@ public class RotmgStreamProcessor
     private readonly Dictionary<int, (string Name, RotmgClass Class)> _playersOnMap = new();
     private readonly Dictionary<int, TrackedMapEnemy> _enemiesOnMap = new();
     private EnemyMetadata? _lastDamagedBossOnMap;
+    
+    private readonly LocalPlayerStatTracker _localStats = new();
+    private RotmgClass? _localClass;
+    private int _lastLoggedMaxed = -1;
 
     // Tryb przechwytywania (diagnostyka); null = wylaczony
     public PacketCaptureLogger? Capture { get; set; }
@@ -166,6 +170,7 @@ public class RotmgStreamProcessor
                 {
                     _myObjectId = reader.ReadInt32();
                     _currentCharId = reader.ReadInt32();
+                    _localStats.Reset(); _localClass = null; _lastLoggedMaxed = -1;
                 }
                 break;
 
@@ -315,6 +320,7 @@ public class RotmgStreamProcessor
                 if (!string.IsNullOrWhiteSpace(playerName))
                     _state.HandleNexusPlayerDetected(playerName, playerClass, true, _currentCharId);
 
+                _localClass = playerClass;
                 InspectLocalPlayerStats(stats);
             }
             return;
@@ -469,6 +475,18 @@ public class RotmgStreamProcessor
         int skinId = _state.ActiveCharacter.SkinId;
         int[] equip = (int[])_state.ActiveCharacter.EquipmentIds.Clone();
         bool changed = false;
+        
+        int maxedStats = _state.ActiveCharacter.MaxedStats;
+        _localStats.Apply(stats);
+        if (_localClass is { } cls && _localStats.TryComputeMaxed(cls, out int computed, out var b))
+        {
+            if (computed != maxedStats) { maxedStats = computed; changed = true; }
+            if (computed != _lastLoggedMaxed)
+            {
+                _lastLoggedMaxed = computed;
+                Capture?.Note($"MAXED_STATS: {cls} {computed}/8 base=[HP {b.Hp}, MP {b.Mp}, ATT {b.Att}, DEF {b.Def}, SPD {b.Spd}, DEX {b.Dex}, VIT {b.Vit}, WIS {b.Wis}] exalt: {_localStats.ExaltBonusesText()}");
+            }
+        }
 
         foreach (var s in stats)
         {
@@ -490,7 +508,7 @@ public class RotmgStreamProcessor
         }
 
         if (changed)
-            _state.UpdateActiveCharacterStats(_state.ActiveCharacter.MaxedStats, baseFame, equip, skinId);
+            _state.UpdateActiveCharacterStats(maxedStats, baseFame, equip, skinId);
     }
 
     private void ParseDamage(ref RotmgPacketReader reader)
