@@ -5,7 +5,8 @@ namespace RotmgTrackerV1.Sniffer.Protocol;
 public static class RotmgProtocolConstants
 {
     // Główne ID pakietów RotMG Exalt (w razie aktualizacji DECA zmieniasz je tylko tutaj)
-    public const byte PacketLoad = 57;          // Client -> Server: zawiera CharId wybranej postaci
+    public const byte PacketCreate = 57;        // Client -> Server: utworzenie postaci (classType, skinType, flagi) - potwierdzone na capture
+    public const byte PacketLoad = 61;          // Client -> Server: zawiera CharId wybranej postaci (int32 + bool)
     public const byte PacketInvDrop = 19;       // Client -> Server: wyrzucenie itemu z plecaka (Anti-Drop)
     public const byte PacketUpdate = 42;        // Server -> Client: nowe obiekty na mapie (gracze, worki, bossowie)
     public const byte PacketNewTick = 10;       // Server -> Client: aktualizacja statystyk i zawartości worków
@@ -37,9 +38,10 @@ public static class RotmgProtocolConstants
         objectType is 0x0500 or 0x0506 or 0x0507 or 0x0508 or 0x0509
             or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
-// Śledzimy: cyan/niebieski (tylko Marki), biały (+Boost), czerwony, pomarańczowy
+    // Śledzimy: egg (0x0508), cyan/niebieski (tylko Marki), biały (+Boost), czerwony, pomarańczowy.
+    // Brązowy/różowy/fioletowy (0x0500/0x0506/0x0507) celowo pomijamy - zalałyby log i słownik worków.
     public static bool IsTrackedBagContainer(int objectType) =>
-        objectType is 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
+        objectType is 0x0508 or 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
     // Mapowanie wewnętrznych ObjectType klas w RotMG na nasz enum RotmgClass
     private static readonly Dictionary<int, RotmgClass> ClassObjectTypes = new()

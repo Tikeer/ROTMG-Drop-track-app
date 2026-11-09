@@ -116,7 +116,7 @@ public class GameDataService
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
         _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
-        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v7.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v8.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
 
@@ -357,7 +357,7 @@ public class GameDataService
         }
     }
 
-    private void ParseGameObjectElement(
+        private void ParseGameObjectElement(
         XElement obj,
         Dictionary<int, ForgeXmlEntry> forgeMap,
         Dictionary<string, double> xmlGraveMap)
@@ -458,7 +458,8 @@ public class GameDataService
                     isBoss,
                     maxHp,
                     texFile,
-                    texIndex);
+                    texIndex,
+                    category);
             }
 
             if (isBoss)

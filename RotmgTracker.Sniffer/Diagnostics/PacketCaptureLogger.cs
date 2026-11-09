@@ -145,9 +145,18 @@ public sealed class PacketCaptureLogger : IDisposable
                 string body = string.Empty;
                 if (IsBodyAllowed(isServerToClient, packetId))
                 {
-                    int take = isServerToClient
-                        ? (decryptedBody.Length < FullBodyIfShorterThan ? decryptedBody.Length : TruncatedServerBodyBytes)
-                        : ClientBodyBytes;
+                    // 183 (JSON sezonu) i 101 (CreateSuccess) zawsze w calosci, bez ucinania do 96 B
+                    bool fullBody = isServerToClient &&
+                                    (packetId == 183 || packetId == RotmgProtocolConstants.PacketCreateSuccess);
+
+                    int take;
+                    if (!isServerToClient)
+                        take = ClientBodyBytes;
+                    else if (fullBody || decryptedBody.Length < FullBodyIfShorterThan)
+                        take = decryptedBody.Length;
+                    else
+                        take = TruncatedServerBodyBytes;
+
                     take = Math.Min(take, decryptedBody.Length);
                     body = Convert.ToHexString(decryptedBody[..take]);
                     if (take < decryptedBody.Length) body += "...";
@@ -189,6 +198,7 @@ public sealed class PacketCaptureLogger : IDisposable
     private static bool IsBodyAllowed(bool isServerToClient, byte id) =>
         isServerToClient
             ? id is RotmgProtocolConstants.PacketMapInfo
+                or RotmgProtocolConstants.PacketCreateSuccess
                 or RotmgProtocolConstants.PacketUpdate
                 or RotmgProtocolConstants.PacketNewTick
                 or RotmgProtocolConstants.PacketDamage

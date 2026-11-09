@@ -22,6 +22,7 @@ public class RotmgStreamProcessor
         public float X { get; init; }
         public float Y { get; init; }
         public Guid? CombatSessionId { get; init; }
+        public DateTime SpawnedUtc { get; init; } = DateTime.UtcNow;
     }
 
     private readonly TrackerStateService _state;
@@ -134,7 +135,10 @@ public class RotmgStreamProcessor
                 else
                     HandleClientPacket(packetId, body);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Capture?.Note($"PARSE_EXCEPTION: {(isServerToClient ? "S->C" : "C->S")} id={packetId}, len={packetLength}, {ex.GetType().Name}: {ex.Message}");
+            }
         }
     }
 
@@ -175,7 +179,7 @@ public class RotmgStreamProcessor
                 break;
 
             case RotmgProtocolConstants.PacketUpdate:
-                ParseUpdate(ref reader);
+                ParseUpdate(ref reader, body);
                 break;
 
             case RotmgProtocolConstants.PacketNewTick:
@@ -227,8 +231,13 @@ public class RotmgStreamProcessor
         }
     }
 
-    private void ParseUpdate(ref RotmgPacketReader reader)
+        private void ParseUpdate(ref RotmgPacketReader reader, ReadOnlySpan<byte> body)
     {
+        // Potwierdzenie killa (na razie tylko log): worek zespawnowany <= 200 ms temu,
+        // w promieniu 15 kafli od ostatniej znanej pozycji bossa (z NewTick).
+        const double killBagWindowMs = 200.0;
+        const float killBagRadiusSq = 15f * 15f;
+
         reader.Skip(8);        // pozycja
         reader.ReadByte();     // 0x19, stały w logu
 
@@ -236,19 +245,36 @@ public class RotmgStreamProcessor
         reader.Skip(tileCount * 6);
 
         int newObjectsCount = reader.ReadCompressedInt();
+
+        int firstObjectStart = reader.Position;
+        int prevType = -1;
+        int prevId = -1;
+        List<StatEntry>? prevStats = null;
+
         for (int i = 0; i < newObjectsCount && reader.Remaining > 0; i++)
         {
             ushort objectType = reader.ReadUInt16();
             int objectId = reader.ReadCompressedInt();
             var (x, y) = reader.ReadWorldPosData();
-            
+
             if (objectId < 0 || !float.IsFinite(x) || !float.IsFinite(y) || Math.Abs(x) > 5000 || Math.Abs(y) > 5000)
             {
-                Capture?.Note($"UPDATE_DESYNC: object {i}/{newObjectsCount}, type=0x{objectType:X4}");
+                // Po desyncu offset nie jest na granicy obiektu - dalsze czytanie dawaloby smieci.
+                // Logujemy okno hex (ostatnie ~1200 B przed bledem), zeby znalezc stat, ktory psuje parsowanie.
+                int failPos = reader.Position;
+                int from = Math.Max(firstObjectStart, failPos - 1200);
+                int to = Math.Min(body.Length, failPos + 16);
+                string window = to > from ? Convert.ToHexString(body.Slice(from, to - from)) : string.Empty;
+                string prevStatTypes = prevStats == null ? "" : string.Join(",", prevStats.Select(s => s.StatType));
+
+                Capture?.Note($"UPDATE_DESYNC: object {i}/{newObjectsCount}, type=0x{objectType:X4}, bodyLen={body.Length}, failPos={failPos}, prev=(type=0x{prevType:X4}, id={prevId}, statTypes=[{prevStatTypes}]), hexFrom={from}: {window}");
                 return;
             }
-            
+
             var stats = reader.ReadStatDataList();
+            prevType = objectType;
+            prevId = objectId;
+            prevStats = stats;
 
             InspectObjectStatus(objectType, objectId, x, y, stats);
         }
@@ -257,12 +283,28 @@ public class RotmgStreamProcessor
         for (int i = 0; i < dropCount && reader.Remaining > 0; i++)
         {
             int id = reader.ReadCompressedInt();
-            
+
             if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
             {
-                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\"");
+                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\", Category={gone.Metadata.Category}, LastPos=({gone.X:F1}, {gone.Y:F1})");
+
+                var nowUtc = DateTime.UtcNow;
+                foreach (var bagEntry in _activeBagsOnMap)
+                {
+                    var bag = bagEntry.Value;
+                    if ((nowUtc - bag.SpawnedUtc).TotalMilliseconds > killBagWindowMs)
+                        continue;
+
+                    float dx = bag.X - gone.X;
+                    float dy = bag.Y - gone.Y;
+                    if ((dx * dx) + (dy * dy) > killBagRadiusSq)
+                        continue;
+
+                    Capture?.Note($"BOSS_KILL_CONFIRMED: Id={id}, Name=\"{gone.Metadata.DisplayName}\", Category={gone.Metadata.Category}, BagId={bagEntry.Key}, BagType=0x{bag.BagObjectType:X4}");
+                    break;
+                }
             }
-            
+
             _activeBagsOnMap.Remove(id);
             _enemiesOnMap.Remove(id);
             _playersOnMap.Remove(id);
@@ -553,14 +595,22 @@ public class RotmgStreamProcessor
     private void ParseDeath(ref RotmgPacketReader reader)
     {
         string accountId = reader.ReadUtfString();
-        int charId = reader.ReadInt32();
+        int charId = reader.ReadCompressedInt();   // w capture: BA 03 = 442 (compressed int, nie int32)
         string killedBy = reader.ReadUtfString();
-        reader.Skip(8);
-        int totalFame = reader.Remaining >= 4 ? reader.ReadInt32() : _state.ActiveCharacter.BaseFame;
+
+        int activeCharId = _state.ActiveCharacter.RotmgCharId;
+        Capture?.Note($"DEATH: charId={charId}, currentCharId={_currentCharId}, activeCharId={activeCharId}, killedBy=\"{killedBy}\"");
+
+        // Nie zabijaj aktywnej postaci w bazie, jesli zginela inna (np. nowy lucznik, gdy aktywny jest Knight).
+        if (activeCharId > 0 && charId != activeCharId)
+        {
+            Capture?.Note("DEATH_IGNORED: charId martwej postaci != aktywna postac w aplikacji");
+            return;
+        }
 
         _state.KillActiveCharacter(
             string.IsNullOrWhiteSpace(killedBy) ? "Unknown Enemy" : killedBy,
             _state.CurrentDungeonName,
-            totalFame);
+            _state.ActiveCharacter.BaseFame);
     }
 }
