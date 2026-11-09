@@ -101,6 +101,7 @@ public static class RarityScoreEngine
     public static List<TrophyCaseEntry> BuildTrophyCase(IEnumerable<LootDropRecord> allLoot, int maxItems = 24)
     {
         return allLoot
+            .Where(l => l.BagType != DropType.Other)
             .GroupBy(l => new { Name = l.ItemName.ToLowerInvariant(), l.IsShiny })
             .Select(group =>
             {

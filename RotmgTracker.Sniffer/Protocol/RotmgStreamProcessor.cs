@@ -347,73 +347,74 @@ public class RotmgStreamProcessor
     }
 
     private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
+{
+    if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
+        RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
     {
-        if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
-            RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
+        string? playerName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
+        if (!string.IsNullOrWhiteSpace(playerName))
+            _playersOnMap[objectId] = (playerName, playerClass);
+
+        if (objectId == _myObjectId)
         {
-            string? playerName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
+            // NOTE: Gracz lokalny (ObjectId, klasa, staty)
+            string statsSummary = string.Join(", ", stats.Select(s => $"{s.StatType}:{(string.IsNullOrEmpty(s.StringValue) ? s.IntValue : s.StringValue)}"));
+            Capture?.Note($"PLAYER_STATUS: Id={objectId}, Class={playerClass}, Stats=[{statsSummary}]");
+
             if (!string.IsNullOrWhiteSpace(playerName))
-                _playersOnMap[objectId] = (playerName, playerClass);
+                _state.HandleNexusPlayerDetected(playerName, playerClass, true, _currentCharId);
 
-            if (objectId == _myObjectId)
-            {
-                // NOTE: Gracz lokalny (ObjectId, klasa, staty)
-                string statsSummary = string.Join(", ", stats.Select(s => $"{s.StatType}:{(string.IsNullOrEmpty(s.StringValue) ? s.IntValue : s.StringValue)}"));
-                Capture?.Note($"PLAYER_STATUS: Id={objectId}, Class={playerClass}, Stats=[{statsSummary}]");
+            _localClass = playerClass;
+            InspectLocalPlayerStats(stats);
+        }
+        return;
+    }
 
-                if (!string.IsNullOrWhiteSpace(playerName))
-                    _state.HandleNexusPlayerDetected(playerName, playerClass, true, _currentCharId);
+    if (_gameData.TryResolveEnemy(objectType, out var enemyMeta))
+    {
+        _enemiesOnMap[objectId] = new TrackedMapEnemy
+        {
+            Metadata = enemyMeta,
+            X = x,
+            Y = y,
+            LastSeenUtc = DateTime.UtcNow
+        };
 
-                _localClass = playerClass;
-                InspectLocalPlayerStats(stats);
-            }
-            return;
+        if (enemyMeta.IsBoss)
+        {
+            _lastDamagedBossOnMap = enemyMeta;
+            // NOTE: Wykryty Boss na mapie
+            Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4},Category={enemyMeta.Category}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
         }
 
-        if (_gameData.TryResolveEnemy(objectType, out var enemyMeta))
+        return;
+    }
+
+    if (RotmgProtocolConstants.IsTrackedBagContainer(objectType))
+    {
+        if ((DateTime.UtcNow - _lastPlayerInvDropTime).TotalSeconds < 2.0)
+            return;
+
+        if (!_activeBagsOnMap.TryGetValue(objectId, out var trackedBag))
         {
-            _enemiesOnMap[objectId] = new TrackedMapEnemy
+            trackedBag = new TrackedLootBag
             {
-                Metadata = enemyMeta,
+                BagInstanceId = Guid.NewGuid(),
+                BagObjectType = objectType,
                 X = x,
                 Y = y,
-                LastSeenUtc = DateTime.UtcNow
+                CombatSessionId = _state.LastCompletedCombatSessionId
             };
+            _activeBagsOnMap[objectId] = trackedBag;
 
-            if (enemyMeta.IsBoss)
-            {
-                _lastDamagedBossOnMap = enemyMeta;
-                // NOTE: Wykryty Boss na mapie
-                Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4},Category={enemyMeta.Category}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
-            }
-
-            return;
-        }
-
-        if (RotmgProtocolConstants.IsTrackedBagContainer(objectType))
-        {
-            if ((DateTime.UtcNow - _lastPlayerInvDropTime).TotalSeconds < 2.0)
-                return;
-
-            if (!_activeBagsOnMap.TryGetValue(objectId, out var trackedBag))
-            {
-                trackedBag = new TrackedLootBag
-                {
-                    BagInstanceId = Guid.NewGuid(),
-                    BagObjectType = objectType,
-                    X = x,
-                    Y = y,
-                    CombatSessionId = _state.LastCompletedCombatSessionId
-                };
-                _activeBagsOnMap[objectId] = trackedBag;
-
-                // NOTE: Zespawnowany worek na mapie
+            // NOTE: Zespawnowany worek na mapie (fioletowe i egg pomijamy - zalałyby capture)
+            if (objectType is not (0x0507 or 0x0508))
                 Capture?.Note($"BAG_SPAWN: Type=0x{objectType:X4}, Id={objectId}, Pos=({x:F1}, {y:F1})");
-            }
-
-            InspectBagContents(trackedBag, objectId, stats);
         }
+
+        InspectBagContents(trackedBag, objectId, stats);
     }
+}
 
     private EnemyMetadata? ResolveBossForBagPosition(float bagX, float bagY)
     {
@@ -441,105 +442,109 @@ public class RotmgStreamProcessor
     }
 
     private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
-{
-    // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
-    bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
-
-    BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
-    var matchedBoss = ResolveBossForBagPosition(trackedBag.X, trackedBag.Y);
-    double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
-    DungeonDifficultyTier tier = RarityScoreEngine.GraveCountToTier(graves);
-    var portal = _gameData.ResolvePortalByDungeonName(_state.CurrentDungeonName);
-
-    foreach (var stat in stats)
     {
-        if (stat.StatType is < RotmgProtocolConstants.StatInventory0 or > RotmgProtocolConstants.StatInventory7)
-            continue;
+        // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
+        bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
 
-        int itemId = stat.IntValue;
-        if (itemId <= 0) continue;
+        BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
+        var matchedBoss = ResolveBossForBagPosition(trackedBag.X, trackedBag.Y);
+        double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
+        DungeonDifficultyTier tier = RarityScoreEngine.GraveCountToTier(graves);
+        var portal = _gameData.ResolvePortalByDungeonName(_state.CurrentDungeonName);
 
-        int slotIndex = stat.StatType - RotmgProtocolConstants.StatInventory0;
-        if (!_loggedBagItems.Add((bagObjectId, slotIndex, itemId)))
-            continue;
-
-        string itemName;
-        DropType effectiveQuality;
-        bool isShiny = false;
-        int itemTier = -1;
-        BagType itemBag = physicalBag;
-
-        if (_gameData.TryResolveMark(itemId, out var markMeta))
+        foreach (var stat in stats)
         {
-            // Mark u Tinkerera -> aktualizacja Quest Tracker; do historii trafia jako Other
-            if (!quiet)
-                Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (MARK: {markMeta.MarkName})");
-            _state.SyncMarkPickedUp(markMeta, portal?.ObjectType ?? 0);
+            if (stat.StatType is < RotmgProtocolConstants.StatInventory0 or > RotmgProtocolConstants.StatInventory7)
+                continue;
 
-            itemName = markMeta.MarkName;
-            effectiveQuality = DropType.Other;
-        }
-        else if (!_gameData.TryGetItem(itemId, out var itemMeta))
-        {
-            // Item spoza katalogu - zapisujemy z nazwą zastępczą
-            if (!quiet)
-                Capture?.Note($"BAG_ITEM_UNKNOWN: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4}");
+            int itemId = stat.IntValue;
+            if (itemId <= 0) continue;
 
-            itemName = $"Unknown Item (0x{itemId:X4})";
-            effectiveQuality = DropType.Other;
-        }
-        else
-        {
-            itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
+            int slotIndex = stat.StatType - RotmgProtocolConstants.StatInventory0;
+            if (!_loggedBagItems.Add((bagObjectId, slotIndex, itemId)))
+                continue;
 
-            if (!quiet)
-                Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+            string itemName;
+            DropType effectiveQuality;
+            bool isShiny = false;
+            int itemTier = -1;
+            BagType itemBag = physicalBag;
 
-            // Dotychczasowa kwalifikacja zostaje w mocy: item "liczy się" tylko po spełnieniu starych warunków,
-            // reszta jest zapisywana jako Other (bez wpływu na rarity score i statystyki).
-            bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
-            bool qualifies = itemMeta.BagTypeId >= 6 || special;
-
-            if (itemMeta.Quality == DropType.Tiered && itemBag is not (BagType.WhiteBag or BagType.OrangeBag))
-                qualifies = false;
-
-            itemName = itemMeta.Name;
-            itemTier = itemMeta.Tier;
-
-            if (qualifies)
+            if (_gameData.TryResolveMark(itemId, out var markMeta))
             {
-                effectiveQuality = itemMeta.Quality;
-                isShiny = itemMeta.IsShiny;
+                // Mark u Tinkerera -> aktualizacja Quest Tracker; do historii trafia jako Other
+                if (!quiet)
+                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (MARK: {markMeta.MarkName})");
+                _state.SyncMarkPickedUp(markMeta, portal?.ObjectType ?? 0);
 
-                // White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv) -> LegendaryWhite
-                if (physicalBag == BagType.WhiteBag && !itemMeta.IsShiny && graves >= 9.0 && effectiveQuality == DropType.RegularWhite)
-                    effectiveQuality = DropType.LegendaryWhite;
+                itemName = markMeta.MarkName;
+                effectiveQuality = DropType.Other;
+            }
+            else if (!_gameData.TryGetItem(itemId, out var itemMeta))
+            {
+                // Item spoza katalogu (kolekcja + loot-only) - zapisujemy z nazwą zastępczą
+                if (!quiet)
+                    Capture?.Note($"BAG_ITEM_UNKNOWN: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4}");
+
+                itemName = $"Unknown Item (0x{itemId:X4})";
+                effectiveQuality = DropType.Other;
             }
             else
             {
-                effectiveQuality = DropType.Other;
-            }
-        }
+                itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
 
-        _state.RecordLootDrop(
-            itemName: itemName,
-            itemId: itemId,
-            bagQuality: effectiveQuality,
-            dungeonName: _state.CurrentDungeonName,
-            rarity: ItemRarity.Common,
-            isShiny: isShiny,
-            difficulty: tier,
-            physicalBag: itemBag,
-            itemTier: itemTier,
-            bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
-            bossObjectType: matchedBoss?.ObjectType ?? 0,
-            graveDifficulty: graves,
-            bagObjectType: trackedBag.BagObjectType,
-            dungeonPortalObjectType: portal?.ObjectType ?? 0,
-            bagInstanceId: trackedBag.BagInstanceId,
-            combatSessionId: trackedBag.CombatSessionId);
+                if (!quiet)
+                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+
+                // Dotychczasowa kwalifikacja zostaje w mocy: item "liczy się" tylko po spełnieniu starych warunków,
+                // reszta jest zapisywana jako Other (bez wpływu na rarity score i statystyki).
+                bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
+                bool qualifies = itemMeta.BagTypeId >= 6 || special;
+
+                if (itemMeta.Quality == DropType.Tiered && itemBag is not (BagType.WhiteBag or BagType.OrangeBag))
+                    qualifies = false;
+
+                itemName = itemMeta.Name;
+                itemTier = itemMeta.Tier;
+
+                if (qualifies)
+                {
+                    effectiveQuality = itemMeta.Quality;
+                    isShiny = itemMeta.IsShiny;
+
+                    // White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv) -> LegendaryWhite
+                    if (physicalBag == BagType.WhiteBag && !itemMeta.IsShiny && graves >= 9.0 && effectiveQuality == DropType.RegularWhite)
+                        effectiveQuality = DropType.LegendaryWhite;
+                }
+                else
+                {
+                    effectiveQuality = DropType.Other;
+                }
+            }
+
+            // Dla Other pokazujemy kolor kontenera, w którym item faktycznie leżał (nie <BagType> z XML-a itemu)
+            if (effectiveQuality == DropType.Other)
+                itemBag = physicalBag;
+
+            _state.RecordLootDrop(
+                itemName: itemName,
+                itemId: itemId,
+                bagQuality: effectiveQuality,
+                dungeonName: _state.CurrentDungeonName,
+                rarity: ItemRarity.Common,
+                isShiny: isShiny,
+                difficulty: tier,
+                physicalBag: itemBag,
+                itemTier: itemTier,
+                bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
+                bossObjectType: matchedBoss?.ObjectType ?? 0,
+                graveDifficulty: graves,
+                bagObjectType: trackedBag.BagObjectType,
+                dungeonPortalObjectType: portal?.ObjectType ?? 0,
+                bagInstanceId: trackedBag.BagInstanceId,
+                combatSessionId: trackedBag.CombatSessionId);
+        }
     }
-}
 
     private void InspectLocalPlayerStats(List<StatEntry> stats)
     {

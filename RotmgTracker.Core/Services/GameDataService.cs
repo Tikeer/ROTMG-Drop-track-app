@@ -58,12 +58,14 @@ public class GameDataService
     private readonly string _enemyCatalogPath;
     private readonly string _portalCatalogPath;
     private readonly string _markCatalogPath;
+    private readonly string _lootOnlyCatalogPath;
     private readonly object _catalogLock = new();
 
     private readonly Dictionary<int, ItemMetadata> _items = new();
     private readonly Dictionary<int, EnemyMetadata> _enemies = new();
     private readonly Dictionary<string, PortalMetadata> _portalsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, MarkMetadata> _marks = new();
+    private readonly Dictionary<int, ItemMetadata> _lootOnlyItems = new();
     private readonly Dictionary<int, RotmgClass> _playerClasses = new();
     private readonly List<string> _bossReasons = new();
 
@@ -119,10 +121,12 @@ public class GameDataService
         _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v8.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
+        _lootOnlyCatalogPath = Path.Combine(_appDataDir, "loot_only_catalog_v1.json");
 
         LoadCachedCatalogs();
 
-        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0)
+        // Brak pliku loot_only_catalog_v1.json wymusza jednorazowy rescan przy pierwszym starcie
+        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0 || _lootOnlyItems.Count == 0)
         {
             TryAutoExtractFromInstalledGame();
         }
@@ -161,16 +165,36 @@ public class GameDataService
         _ => fallback
     };
 
-    // Zwraca false dla przedmiotow, ktorych nie ma w katalogu (nie zgadujemy ich jakosci)
+    // Zwraca false dla przedmiotow, ktorych nie ma w katalogu (nie zgadujemy ich jakosci).
+    // Szuka w kolekcji oraz w katalogu "loot-only" (potki, jajka, smieci - tylko nazwy do Loot History).
     public bool TryGetItem(int itemId, out ItemMetadata item) =>
-        _items.TryGetValue(itemId, out item!);
+        _items.TryGetValue(itemId, out item!) || _lootOnlyItems.TryGetValue(itemId, out item!);
 
     public ItemMetadata ResolveItem(int itemId)
     {
-        if (_items.TryGetValue(itemId, out var meta))
+        if (TryGetItem(itemId, out var meta))
             return meta;
 
-        return new ItemMetadata(itemId, $"Unknown Item (0x{itemId:X4})", DropType.RegularWhite, -1);
+        return new ItemMetadata(itemId, $"Unknown Item (0x{itemId:X4})", DropType.Other, -1);
+    }
+    
+    // Przedmioty spoza kolekcji (potki, jajka, śmieci) - tylko nazwy do Loot History, nie trafiają do GetAllKnownItems()
+    private void RegisterLootOnlyItem(int objectType, string displayName, XElement obj, string texFile, int texIndex)
+    {
+        int.TryParse(obj.Element("SlotType")?.Value, out int slotType);
+        int.TryParse(obj.Element("BagType")?.Value, out int xmlBagType);
+
+        _lootOnlyItems[objectType] = new ItemMetadata(
+            objectType,
+            displayName,
+            DropType.Other,
+            -1,
+            false,
+            xmlBagType,
+            slotType,
+            string.Empty,
+            texFile,
+            texIndex);
     }
 
     public PortalMetadata? ResolvePortalByDungeonName(string dungeonName)
@@ -358,178 +382,181 @@ public class GameDataService
     }
 
         private void ParseGameObjectElement(
-        XElement obj,
-        Dictionary<int, ForgeXmlEntry> forgeMap,
-        Dictionary<string, double> xmlGraveMap)
+    XElement obj,
+    Dictionary<int, ForgeXmlEntry> forgeMap,
+    Dictionary<string, double> xmlGraveMap)
+{
+    string? typeHex = obj.Attribute("type")?.Value;
+    string? idName = obj.Attribute("id")?.Value?.Trim();
+    if (string.IsNullOrWhiteSpace(typeHex) || string.IsNullOrWhiteSpace(idName))
+        return;
+
+    if (!TryParseHexOrDec(typeHex, out int objectType))
+        return;
+
+    string displayName = (obj.Element("DisplayId")?.Value ?? idName).Trim();
+    (string texFile, int texIndex) = ExtractTextureInfo(obj);
+
+    // 1. Klasy postaci (<Player />)
+    if (obj.Element("Player") != null && Enum.TryParse<RotmgClass>(idName, true, out var parsedClass))
     {
-        string? typeHex = obj.Attribute("type")?.Value;
-        string? idName = obj.Attribute("id")?.Value?.Trim();
-        if (string.IsNullOrWhiteSpace(typeHex) || string.IsNullOrWhiteSpace(idName))
-            return;
-
-        if (!TryParseHexOrDec(typeHex, out int objectType))
-            return;
-
-        string displayName = (obj.Element("DisplayId")?.Value ?? idName).Trim();
-        (string texFile, int texIndex) = ExtractTextureInfo(obj);
-
-        // 1. Klasy postaci (<Player />)
-        if (obj.Element("Player") != null && Enum.TryParse<RotmgClass>(idName, true, out var parsedClass))
-        {
-            _playerClasses[objectType] = parsedClass;
-            return;
-        }
-
-        // 2. Portale dungeonów (<DungeonPortal />)
-        if (obj.Element("DungeonPortal") != null)
-        {
-            string? dungName = obj.Element("DungeonName")?.Value?.Trim();
-            if (string.IsNullOrWhiteSpace(dungName))
-                return;
-
-            string cleanDung = dungName.Replace(" Portal", "", StringComparison.OrdinalIgnoreCase).Trim().Replace('’', '\'');
-            if (cleanDung is "Nexus" or "Vault" or "Daily Quest Room" or "Pet Yard" or "Guild Hall" or "Cloth Bazaar")
-                return;
-
-            foreach (var excluded in ExcludedPortalKeywords)
-            {
-                if (idName.Contains(excluded, StringComparison.OrdinalIgnoreCase) ||
-                    cleanDung.Contains(excluded, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-            }
-
-            double graves = 0;
-            string? portalDiffStr = obj.Element("DungeonDifficulty")?.Value ?? obj.Element("Difficulty")?.Value;
-            if (!string.IsNullOrWhiteSpace(portalDiffStr))
-                double.TryParse(portalDiffStr, NumberStyles.Float, CultureInfo.InvariantCulture, out graves);
-
-            if (graves <= 0 && xmlGraveMap.TryGetValue(idName, out double gFromId))
-                graves = gFromId;
-            if (graves <= 0 && xmlGraveMap.TryGetValue(cleanDung, out double gFromName))
-                graves = gFromName;
-
-            if (!_portalsByName.TryGetValue(cleanDung, out var existingPortal) || graves > existingPortal.GraveDifficulty)
-            {
-                _portalsByName[cleanDung] = new PortalMetadata(objectType, idName, cleanDung, graves, texFile, texIndex);
-            }
-            return;
-        }
-
-        // 3. Bossowie i Przeciwnicy (<Enemy />)
-        if (obj.Element("Enemy") != null)
-        {
-            if (idName.Contains("Rehearsal", StringComparison.OrdinalIgnoreCase))
-                return;
-
-            int maxHp = 0;
-            int.TryParse(obj.Element("MaxHitPoints")?.Value, out maxHp);
-
-            string labels = obj.Element("Labels")?.Value ?? obj.Attribute("labels")?.Value ?? string.Empty;
-            var enemyLabels = labels
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            bool hasHealthBar = obj.Element("HealthBarBoss") != null;
-            bool excluded = enemyLabels.Contains("BEACON_GUARDIAN")
-                         || enemyLabels.Contains("LEGIONQUEST")
-                         || idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase);
-
-            string category = string.Empty;
-            if (!excluded)
-            {
-                if (hasHealthBar && enemyLabels.Contains("VETERAN_ENCOUNTER")) category = "VeteranEncounter";
-                else if (hasHealthBar && enemyLabels.Contains("ADEPT_ENCOUNTER")) category = "AdeptEncounter";
-                else if (obj.Element("Oryx") != null
-                         || enemyLabels.Contains("BOSSFIGHT")
-                         || (hasHealthBar && enemyLabels.Contains("BOSS")))
-                    category = "DungeonBoss";
-            }
-
-            bool isBoss = category.Length > 0;
-
-            if (isBoss || maxHp >= 5000)
-            {
-                _enemies[objectType] = new EnemyMetadata(
-                    objectType,
-                    idName,
-                    displayName,
-                    isBoss,
-                    maxHp,
-                    texFile,
-                    texIndex,
-                    category);
-            }
-
-            if (isBoss)
-            {
-                _bossReasons.Add($"{displayName} | 0x{objectType:X4} | hp={maxHp} | cat={category} | labels={labels}");
-            }
-
-            return;
-        }
-
-        // 4. Marki u Tinkerera (<Mark />) oraz Przedmioty (<Item />)
-        if (obj.Element("Item") != null)
-        {
-            string labels = obj.Element("Labels")?.Value ?? string.Empty;
-            var labelTokens = labels
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // 4A. Mark u Tinkerera (<Mark /> lub etykieta MARK)
-            if (obj.Element("Mark") != null || labelTokens.Contains("MARK"))
-            {
-                (string bossName, string dungeonName) = ParseMarkDropLocationFromXml(obj, displayName);
-                _marks[objectType] = new MarkMetadata(objectType, displayName, bossName, dungeonName, texFile, texIndex);
-                return;
-            }
-
-            // 4B. Ekwipunek i Blueprinty
-            if (!IsValidCollectibleEquipment(obj, idName, displayName, labelTokens, out int slotType, out int xmlBagType))
-                return;
-
-            bool isShiny = labelTokens.Contains("SHINY") ||
-                           (texFile.Contains("Shiny", StringComparison.OrdinalIgnoreCase) && idName.EndsWith(" Shiny", StringComparison.OrdinalIgnoreCase));
-
-            string finalItemName = displayName;
-            if (isShiny)
-            {
-                string baseClean = displayName.Replace(" Shiny", "", StringComparison.OrdinalIgnoreCase).Trim();
-                finalItemName = baseClean.StartsWith("Shiny ", StringComparison.OrdinalIgnoreCase)
-                    ? baseClean
-                    : $"Shiny {baseClean}";
-            }
-            else if (labelTokens.Contains("RESKIN") ||
-                     idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase) ||
-                     idName.Contains("- Midas", StringComparison.OrdinalIgnoreCase))
-            {
-                finalItemName = idName;
-            }
-
-            int tier = -1;
-            string? tierStr = obj.Element("Tier")?.Value;
-            if (!string.IsNullOrWhiteSpace(tierStr) && int.TryParse(tierStr, out int parsedTier))
-                tier = parsedTier;
-
-            forgeMap.TryGetValue(objectType, out var forgeEntry);
-            string forgeTier = ResolveItemForgeTier(forgeEntry, labelTokens);
-            DropType quality = DetermineDropQuality(obj, xmlBagType, tier, isShiny, forgeEntry, forgeTier, labelTokens, finalItemName);
-
-            _items[objectType] = new ItemMetadata(
-                objectType,
-                finalItemName,
-                quality,
-                tier,
-                isShiny,
-                xmlBagType,
-                slotType,
-                forgeTier,
-                texFile,
-                texIndex);
-        }
+        _playerClasses[objectType] = parsedClass;
+        return;
     }
+
+    // 2. Portale dungeonów (<DungeonPortal />)
+    if (obj.Element("DungeonPortal") != null)
+    {
+        string? dungName = obj.Element("DungeonName")?.Value?.Trim();
+        if (string.IsNullOrWhiteSpace(dungName))
+            return;
+
+        string cleanDung = dungName.Replace(" Portal", "", StringComparison.OrdinalIgnoreCase).Trim().Replace('’', '\'');
+        if (cleanDung is "Nexus" or "Vault" or "Daily Quest Room" or "Pet Yard" or "Guild Hall" or "Cloth Bazaar")
+            return;
+
+        foreach (var excluded in ExcludedPortalKeywords)
+        {
+            if (idName.Contains(excluded, StringComparison.OrdinalIgnoreCase) ||
+                cleanDung.Contains(excluded, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        double graves = 0;
+        string? portalDiffStr = obj.Element("DungeonDifficulty")?.Value ?? obj.Element("Difficulty")?.Value;
+        if (!string.IsNullOrWhiteSpace(portalDiffStr))
+            double.TryParse(portalDiffStr, NumberStyles.Float, CultureInfo.InvariantCulture, out graves);
+
+        if (graves <= 0 && xmlGraveMap.TryGetValue(idName, out double gFromId))
+            graves = gFromId;
+        if (graves <= 0 && xmlGraveMap.TryGetValue(cleanDung, out double gFromName))
+            graves = gFromName;
+
+        if (!_portalsByName.TryGetValue(cleanDung, out var existingPortal) || graves > existingPortal.GraveDifficulty)
+        {
+            _portalsByName[cleanDung] = new PortalMetadata(objectType, idName, cleanDung, graves, texFile, texIndex);
+        }
+        return;
+    }
+
+    // 3. Bossowie i Przeciwnicy (<Enemy />)
+    if (obj.Element("Enemy") != null)
+    {
+        if (idName.Contains("Rehearsal", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        int maxHp = 0;
+        int.TryParse(obj.Element("MaxHitPoints")?.Value, out maxHp);
+
+        string labels = obj.Element("Labels")?.Value ?? obj.Attribute("labels")?.Value ?? string.Empty;
+        var enemyLabels = labels
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        bool hasHealthBar = obj.Element("HealthBarBoss") != null;
+        bool excluded = enemyLabels.Contains("BEACON_GUARDIAN")
+                     || enemyLabels.Contains("LEGIONQUEST")
+                     || idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase);
+
+        string category = string.Empty;
+        if (!excluded)
+        {
+            if (hasHealthBar && enemyLabels.Contains("VETERAN_ENCOUNTER")) category = "VeteranEncounter";
+            else if (hasHealthBar && enemyLabels.Contains("ADEPT_ENCOUNTER")) category = "AdeptEncounter";
+            else if (obj.Element("Oryx") != null
+                     || enemyLabels.Contains("BOSSFIGHT")
+                     || (hasHealthBar && enemyLabels.Contains("BOSS")))
+                category = "DungeonBoss";
+        }
+
+        bool isBoss = category.Length > 0;
+
+        if (isBoss || maxHp >= 5000)
+        {
+            _enemies[objectType] = new EnemyMetadata(
+                objectType,
+                idName,
+                displayName,
+                isBoss,
+                maxHp,
+                texFile,
+                texIndex,
+                category);
+        }
+
+        if (isBoss)
+        {
+            _bossReasons.Add($"{displayName} | 0x{objectType:X4} | hp={maxHp} | cat={category} | labels={labels}");
+        }
+
+        return;
+    }
+
+    // 4. Marki u Tinkerera (<Mark />) oraz Przedmioty (<Item />)
+    if (obj.Element("Item") != null)
+    {
+        string labels = obj.Element("Labels")?.Value ?? string.Empty;
+        var labelTokens = labels
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // 4A. Mark u Tinkerera (<Mark /> lub etykieta MARK)
+        if (obj.Element("Mark") != null || labelTokens.Contains("MARK"))
+        {
+            (string bossName, string dungeonName) = ParseMarkDropLocationFromXml(obj, displayName);
+            _marks[objectType] = new MarkMetadata(objectType, displayName, bossName, dungeonName, texFile, texIndex);
+            return;
+        }
+
+        // 4B. Ekwipunek i Blueprinty; reszta (potki, jajka, śmieci) trafia do katalogu loot-only
+        if (!IsValidCollectibleEquipment(obj, idName, displayName, labelTokens, out int slotType, out int xmlBagType))
+        {
+            RegisterLootOnlyItem(objectType, displayName, obj, texFile, texIndex);
+            return;
+        }
+
+        bool isShiny = labelTokens.Contains("SHINY") ||
+                       (texFile.Contains("Shiny", StringComparison.OrdinalIgnoreCase) && idName.EndsWith(" Shiny", StringComparison.OrdinalIgnoreCase));
+
+        string finalItemName = displayName;
+        if (isShiny)
+        {
+            string baseClean = displayName.Replace(" Shiny", "", StringComparison.OrdinalIgnoreCase).Trim();
+            finalItemName = baseClean.StartsWith("Shiny ", StringComparison.OrdinalIgnoreCase)
+                ? baseClean
+                : $"Shiny {baseClean}";
+        }
+        else if (labelTokens.Contains("RESKIN") ||
+                 idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase) ||
+                 idName.Contains("- Midas", StringComparison.OrdinalIgnoreCase))
+        {
+            finalItemName = idName;
+        }
+
+        int tier = -1;
+        string? tierStr = obj.Element("Tier")?.Value;
+        if (!string.IsNullOrWhiteSpace(tierStr) && int.TryParse(tierStr, out int parsedTier))
+            tier = parsedTier;
+
+        forgeMap.TryGetValue(objectType, out var forgeEntry);
+        string forgeTier = ResolveItemForgeTier(forgeEntry, labelTokens);
+        DropType quality = DetermineDropQuality(obj, xmlBagType, tier, isShiny, forgeEntry, forgeTier, labelTokens, finalItemName);
+
+        _items[objectType] = new ItemMetadata(
+            objectType,
+            finalItemName,
+            quality,
+            tier,
+            isShiny,
+            xmlBagType,
+            slotType,
+            forgeTier,
+            texFile,
+            texIndex);
+    }
+}
 
     private static (string BossName, string DungeonName) ParseMarkDropLocationFromXml(XElement markObj, string markName)
     {
@@ -744,46 +771,53 @@ public class GameDataService
     }
 
     private void LoadCachedCatalogs()
+{
+    try
     {
-        try
+        if (File.Exists(_itemCatalogPath))
         {
-            if (File.Exists(_itemCatalogPath))
-            {
-                var loadedItems = JsonSerializer.Deserialize<List<ItemMetadata>>(File.ReadAllText(_itemCatalogPath));
-                if (loadedItems != null)
-                    foreach (var item in loadedItems) _items[item.ItemId] = item;
-            }
-
-            if (File.Exists(_enemyCatalogPath))
-            {
-                var loadedEnemies = JsonSerializer.Deserialize<List<EnemyMetadata>>(File.ReadAllText(_enemyCatalogPath));
-                if (loadedEnemies != null)
-                    foreach (var enemy in loadedEnemies) _enemies[enemy.ObjectType] = enemy;
-            }
-
-            if (File.Exists(_portalCatalogPath))
-            {
-                var loadedPortals = JsonSerializer.Deserialize<List<PortalMetadata>>(File.ReadAllText(_portalCatalogPath));
-                if (loadedPortals != null)
-                    foreach (var portal in loadedPortals) _portalsByName[portal.DungeonName] = portal;
-            }
-
-            if (File.Exists(_markCatalogPath))
-            {
-                var loadedMarks = JsonSerializer.Deserialize<List<MarkMetadata>>(File.ReadAllText(_markCatalogPath));
-                if (loadedMarks != null)
-                    foreach (var mark in loadedMarks) _marks[mark.ItemId] = mark;
-            }
-
-            if (_items.Count > 0)
-            {
-                int bossCount = _enemies.Values.Count(e => e.IsBoss);
-                int shinyCount = _items.Values.Count(i => i.IsShiny);
-                ExtractionStatus = $"Loaded {_items.Count} items ({shinyCount} shinies), {bossCount} bosses, {_portalsByName.Count} portals & {_marks.Count} marks";
-            }
+            var loadedItems = JsonSerializer.Deserialize<List<ItemMetadata>>(File.ReadAllText(_itemCatalogPath));
+            if (loadedItems != null)
+                foreach (var item in loadedItems) _items[item.ItemId] = item;
         }
-        catch { }
+
+        if (File.Exists(_lootOnlyCatalogPath))
+        {
+            var loadedLootOnly = JsonSerializer.Deserialize<List<ItemMetadata>>(File.ReadAllText(_lootOnlyCatalogPath));
+            if (loadedLootOnly != null)
+                foreach (var item in loadedLootOnly) _lootOnlyItems[item.ItemId] = item;
+        }
+
+        if (File.Exists(_enemyCatalogPath))
+        {
+            var loadedEnemies = JsonSerializer.Deserialize<List<EnemyMetadata>>(File.ReadAllText(_enemyCatalogPath));
+            if (loadedEnemies != null)
+                foreach (var enemy in loadedEnemies) _enemies[enemy.ObjectType] = enemy;
+        }
+
+        if (File.Exists(_portalCatalogPath))
+        {
+            var loadedPortals = JsonSerializer.Deserialize<List<PortalMetadata>>(File.ReadAllText(_portalCatalogPath));
+            if (loadedPortals != null)
+                foreach (var portal in loadedPortals) _portalsByName[portal.DungeonName] = portal;
+        }
+
+        if (File.Exists(_markCatalogPath))
+        {
+            var loadedMarks = JsonSerializer.Deserialize<List<MarkMetadata>>(File.ReadAllText(_markCatalogPath));
+            if (loadedMarks != null)
+                foreach (var mark in loadedMarks) _marks[mark.ItemId] = mark;
+        }
+
+        if (_items.Count > 0)
+        {
+            int bossCount = _enemies.Values.Count(e => e.IsBoss);
+            int shinyCount = _items.Values.Count(i => i.IsShiny);
+            ExtractionStatus = $"Loaded {_items.Count} items ({shinyCount} shinies), {bossCount} bosses, {_portalsByName.Count} portals & {_marks.Count} marks";
+        }
     }
+    catch { }
+}
 
     private void SaveCachedCatalogs()
     {
@@ -791,6 +825,7 @@ public class GameDataService
         {
             var options = new JsonSerializerOptions { WriteIndented = true };
             File.WriteAllText(_itemCatalogPath, JsonSerializer.Serialize(_items.Values.ToList(), options));
+            File.WriteAllText(_lootOnlyCatalogPath, JsonSerializer.Serialize(_lootOnlyItems.Values.ToList(), options));
             File.WriteAllText(_enemyCatalogPath, JsonSerializer.Serialize(_enemies.Values.ToList(), options));
             File.WriteAllText(_portalCatalogPath, JsonSerializer.Serialize(_portalsByName.Values.ToList(), options));
             File.WriteAllText(_markCatalogPath, JsonSerializer.Serialize(_marks.Values.ToList(), options));

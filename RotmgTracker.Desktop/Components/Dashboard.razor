@@ -202,8 +202,8 @@
                 <h2>Recent Bag Drops (Grouped by Physical Bag)</h2>
                 <button class="btn btn-sm" @onclick='() => SetTab("loot")'>View Full Loot History →</button>
             </div>
-            
-            var recentBagGroups = GroupLoidByBagInstance(State.Data.LootHistory.Take(12));
+
+            var recentBagGroups = GroupLoidByBagInstance(State.Data.LootHistory.Where(l => l.BagType != DropType.Other).Take(12));
 
             if (recentBagGroups.Count == 0)
             {
@@ -292,7 +292,7 @@
                 <div class="drop-card">
                     <span class="drop-title">Collection Progress</span>
                     <div class="drop-value" style="color: var(--accent-gold);">
-                        @State.Data.LootHistory.Select(l => l.ItemName.ToLowerInvariant()).Distinct().Count() / @GameData.GetAllKnownItems().Count(i => !i.IsShiny && i.Tier <= 0)
+                        @State.Data.LootHistory.Where(l => l.BagType != DropType.Other).Select(l => l.ItemName.ToLowerInvariant()).Distinct().Count() / @GameData.GetAllKnownItems().Count(i => !i.IsShiny && i.Tier <= 0)
                     </div>
                     <span style="font-size: 0.8rem; color: var(--text-muted);">Unique UT/ST/White Items</span>
                 </div>
@@ -411,6 +411,9 @@
                         <option value="@r">@r (@((int)r) slots)</option>
                     }
                 </select>
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="LootShowOther" /> Show potions / eggs / junk
+                </label>
             </div>
             
             var filteredBagGroups = GroupLoidByBagInstance(GetFilteredLootHistory());
@@ -1011,6 +1014,7 @@
     private string LootSearchQuery { get; set; } = "";
     private string LootFilterType { get; set; } = "";
     private string LootFilterRarity { get; set; } = "";
+    private bool LootShowOther { get; set; } = true;
 
     private Guid? HighlightedCombatSessionId { get; set; }
 
@@ -1170,7 +1174,7 @@
 
     private IEnumerable<LootDropRecord> GetFilteredShowcaseLoot()
     {
-        var query = State.Data.LootHistory.AsEnumerable();
+        var query = State.Data.LootHistory.Where(l => l.BagType != DropType.Other);
         if (ShowcaseSeasonFilter == "SSNL") query = query.Where(l => l.IsSeasonal);
         else if (ShowcaseSeasonFilter == "NOSSNL") query = query.Where(l => !l.IsSeasonal);
         return query;
@@ -1179,6 +1183,9 @@
     private IEnumerable<LootDropRecord> GetFilteredLootHistory()
     {
         var query = State.Data.LootHistory.AsEnumerable();
+
+        if (!LootShowOther)
+            query = query.Where(l => l.BagType != DropType.Other);
 
         if (!string.IsNullOrWhiteSpace(LootSearchQuery))
         {
