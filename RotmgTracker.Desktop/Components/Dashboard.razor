@@ -117,15 +117,6 @@
 
                 <!-- X/8 MAXED STATS SELECTOR & BASE FAME -->
                 <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-input); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
-                    <span style="font-size: 0.78rem; color: var(--text-muted);">Stats:</span>
-                    <select class="select" style="padding: 2px 6px; font-weight: 700; color: var(--accent-gold);"
-                            value="@State.ActiveCharacter.MaxedStats"
-                            @onchange="OnMaxedStatsChanged">
-                        @for (int s = 0; s <= 8; s++)
-                        {
-                            <option value="@s">@s/8</option>
-                        }
-                    </select>
                     <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: 6px;">Fame:</span>
                     <input class="input" type="number" style="width: 80px; padding: 2px 6px; font-weight: 700;"
                            value="@State.ActiveCharacter.BaseFame"
@@ -1081,12 +1072,6 @@
     {
         if (Guid.TryParse(e.Value?.ToString(), out Guid id))
             State.SelectCharacter(id);
-    }
-
-    private void OnMaxedStatsChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int maxed))
-            State.UpdateActiveCharacterStats(maxed, State.ActiveCharacter.BaseFame);
     }
 
     private void OnBaseFameChanged(ChangeEventArgs e)
