@@ -294,7 +294,8 @@ public class TrackerStateService
         var charLoot = Data.LootHistory.Where(l => l.CharacterId == character.Id).ToList();
         foreach (var type in Enum.GetValues<DropType>())
         {
-            character.Drops[type] = charLoot.Count(l => l.BagType == type);
+            // Other (potki, jajka, śmieci, Marki) są tylko w historii - nie liczą się do statystyk postaci
+            character.Drops[type] = type == DropType.Other ? 0 : charLoot.Count(l => l.BagType == type);
         }
     }
 

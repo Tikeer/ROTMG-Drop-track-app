@@ -38,10 +38,10 @@ public static class RotmgProtocolConstants
         objectType is 0x0500 or 0x0506 or 0x0507 or 0x0508 or 0x0509
             or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
-    // Śledzimy: egg (0x0508), cyan/niebieski (tylko Marki), biały (+Boost), czerwony, pomarańczowy.
-    // Brązowy/różowy/fioletowy (0x0500/0x0506/0x0507) celowo pomijamy - zalałyby log i słownik worków.
+    // Śledzimy: fioletowy (0x0507), egg (0x0508), cyan/niebieski, biały (+Boost), czerwony, pomarańczowy.
+    // Brązowy/różowy (0x0500/0x0506) nadal pomijamy. Zawartość fioletowych i egg trafia do historii jako DropType.Other.
     public static bool IsTrackedBagContainer(int objectType) =>
-        objectType is 0x0508 or 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
+        objectType is 0x0507 or 0x0508 or 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510;
 
     // Mapowanie wewnętrznych ObjectType klas w RotMG na nasz enum RotmgClass
     private static readonly Dictionary<int, RotmgClass> ClassObjectTypes = new()

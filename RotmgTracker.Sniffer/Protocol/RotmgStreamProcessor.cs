@@ -441,77 +441,105 @@ public class RotmgStreamProcessor
     }
 
     private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+{
+    // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
+    bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
+
+    BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
+    var matchedBoss = ResolveBossForBagPosition(trackedBag.X, trackedBag.Y);
+    double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
+    DungeonDifficultyTier tier = RarityScoreEngine.GraveCountToTier(graves);
+    var portal = _gameData.ResolvePortalByDungeonName(_state.CurrentDungeonName);
+
+    foreach (var stat in stats)
     {
-        BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
-        var matchedBoss = ResolveBossForBagPosition(trackedBag.X, trackedBag.Y);
-        double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
-        DungeonDifficultyTier tier = RarityScoreEngine.GraveCountToTier(graves);
-        var portal = _gameData.ResolvePortalByDungeonName(_state.CurrentDungeonName);
+        if (stat.StatType is < RotmgProtocolConstants.StatInventory0 or > RotmgProtocolConstants.StatInventory7)
+            continue;
 
-        foreach (var stat in stats)
+        int itemId = stat.IntValue;
+        if (itemId <= 0) continue;
+
+        int slotIndex = stat.StatType - RotmgProtocolConstants.StatInventory0;
+        if (!_loggedBagItems.Add((bagObjectId, slotIndex, itemId)))
+            continue;
+
+        string itemName;
+        DropType effectiveQuality;
+        bool isShiny = false;
+        int itemTier = -1;
+        BagType itemBag = physicalBag;
+
+        if (_gameData.TryResolveMark(itemId, out var markMeta))
         {
-            if (stat.StatType is < RotmgProtocolConstants.StatInventory0 or > RotmgProtocolConstants.StatInventory7)
-                continue;
-
-            int itemId = stat.IntValue;
-            if (itemId <= 0) continue;
-
-            int slotIndex = stat.StatType - RotmgProtocolConstants.StatInventory0;
-            if (!_loggedBagItems.Add((bagObjectId, slotIndex, itemId)))
-                continue;
-
-            // Sprawdź czy w worku wypadł Mark u Tinkerera -> automatycznie zaktualizuj Quest Tracker
-            if (_gameData.TryResolveMark(itemId, out var markMeta))
-            {
+            // Mark u Tinkerera -> aktualizacja Quest Tracker; do historii trafia jako Other
+            if (!quiet)
                 Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (MARK: {markMeta.MarkName})");
-                _state.SyncMarkPickedUp(markMeta, portal?.ObjectType ?? 0);
-                continue;
-            }
+            _state.SyncMarkPickedUp(markMeta, portal?.ObjectType ?? 0);
 
-            if (!_gameData.TryGetItem(itemId, out var itemMeta))
-            {
+            itemName = markMeta.MarkName;
+            effectiveQuality = DropType.Other;
+        }
+        else if (!_gameData.TryGetItem(itemId, out var itemMeta))
+        {
+            // Item spoza katalogu - zapisujemy z nazwą zastępczą
+            if (!quiet)
                 Capture?.Note($"BAG_ITEM_UNKNOWN: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4}");
-                continue;
-            }
 
-            // Zwykłe potki/śmieci z niebieskich i cyan worków nas nie interesują
+            itemName = $"Unknown Item (0x{itemId:X4})";
+            effectiveQuality = DropType.Other;
+        }
+        else
+        {
+            itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
+
+            if (!quiet)
+                Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+
+            // Dotychczasowa kwalifikacja zostaje w mocy: item "liczy się" tylko po spełnieniu starych warunków,
+            // reszta jest zapisywana jako Other (bez wpływu na rarity score i statystyki).
             bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
-            if (itemMeta.BagTypeId < 6 && !special)
-                continue;
-
-            BagType itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
-
-            Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+            bool qualifies = itemMeta.BagTypeId >= 6 || special;
 
             if (itemMeta.Quality == DropType.Tiered && itemBag is not (BagType.WhiteBag or BagType.OrangeBag))
-                continue;
+                qualifies = false;
 
-            // Jeśli to White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv), nadaj jakość LegendaryWhite
-            DropType effectiveQuality = itemMeta.Quality;
-            if (physicalBag == BagType.WhiteBag && !itemMeta.IsShiny && graves >= 9.0 && effectiveQuality == DropType.RegularWhite)
+            itemName = itemMeta.Name;
+            itemTier = itemMeta.Tier;
+
+            if (qualifies)
             {
-                effectiveQuality = DropType.LegendaryWhite;
-            }
+                effectiveQuality = itemMeta.Quality;
+                isShiny = itemMeta.IsShiny;
 
-            _state.RecordLootDrop(
-                itemName: itemMeta.Name,
-                itemId: itemId,
-                bagQuality: effectiveQuality,
-                dungeonName: _state.CurrentDungeonName,
-                rarity: ItemRarity.Common,
-                isShiny: itemMeta.IsShiny,
-                difficulty: tier,
-                physicalBag: itemBag,
-                itemTier: itemMeta.Tier,
-                bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
-                bossObjectType: matchedBoss?.ObjectType ?? 0,
-                graveDifficulty: graves,
-                bagObjectType: trackedBag.BagObjectType,
-                dungeonPortalObjectType: portal?.ObjectType ?? 0,
-                bagInstanceId: trackedBag.BagInstanceId,
-                combatSessionId: trackedBag.CombatSessionId);
+                // White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv) -> LegendaryWhite
+                if (physicalBag == BagType.WhiteBag && !itemMeta.IsShiny && graves >= 9.0 && effectiveQuality == DropType.RegularWhite)
+                    effectiveQuality = DropType.LegendaryWhite;
+            }
+            else
+            {
+                effectiveQuality = DropType.Other;
+            }
         }
+
+        _state.RecordLootDrop(
+            itemName: itemName,
+            itemId: itemId,
+            bagQuality: effectiveQuality,
+            dungeonName: _state.CurrentDungeonName,
+            rarity: ItemRarity.Common,
+            isShiny: isShiny,
+            difficulty: tier,
+            physicalBag: itemBag,
+            itemTier: itemTier,
+            bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
+            bossObjectType: matchedBoss?.ObjectType ?? 0,
+            graveDifficulty: graves,
+            bagObjectType: trackedBag.BagObjectType,
+            dungeonPortalObjectType: portal?.ObjectType ?? 0,
+            bagInstanceId: trackedBag.BagInstanceId,
+            combatSessionId: trackedBag.CombatSessionId);
     }
+}
 
     private void InspectLocalPlayerStats(List<StatEntry> stats)
     {

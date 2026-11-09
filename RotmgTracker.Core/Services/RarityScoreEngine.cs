@@ -19,6 +19,10 @@ public static class RarityScoreEngine
         double graveDifficulty,
         DungeonDifficultyTier fallbackTier = DungeonDifficultyTier.Tier2_Godlands)
     {
+        // Other (potki, jajka, śmieci, Marki) trafiają tylko do historii - bez punktów rzadkości
+        if (quality == DropType.Other)
+            return 0.0;
+
         // 1. Bazowa jakość przedmiotu
         double basePoints = quality switch
         {
