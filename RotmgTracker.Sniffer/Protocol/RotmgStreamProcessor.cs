@@ -257,13 +257,15 @@ public class RotmgStreamProcessor
         for (int i = 0; i < dropCount && reader.Remaining > 0; i++)
         {
             int id = reader.ReadCompressedInt();
+            
+            if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
+            {
+                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\"");
+            }
+            
             _activeBagsOnMap.Remove(id);
             _enemiesOnMap.Remove(id);
             _playersOnMap.Remove(id);
-            
-            if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
-                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\"");
-            
         }
     }
 

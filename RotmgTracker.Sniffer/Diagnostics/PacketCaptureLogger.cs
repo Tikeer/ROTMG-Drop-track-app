@@ -193,6 +193,7 @@ public sealed class PacketCaptureLogger : IDisposable
                 or RotmgProtocolConstants.PacketNewTick
                 or RotmgProtocolConstants.PacketDamage
                 or RotmgProtocolConstants.PacketDeath
+                or 183
             : id == RotmgProtocolConstants.PacketLoad;
 
     private static string Describe(bool isServerToClient, byte id)
@@ -207,6 +208,7 @@ public sealed class PacketCaptureLogger : IDisposable
                 RotmgProtocolConstants.PacketNewTick => "NewTick?",
                 RotmgProtocolConstants.PacketDamage => "Damage?",
                 RotmgProtocolConstants.PacketDeath => "Death?",
+                183 => "ExaltData/AccountData?",
                 _ => string.Empty
             };
         }
