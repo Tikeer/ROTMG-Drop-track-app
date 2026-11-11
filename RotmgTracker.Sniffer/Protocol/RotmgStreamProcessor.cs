@@ -546,22 +546,31 @@ public class RotmgStreamProcessor
         }
     }
 
-    private void InspectLocalPlayerStats(List<StatEntry> stats)
+        private void InspectLocalPlayerStats(List<StatEntry> stats)
     {
         int baseFame = _state.ActiveCharacter.BaseFame;
         int skinId = _state.ActiveCharacter.SkinId;
         int[] equip = (int[])_state.ActiveCharacter.EquipmentIds.Clone();
         bool changed = false;
-        
+
         int maxedStats = _state.ActiveCharacter.MaxedStats;
         _localStats.Apply(stats);
         if (_localClass is { } cls && _localStats.TryComputeMaxed(cls, out int computed, out var b))
         {
-            if (computed != maxedStats) { maxedStats = computed; changed = true; }
             if (computed != _lastLoggedMaxed)
             {
                 _lastLoggedMaxed = computed;
-                Capture?.Note($"MAXED_STATS: {cls} {computed}/8 base=[HP {b.Hp}, MP {b.Mp}, ATT {b.Att}, DEF {b.Def}, SPD {b.Spd}, DEX {b.Dex}, VIT {b.Vit}, WIS {b.Wis}] exalt: {_localStats.ExaltBonusesText()}");
+                string inTick = string.Join(" ", stats
+                    .Where(s => string.IsNullOrEmpty(s.StringValue) && (s.StatType <= 60 || (s.StatType >= 96 && s.StatType <= 112)))
+                    .Select(s => $"{s.StatType}:{s.IntValue}"));
+                Capture?.Note($"MAXED_RAW: {cls} computed={computed}/8 base=[HP {b.Hp}, MP {b.Mp}, ATT {b.Att}, DEF {b.Def}, SPD {b.Spd}, DEX {b.Dex}, VIT {b.Vit}, WIS {b.Wis}] inTick=[{inTick}]");
+            }
+
+            if (_localStats.TryAcceptMaxed(computed, out int accepted))
+            {
+                // Bazowe staty nie spadają: zapisujemy tylko wzrost względem tego, co już jest w bazie
+                if (accepted > maxedStats) { maxedStats = accepted; changed = true; }
+                Capture?.Note($"MAXED_STATS: {cls} accepted={accepted}/8 base=[HP {b.Hp}, MP {b.Mp}, ATT {b.Att}, DEF {b.Def}, SPD {b.Spd}, DEX {b.Dex}, VIT {b.Vit}, WIS {b.Wis}] exalt: {_localStats.ExaltBonusesText()}");
             }
         }
 

@@ -24,8 +24,18 @@ public sealed class LocalPlayerStatTracker
     private const int ExaltAtt = 105, ExaltDef = 106, ExaltSpd = 107, ExaltVit = 108, ExaltWis = 109, ExaltDex = 110, ExaltHp = 111, ExaltMp = 112;
 
     private readonly Dictionary<int, int> _values = new();
+    private int _acceptedMaxed = -1;
+    private int _candidateMaxed = -1;
+    private DateTime _candidateSinceUtc = DateTime.MinValue;
+    private static readonly TimeSpan IncreaseStableFor = TimeSpan.FromSeconds(3);
 
-    public void Reset() => _values.Clear();
+    public void Reset()
+    {
+        _values.Clear();
+        _acceptedMaxed = -1;
+        _candidateMaxed = -1;
+        _candidateSinceUtc = DateTime.MinValue;
+    }
 
     public void Apply(IEnumerable<StatEntry> stats)
     {
@@ -72,6 +82,45 @@ public sealed class LocalPlayerStatTracker
         if (!TryGetBaseStats(out baseStats)) return false;
         if (!ClassStatTable.TryGetMax(playerClass, out _)) return false;
         maxed = ClassStatTable.CountMaxed(playerClass, baseStats);
+        return true;
+    }
+    
+    /// <summary>
+    /// Filtr X/8: bazowe staty nie spadają, więc spadki (debuffy, modyfikatory dungeonu) są ignorowane,
+    /// a wzrost jest akceptowany dopiero po 3 s stabilności. Pierwsza próbka po zalogowaniu przechodzi od razu.
+    /// Zwraca true, gdy zaakceptowana wartość się zmieniła.
+    /// </summary>
+    public bool TryAcceptMaxed(int computed, out int accepted)
+    {
+        accepted = _acceptedMaxed;
+
+        if (_acceptedMaxed < 0)
+        {
+            _acceptedMaxed = computed;
+            accepted = computed;
+            return true;
+        }
+
+        if (computed <= _acceptedMaxed)
+        {
+            _candidateMaxed = -1;
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        if (computed != _candidateMaxed)
+        {
+            _candidateMaxed = computed;
+            _candidateSinceUtc = now;
+            return false;
+        }
+
+        if (now - _candidateSinceUtc < IncreaseStableFor)
+            return false;
+
+        _acceptedMaxed = computed;
+        _candidateMaxed = -1;
+        accepted = computed;
         return true;
     }
 

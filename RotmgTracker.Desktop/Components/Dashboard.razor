@@ -3,45 +3,32 @@
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
 
-<div class="app-layout">
-    <!-- LEFT NAVIGATION SIDEBAR -->
-    <aside class="sidebar">
-        <div class="brand">
-            <div class="brand-icon"></div>
-            <h1>RotMG Tracker</h1>
+<div class="app-shell">
+    <!-- LEFT NAVIGATION SIDEBAR (zwijany hamburgerem) -->
+    <aside class="sidebar @(SidebarCollapsed ? "collapsed" : "")">
+        <div class="sidebar-top">
+            <button class="hamburger-btn" @onclick="ToggleSidebar" title="Menu">☰</button>
+            <span class="sidebar-brand">RotMG Tracker</span>
         </div>
 
-        <button class="nav-btn @(ActiveTab == "dashboard" ? "active" : "")" @onclick='() => SetTab("dashboard")'>
-            📊 Dashboard (X/8)
-        </button>
-        <button class="nav-btn @(ActiveTab == "showcase" ? "active" : "")" @onclick='() => SetTab("showcase")'>
-            🏆 Showcase & Trophy Case
-        </button>
-        <button class="nav-btn @(ActiveTab == "loot" ? "active" : "")" @onclick='() => SetTab("loot")'>
-            💎 Loot History (@State.Data.LootHistory.Count)
-        </button>
-        <button class="nav-btn @(ActiveTab == "dps" ? "active" : "")" @onclick='() => SetTab("dps")'>
-            ⚔️ Live DPS & Fights (@State.Data.CombatHistory.Count)
-        </button>
-        <button class="nav-btn @(ActiveTab == "counters" ? "active" : "")" @onclick='() => SetTab("counters")'>
-            📈 Counters & Dungeons (@State.Data.DungeonRuns.Count)
-        </button>
-        <button class="nav-btn @(ActiveTab == "collection" ? "active" : "")" @onclick='() => SetTab("collection")'>
-            📖 Item Collection
-        </button>
-        <button class="nav-btn @(ActiveTab == "wishlist" ? "active" : "")" @onclick='() => SetTab("wishlist")'>
-            🎯 Target Wishlist (@State.Data.Wishlist.Count(w => !w.IsCompleted))
-        </button>
-        <button class="nav-btn @(ActiveTab == "quests" ? "active" : "")" @onclick='() => SetTab("quests")'>
-            📜 Quests & Openings
-        </button>
-        <button class="nav-btn @(ActiveTab == "graveyard" ? "active" : "")" @onclick='() => SetTab("graveyard")'>
-            🪦 Graveyard (@State.Data.Graveyard.Count)
-        </button>
+        @foreach (var nav in NavItems)
+        {
+            string badge = GetNavBadge(nav.Key);
+            <button class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
+                    title="@nav.Label"
+                    @onclick="() => SetTab(nav.Key)">
+                <span class="nav-icon">@nav.Icon</span>
+                <span class="nav-label">@nav.Label</span>
+                @if (!string.IsNullOrEmpty(badge))
+                {
+                    <span class="nav-badge">@badge</span>
+                }
+            </button>
+        }
     </aside>
 
     <!-- MAIN CONTENT -->
-    <main class="main-content">
+    <main class="main-workspace">
 
         <!-- PASSIVE SNIFFER STATUS BAR -->
         <div class="char-bar" style="padding: 10px 16px;">
@@ -1039,6 +1026,33 @@
     private string NewOpeningTitle { get; set; } = "";
     
     private void ToggleCapture() { Sniffer.ToggleCapture(); StateHasChanged(); }
+    
+    private bool SidebarCollapsed { get; set; } = true;
+
+    private static readonly (string Key, string Icon, string Label)[] NavItems =
+    {
+        ("dashboard",  "📊", "Dashboard (X/8)"),
+        ("showcase",   "🏆", "Showcase & Trophy Case"),
+        ("loot",       "💎", "Loot History"),
+        ("dps",        "⚔️", "Live DPS & Fights"),
+        ("counters",   "📈", "Counters & Dungeons"),
+        ("collection", "📖", "Item Collection"),
+        ("wishlist",   "🎯", "Target Wishlist"),
+        ("quests",     "📜", "Quests & Openings"),
+        ("graveyard",  "🪦", "Graveyard")
+    };
+
+    private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
+
+    private string GetNavBadge(string key) => key switch
+    {
+        "loot" => State.Data.LootHistory.Count.ToString(),
+        "dps" => State.Data.CombatHistory.Count.ToString(),
+        "counters" => State.Data.DungeonRuns.Count.ToString(),
+        "wishlist" => State.Data.Wishlist.Count(w => !w.IsCompleted).ToString(),
+        "graveyard" => State.Data.Graveyard.Count.ToString(),
+        _ => string.Empty
+    };
 
     protected override void OnInitialized()
     {
