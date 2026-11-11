@@ -27,11 +27,11 @@ public static class RotmgProtocolConstants
     public const int StatName = 31;       // String: nick gracza
     public const int StatCurrFame = 57;   // Aktualny Base Fame postaci
     public const int StatUniqueData = 80; // String: dane enchantów / rzadkości przedmiotu
-    public const int StatSkinId = 82;
+    public const int StatSkinId = 25;
 
     // Które statystyki w protokole RotMG są przesyłane jako UTF String zamiast CompressedInt
     public static bool IsStringStat(int statType) =>
-        statType is 6 or 31 or 38 or 54 or 62 or 80 or 82 or 115 or 121 or 127 or 128 or 147;
+        statType is 6 or 31 or 38 or 54 or 62 or 71 or 72 or 78 or 80 or 82 or 115 or 121 or 127 or 128 or 147 or 155;
     
     // Wszystkie worki z lootem ("Loot Bag N" w XML = BagType N)
     public static bool IsLootBagContainer(int objectType) =>

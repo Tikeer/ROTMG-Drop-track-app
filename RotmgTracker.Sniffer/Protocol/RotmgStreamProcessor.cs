@@ -548,6 +548,8 @@ public class RotmgStreamProcessor
 
         private void InspectLocalPlayerStats(List<StatEntry> stats)
     {
+        Capture?.LogLocalPlayerStats(stats);
+
         int baseFame = _state.ActiveCharacter.BaseFame;
         int skinId = _state.ActiveCharacter.SkinId;
         int[] equip = (int[])_state.ActiveCharacter.EquipmentIds.Clone();
