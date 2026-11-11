@@ -41,6 +41,7 @@ rotmg_data.json
 *.txt
 *.py
 *.csv
+SPECIFICATION.md
 
 ## OS Generated
 .DS_Store
