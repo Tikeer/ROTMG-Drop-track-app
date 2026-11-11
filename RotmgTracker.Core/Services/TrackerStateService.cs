@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RotmgTrackerV1.Core.Data;
 using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Models;
+using System.Text.Json.Nodes;
 
 namespace RotmgTrackerV1.Core.Services;
 
@@ -556,26 +557,58 @@ public class TrackerStateService
         NotifyStateChanged();
     }
 
-    private void TryMigrateLegacyJson()
+        private void TryMigrateLegacyJson()
     {
-        string legacyPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rotmg_data.json");
-        if (!File.Exists(legacyPath)) return;
+        // Stara wersja (WPF) zapisywała rotmg_data.json obok exe. Szukamy obok obecnego exe i w katalogu danych aplikacji.
+        string[] candidates =
+        [
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rotmg_data.json"),
+            Path.Combine(Path.GetDirectoryName(_dbFilePath) ?? string.Empty, "rotmg_data.json")
+        ];
+
+        string? legacyPath = candidates.FirstOrDefault(File.Exists);
+        if (legacyPath == null) return;
 
         try
         {
-            string json = File.ReadAllText(legacyPath);
-            var legacyData = JsonSerializer.Deserialize<TrackerSaveData>(json);
-            if (legacyData != null)
+            if (JsonNode.Parse(File.ReadAllText(legacyPath)) is not JsonObject root) return;
+
+            // Stary enum RotmgClass: Rogue=4, Archer=5, Huntress=6. Obecny: Archer=4, Huntress=5, Rogue=6.
+            static void RemapClass(JsonNode? node)
             {
-                Data = legacyData;
-                if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
-                {
-                    Data.ActiveCharacters.Add(Data.CurrentCharacter);
-                    Data.ActiveCharacterId = Data.CurrentCharacter.Id;
-                }
+                if (node is not JsonObject ch) return;
+                if (ch["Class"] is not JsonValue v || !v.TryGetValue(out int old)) return;
+                ch["Class"] = old switch { 4 => 6, 5 => 4, 6 => 5, _ => old };
+            }
+
+            RemapClass(root["CurrentCharacter"]);
+            foreach (var key in new[] { "ActiveCharacters", "Graveyard" })
+            {
+                if (root[key] is JsonArray arr)
+                    foreach (var ch in arr) RemapClass(ch);
+            }
+
+            var legacyData = root.Deserialize<TrackerSaveData>();
+            if (legacyData == null) return;
+
+            Data = legacyData;
+            if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
+            {
+                Data.ActiveCharacters.Add(Data.CurrentCharacter);
+                Data.ActiveCharacterId = Data.CurrentCharacter.Id;
+            }
+
+            // Postaci z Graveyard stara wersja nie oznaczała flagą IsAlive
+            foreach (var dead in Data.Graveyard)
+            {
+                dead.IsAlive = false;
+                dead.DiedAt ??= dead.CreatedAt;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Legacy migration failed: {ex.Message}");
+        }
     }
 
     private void EnsureDropsInitialized()

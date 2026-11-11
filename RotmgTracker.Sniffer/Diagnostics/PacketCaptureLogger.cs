@@ -19,7 +19,8 @@ public sealed class PacketCaptureLogger : IDisposable
 {
     private const int MaxLinesPerPacketId = 1500;
     private const int MaxBadFrameLines = 50;
-    private const int MaxEventLines = 2000;
+    private const int MaxEventLinesTotal = 8000;
+    private const int MaxEventLinesPerCategory = 1500;
     private const int FullBodyIfShorterThan = 400;
     private const int TruncatedServerBodyBytes = 96;
     private const int ClientBodyBytes = 8;
@@ -42,6 +43,7 @@ public sealed class PacketCaptureLogger : IDisposable
     private int _badFrames;
     private int _streamResets;
     private int _eventLines;
+    private readonly Dictionary<string, int> _eventAttempts = new();
 
     public bool IsActive { get; private set; }
     public string? FilePath { get; private set; }
@@ -64,6 +66,7 @@ public sealed class PacketCaptureLogger : IDisposable
 
             _writer = new StreamWriter(FilePath, append: false, Encoding.UTF8) { AutoFlush = true };
             _stats.Clear();
+            _eventAttempts.Clear();
             _totalFrames = 0;
             _badFrames = 0;
             _streamResets = 0;
@@ -96,10 +99,22 @@ public sealed class PacketCaptureLogger : IDisposable
         {
             if (_writer == null) return;
             if (text == "STREAM_RESET") _streamResets++;
-            if (_eventLines++ >= MaxEventLines) return;
 
+            string category = GetEventCategory(text);
+            _eventAttempts.TryGetValue(category, out int attempts);
+            _eventAttempts[category] = attempts + 1;
+
+            if (attempts >= MaxEventLinesPerCategory || _eventLines >= MaxEventLinesTotal) return;
+
+            _eventLines++;
             _writer.WriteLine($"{Now()} | EVENT | {text}");
         }
+    }
+
+    private static string GetEventCategory(string text)
+    {
+        int end = text.IndexOfAny([':', ' ']);
+        return end > 0 ? text[..end] : text;
     }
 
     public void LogBadFrame(bool isServerToClient, int bufferedBytes, byte[] firstBytes)
@@ -178,6 +193,9 @@ public sealed class PacketCaptureLogger : IDisposable
         {
             var sb = new StringBuilder();
             sb.AppendLine($"frames_decoded={_totalFrames} bad_frames={_badFrames} stream_resets={_streamResets}");
+            sb.AppendLine($"event_lines_written={_eventLines} (cap {MaxEventLinesTotal})");
+            foreach (var kv in _eventAttempts.Where(k => k.Value > MaxEventLinesPerCategory).OrderBy(k => k.Key))
+                sb.AppendLine($"event_truncated: {kv.Key} attempts={kv.Value} cap={MaxEventLinesPerCategory}");
             sb.AppendLine("dir | id | count | minLen | maxLen | avgLen | assumed meaning (unverified)");
 
             foreach (var kv in _stats.OrderBy(k => !k.Key.Server).ThenBy(k => k.Key.Id))
