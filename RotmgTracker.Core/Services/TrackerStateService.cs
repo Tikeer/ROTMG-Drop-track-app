@@ -85,7 +85,6 @@ public class TrackerStateService
         using var db = new TrackerDbContext(_dbFilePath);
         db.Database.EnsureCreated();
         EnsureSchemaUpgraded(db);
-        EnsureLegacyDropsColumn(db);
 
         if (!db.Characters.Any() && !db.Openings.Any())
         {
@@ -124,78 +123,94 @@ public class TrackerStateService
     }
 
     private static void EnsureSchemaUpgraded(TrackerDbContext db)
+{
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != System.Data.ConnectionState.Open)
+        connection.Open();
+
+    string[] createTables =
+    [
+        "CREATE TABLE IF NOT EXISTS DungeonRuns (Id TEXT PRIMARY KEY, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, DungeonName TEXT NOT NULL, DifficultyTier INTEGER NOT NULL, ServerName TEXT NOT NULL, IsSeasonal INTEGER NOT NULL, SeasonTag TEXT NOT NULL, CompletedAt TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS CombatSessions (Id TEXT PRIMARY KEY, DungeonName TEXT NOT NULL, BossName TEXT NOT NULL, BossObjectType INTEGER NOT NULL, GraveDifficulty REAL NOT NULL, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, TotalBossDamage INTEGER NOT NULL, MyDamage INTEGER NOT NULL, Participants TEXT NOT NULL, EndedAt TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS WishlistTargets (Id TEXT PRIMARY KEY, ItemId INTEGER NOT NULL, ItemName TEXT NOT NULL, TargetDungeonName TEXT NOT NULL, MinimumRarity INTEGER NOT NULL, RequireShiny INTEGER NOT NULL, DesiredEnchantments TEXT NOT NULL, EstimatedDropRate REAL NOT NULL, CreatedAt TEXT NOT NULL, CompletedAt TEXT NULL, IsCompleted INTEGER NOT NULL);"
+    ];
+
+    foreach (var sql in createTables)
     {
-        string[] migrations =
-        [
-            "CREATE TABLE IF NOT EXISTS DungeonRuns (Id TEXT PRIMARY KEY, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, DungeonName TEXT NOT NULL, DifficultyTier INTEGER NOT NULL, ServerName TEXT NOT NULL, IsSeasonal INTEGER NOT NULL, SeasonTag TEXT NOT NULL, CompletedAt TEXT NOT NULL);",
-            "CREATE TABLE IF NOT EXISTS CombatSessions (Id TEXT PRIMARY KEY, DungeonName TEXT NOT NULL, BossName TEXT NOT NULL, BossObjectType INTEGER NOT NULL, GraveDifficulty REAL NOT NULL, CharacterId TEXT NOT NULL, CharacterName TEXT NOT NULL, CharacterClass INTEGER NOT NULL, TotalBossDamage INTEGER NOT NULL, MyDamage INTEGER NOT NULL, Participants TEXT NOT NULL, EndedAt TEXT NOT NULL);",
-            "CREATE TABLE IF NOT EXISTS WishlistTargets (Id TEXT PRIMARY KEY, ItemId INTEGER NOT NULL, ItemName TEXT NOT NULL, TargetDungeonName TEXT NOT NULL, MinimumRarity INTEGER NOT NULL, RequireShiny INTEGER NOT NULL, DesiredEnchantments TEXT NOT NULL, EstimatedDropRate REAL NOT NULL, CreatedAt TEXT NOT NULL, CompletedAt TEXT NULL, IsCompleted INTEGER NOT NULL);"
-        ];
-
-        foreach (var sql in migrations)
-        {
-            try { db.Database.ExecuteSqlRaw(sql); } catch { }
-        }
-
-        string[] alterColumns =
-        [
-            "ALTER TABLE Characters ADD COLUMN RotmgCharId INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Characters ADD COLUMN ClassSlotNumber INTEGER NOT NULL DEFAULT 1;",
-            "ALTER TABLE Characters ADD COLUMN SkinId INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Characters ADD COLUMN SeasonTag TEXT NOT NULL DEFAULT 'S1';",
-            "ALTER TABLE Characters ADD COLUMN IsAlive INTEGER NOT NULL DEFAULT 1;",
-            "ALTER TABLE Characters ADD COLUMN MaxedStats INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Characters ADD COLUMN BaseFame INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Characters ADD COLUMN TotalFame INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Characters ADD COLUMN EquipmentIds TEXT NOT NULL DEFAULT '[0,0,0,0]';",
-            "ALTER TABLE Characters ADD COLUMN DeathServer TEXT NULL;",
-            "ALTER TABLE Characters ADD COLUMN DeathDungeon TEXT NULL;",
-            "ALTER TABLE Characters ADD COLUMN KilledBy TEXT NULL;",
-            "ALTER TABLE LootHistory ADD COLUMN BagInstanceId TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';",
-            "ALTER TABLE LootHistory ADD COLUMN CombatSessionId TEXT NULL;",
-            "ALTER TABLE LootHistory ADD COLUMN CharacterId TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';",
-            "ALTER TABLE LootHistory ADD COLUMN CharacterSkinId INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN CharacterMaxedStatsAtDrop INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN BaseFameAtDrop INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN SeasonTag TEXT NOT NULL DEFAULT 'S1';",
-            "ALTER TABLE LootHistory ADD COLUMN ItemTier INTEGER NOT NULL DEFAULT -1;",
-            "ALTER TABLE LootHistory ADD COLUMN PhysicalBag INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN BagObjectType INTEGER NOT NULL DEFAULT 1289;",
-            "ALTER TABLE LootHistory ADD COLUMN Rarity INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN Enchantments TEXT NOT NULL DEFAULT '';",
-            "ALTER TABLE LootHistory ADD COLUMN IsShiny INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN DungeonPortalObjectType INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN GraveDifficulty REAL NOT NULL DEFAULT 3.0;",
-            "ALTER TABLE LootHistory ADD COLUMN DungeonDifficulty INTEGER NOT NULL DEFAULT 2;",
-            "ALTER TABLE LootHistory ADD COLUMN BossName TEXT NOT NULL DEFAULT 'Unknown Boss';",
-            "ALTER TABLE LootHistory ADD COLUMN BossObjectType INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE LootHistory ADD COLUMN ServerName TEXT NOT NULL DEFAULT 'EUWest';",
-            "ALTER TABLE LootHistory ADD COLUMN RarityScore REAL NOT NULL DEFAULT 100.0;",
-            "ALTER TABLE Quests ADD COLUMN QuestTitle TEXT NOT NULL DEFAULT 'Daily Tinkerer Quest';",
-            "ALTER TABLE Quests ADD COLUMN MarkItemId INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Quests ADD COLUMN MarkName TEXT NOT NULL DEFAULT '';",
-            "ALTER TABLE Quests ADD COLUMN DungeonPortalObjectType INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Quests ADD COLUMN BossName TEXT NOT NULL DEFAULT 'Dungeon Boss';",
-            "ALTER TABLE Quests ADD COLUMN RealmBiomeSource TEXT NOT NULL DEFAULT 'Realm / Godlands';",
-            "ALTER TABLE Quests ADD COLUMN RewardName TEXT NOT NULL DEFAULT 'Quest Chest';",
-            "ALTER TABLE Quests ADD COLUMN RewardItemId INTEGER NOT NULL DEFAULT 0;",
-            "ALTER TABLE Quests ADD COLUMN IsAutoTracked INTEGER NOT NULL DEFAULT 1;"
-        ];
-
-        foreach (var alter in alterColumns)
-        {
-            try { db.Database.ExecuteSqlRaw(alter); } catch { }
-        }
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.ExecuteNonQuery();
     }
-    
-    private static void EnsureLegacyDropsColumn(TrackerDbContext db)
+
+    (string Table, string Column, string Definition)[] columns =
+    [
+        ("Characters", "RotmgCharId", "INTEGER NOT NULL DEFAULT 0"),
+        ("Characters", "ClassSlotNumber", "INTEGER NOT NULL DEFAULT 1"),
+        ("Characters", "SkinId", "INTEGER NOT NULL DEFAULT 0"),
+        ("Characters", "SeasonTag", "TEXT NOT NULL DEFAULT 'S1'"),
+        ("Characters", "IsAlive", "INTEGER NOT NULL DEFAULT 1"),
+        ("Characters", "MaxedStats", "INTEGER NOT NULL DEFAULT 0"),
+        ("Characters", "BaseFame", "INTEGER NOT NULL DEFAULT 0"),
+        ("Characters", "TotalFame", "INTEGER NOT NULL DEFAULT 0"),
+        ("Characters", "EquipmentIds", "TEXT NOT NULL DEFAULT '[0,0,0,0]'"),
+        ("Characters", "DeathServer", "TEXT NULL"),
+        ("Characters", "DeathDungeon", "TEXT NULL"),
+        ("Characters", "KilledBy", "TEXT NULL"),
+        ("Characters", "LegacyDrops", "TEXT NOT NULL DEFAULT '{}'"),
+        ("LootHistory", "BagInstanceId", "TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'"),
+        ("LootHistory", "CombatSessionId", "TEXT NULL"),
+        ("LootHistory", "CharacterId", "TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'"),
+        ("LootHistory", "CharacterSkinId", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "CharacterMaxedStatsAtDrop", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "BaseFameAtDrop", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "SeasonTag", "TEXT NOT NULL DEFAULT 'S1'"),
+        ("LootHistory", "ItemTier", "INTEGER NOT NULL DEFAULT -1"),
+        ("LootHistory", "PhysicalBag", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "BagObjectType", "INTEGER NOT NULL DEFAULT 1289"),
+        ("LootHistory", "Rarity", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "Enchantments", "TEXT NOT NULL DEFAULT ''"),
+        ("LootHistory", "IsShiny", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "DungeonPortalObjectType", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "GraveDifficulty", "REAL NOT NULL DEFAULT 3.0"),
+        ("LootHistory", "DungeonDifficulty", "INTEGER NOT NULL DEFAULT 2"),
+        ("LootHistory", "BossName", "TEXT NOT NULL DEFAULT 'Unknown Boss'"),
+        ("LootHistory", "BossObjectType", "INTEGER NOT NULL DEFAULT 0"),
+        ("LootHistory", "ServerName", "TEXT NOT NULL DEFAULT 'EUWest'"),
+        ("LootHistory", "RarityScore", "REAL NOT NULL DEFAULT 100.0"),
+        ("Quests", "QuestTitle", "TEXT NOT NULL DEFAULT 'Daily Tinkerer Quest'"),
+        ("Quests", "MarkItemId", "INTEGER NOT NULL DEFAULT 0"),
+        ("Quests", "MarkName", "TEXT NOT NULL DEFAULT ''"),
+        ("Quests", "DungeonPortalObjectType", "INTEGER NOT NULL DEFAULT 0"),
+        ("Quests", "BossName", "TEXT NOT NULL DEFAULT 'Dungeon Boss'"),
+        ("Quests", "RealmBiomeSource", "TEXT NOT NULL DEFAULT 'Realm / Godlands'"),
+        ("Quests", "RewardName", "TEXT NOT NULL DEFAULT 'Quest Chest'"),
+        ("Quests", "RewardItemId", "INTEGER NOT NULL DEFAULT 0"),
+        ("Quests", "IsAutoTracked", "INTEGER NOT NULL DEFAULT 1")
+    ];
+
+    foreach (var (table, column, definition) in columns)
     {
-        try
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        using (var info = connection.CreateCommand())
         {
-            db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN LegacyDrops TEXT NOT NULL DEFAULT '{}';");
+            info.CommandText = $"PRAGMA table_info(\"{table}\");";
+            using var reader = info.ExecuteReader();
+            while (reader.Read())
+                existing.Add(reader.GetString(1));
         }
-        catch { /* kolumna już istnieje */ }
+
+        if (existing.Count == 0)
+            throw new InvalidOperationException($"Tabela '{table}' nie istnieje w używanej bazie: {connection.DataSource}");
+
+        if (existing.Contains(column))
+            continue;
+
+        using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition};";
+        alter.ExecuteNonQuery();
     }
+}
 
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
     {
