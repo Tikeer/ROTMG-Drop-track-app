@@ -26,6 +26,10 @@ public class TrackerStateService
 {
     private readonly string _dbFilePath;
     private readonly object _dbLock = new();
+    private bool _legacyCountersRestored;
+    private int _saveRequested;
+    private int _saveWorkerActive;
+    private DateTime _lastDpsNotifyUtc = DateTime.MinValue;
 
     public TrackerSaveData Data { get; private set; } = new();
 
@@ -81,6 +85,7 @@ public class TrackerStateService
         using var db = new TrackerDbContext(_dbFilePath);
         db.Database.EnsureCreated();
         EnsureSchemaUpgraded(db);
+        EnsureLegacyDropsColumn(db);
 
         if (!db.Characters.Any() && !db.Openings.Any())
         {
@@ -108,7 +113,14 @@ public class TrackerStateService
         if (accountSetting != null)
             LinkedAccountName = accountSetting.Value;
 
+        _legacyCountersRestored = db.Settings.Any(s => s.Key == "LegacyCountersRestored" && s.Value == "1");
+
         EnsureDropsInitialized();
+        RestoreLegacyCountersOnce();
+
+        // Drops = LegacyDrops + loot z historii (naprawia wcześniej wyzerowane liczniki)
+        foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
+            RecalculateCharacterDrops(ch);
     }
 
     private static void EnsureSchemaUpgraded(TrackerDbContext db)
@@ -175,6 +187,15 @@ public class TrackerStateService
             try { db.Database.ExecuteSqlRaw(alter); } catch { }
         }
     }
+    
+    private static void EnsureLegacyDropsColumn(TrackerDbContext db)
+    {
+        try
+        {
+            db.Database.ExecuteSqlRaw("ALTER TABLE Characters ADD COLUMN LegacyDrops TEXT NOT NULL DEFAULT '{}';");
+        }
+        catch { /* kolumna już istnieje */ }
+    }
 
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
     {
@@ -199,7 +220,7 @@ public class TrackerStateService
     }
 
     // Rejestruje drop powiązany z workiem (BagInstanceId), trudnością w nagrobkach (1-10) i walką DPS (CombatSessionId)
-    public void RecordLootDrop(
+        public void RecordLootDrop(
         string itemName,
         int itemId,
         DropType bagQuality,
@@ -225,7 +246,7 @@ public class TrackerStateService
         var record = new LootDropRecord
         {
             BagInstanceId = bagInstanceId ?? Guid.NewGuid(),
-            CombatSessionId = combatSessionId ?? LastCompletedCombatSessionId,
+            CombatSessionId = combatSessionId,
             CharacterId = current.Id,
             CharacterName = current.FormattedTitle,
             CharacterClass = current.Class,
@@ -296,7 +317,14 @@ public class TrackerStateService
         foreach (var type in Enum.GetValues<DropType>())
         {
             // Other (potki, jajka, śmieci, Marki) są tylko w historii - nie liczą się do statystyk postaci
-            character.Drops[type] = type == DropType.Other ? 0 : charLoot.Count(l => l.BagType == type);
+            if (type == DropType.Other)
+            {
+                character.Drops[type] = 0;
+                continue;
+            }
+
+            int legacy = character.LegacyDrops.GetValueOrDefault(type);
+            character.Drops[type] = Math.Max(0, legacy + charLoot.Count(l => l.BagType == type));
         }
     }
 
@@ -336,6 +364,22 @@ public class TrackerStateService
 
     public CombatSessionRecord? GetCombatSession(Guid? sessionId) =>
         sessionId.HasValue ? Data.CombatHistory.FirstOrDefault(c => c.Id == sessionId.Value) : null;
+    
+    // Dopina sesję DPS do już zapisanych dropów (worek mógł pojawić się przed potwierdzeniem killa)
+    public void AttachCombatSessionToBags(IReadOnlyCollection<Guid> bagInstanceIds, Guid sessionId)
+    {
+        if (bagInstanceIds.Count == 0) return;
+
+        var ids = new HashSet<Guid>(bagInstanceIds);
+        foreach (var loot in Data.LootHistory)
+        {
+            if (ids.Contains(loot.BagInstanceId))
+                loot.CombatSessionId = sessionId;
+        }
+
+        SaveAsync();
+        NotifyStateChanged();
+    }
 
     public void RecordDungeonCompletion(string dungeonName, DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands)
     {
@@ -469,9 +513,21 @@ public class TrackerStateService
         CharacterSession? existing = null;
 
         if (rotmgCharId > 0)
+        {
+            // 1. Dokładne dopasowanie po ID postaci z gry
             existing = Data.ActiveCharacters.FirstOrDefault(c => c.RotmgCharId == rotmgCharId);
 
-        existing ??= Data.ActiveCharacters.FirstOrDefault(c => c.Class == charClass && c.IsSeasonal == isSeasonal);
+            // 2. Postać zaimportowana (bez ID) - przypisujemy jej ID z gry
+            existing ??= Data.ActiveCharacters.FirstOrDefault(c =>
+                c.RotmgCharId == 0 && c.Class == charClass && c.IsSeasonal == isSeasonal);
+
+            if (existing != null && existing.RotmgCharId == 0)
+                existing.RotmgCharId = rotmgCharId;
+        }
+        else
+        {
+            existing = Data.ActiveCharacters.FirstOrDefault(c => c.Class == charClass && c.IsSeasonal == isSeasonal);
+        }
 
         if (existing != null)
             Data.ActiveCharacterId = existing.Id;
@@ -548,7 +604,13 @@ public class TrackerStateService
 
         entry.TotalDamage += damage;
         entry.HitsCount++;
-        NotifyStateChanged();
+
+        var now = DateTime.UtcNow;
+        if ((now - _lastDpsNotifyUtc).TotalMilliseconds >= 250)
+        {
+            _lastDpsNotifyUtc = now;
+            NotifyStateChanged();
+        }
     }
 
     public void ClearDungeonDps()
@@ -556,22 +618,26 @@ public class TrackerStateService
         CurrentDungeonPlayers.Clear();
         NotifyStateChanged();
     }
-
-        private void TryMigrateLegacyJson()
+    
+    private string? FindLegacyJsonPath()
     {
-        // Stara wersja (WPF) zapisywała rotmg_data.json obok exe. Szukamy obok obecnego exe i w katalogu danych aplikacji.
         string[] candidates =
         [
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "rotmg_data.json"),
             Path.Combine(Path.GetDirectoryName(_dbFilePath) ?? string.Empty, "rotmg_data.json")
         ];
 
-        string? legacyPath = candidates.FirstOrDefault(File.Exists);
-        if (legacyPath == null) return;
+        return candidates.FirstOrDefault(File.Exists);
+    }
+    
+    private TrackerSaveData? LoadLegacySaveData()
+    {
+        string? legacyPath = FindLegacyJsonPath();
+        if (legacyPath == null) return null;
 
         try
         {
-            if (JsonNode.Parse(File.ReadAllText(legacyPath)) is not JsonObject root) return;
+            if (JsonNode.Parse(File.ReadAllText(legacyPath)) is not JsonObject root) return null;
 
             // Stary enum RotmgClass: Rogue=4, Archer=5, Huntress=6. Obecny: Archer=4, Huntress=5, Rogue=6.
             static void RemapClass(JsonNode? node)
@@ -588,27 +654,79 @@ public class TrackerStateService
                     foreach (var ch in arr) RemapClass(ch);
             }
 
-            var legacyData = root.Deserialize<TrackerSaveData>();
-            if (legacyData == null) return;
-
-            Data = legacyData;
-            if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
-            {
-                Data.ActiveCharacters.Add(Data.CurrentCharacter);
-                Data.ActiveCharacterId = Data.CurrentCharacter.Id;
-            }
-
-            // Postaci z Graveyard stara wersja nie oznaczała flagą IsAlive
-            foreach (var dead in Data.Graveyard)
-            {
-                dead.IsAlive = false;
-                dead.DiedAt ??= dead.CreatedAt;
-            }
+            return root.Deserialize<TrackerSaveData>();
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Legacy migration failed: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Legacy JSON load failed: {ex.Message}");
+            return null;
         }
+    }
+    
+    private static Dictionary<DropType, int> ComputeLegacyCounters(CharacterSession legacyChar, IEnumerable<LootDropRecord> legacyLoot)
+    {
+        var loot = legacyLoot.Where(l => l.CharacterId == legacyChar.Id).ToList();
+        var result = new Dictionary<DropType, int>();
+
+        foreach (var type in Enum.GetValues<DropType>())
+        {
+            if (type == DropType.Other) continue;
+
+            int counter = legacyChar.Drops.GetValueOrDefault(type);
+            int alreadyInHistory = loot.Count(l => l.BagType == type);
+            result[type] = Math.Max(0, counter - alreadyInHistory);
+        }
+
+        return result;
+    }
+
+    private void TryMigrateLegacyJson()
+    {
+        var legacyData = LoadLegacySaveData();
+        if (legacyData == null) return;
+
+        Data = legacyData;
+        if (Data.ActiveCharacters.Count == 0 && Data.CurrentCharacter != null)
+        {
+            Data.ActiveCharacters.Add(Data.CurrentCharacter);
+            Data.ActiveCharacterId = Data.CurrentCharacter.Id;
+        }
+
+        // Postaci z Graveyard stara wersja nie oznaczała flagą IsAlive
+        foreach (var dead in Data.Graveyard)
+        {
+            dead.IsAlive = false;
+            dead.DiedAt ??= dead.CreatedAt;
+        }
+
+        foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
+            ch.LegacyDrops = ComputeLegacyCounters(ch, Data.LootHistory);
+
+        _legacyCountersRestored = true;
+    }
+    
+    private void RestoreLegacyCountersOnce()
+    {
+        if (_legacyCountersRestored) return;
+
+        var legacy = LoadLegacySaveData();
+        if (legacy == null) return;
+
+        var legacyChars = legacy.ActiveCharacters.Concat(legacy.Graveyard).ToList();
+        if (legacy.CurrentCharacter != null)
+            legacyChars.Add(legacy.CurrentCharacter);
+
+        var current = Data.ActiveCharacters.Concat(Data.Graveyard).ToList();
+        foreach (var lc in legacyChars.GroupBy(c => c.Id).Select(g => g.First()))
+        {
+            var target = current.FirstOrDefault(c => c.Id == lc.Id);
+            if (target == null) continue;
+
+            target.LegacyDrops = ComputeLegacyCounters(lc, legacy.LootHistory);
+        }
+
+        _legacyCountersRestored = true;
+        SaveAsync();
     }
 
     private void EnsureDropsInitialized()
@@ -660,7 +778,8 @@ public class TrackerStateService
     public void ChangeDropCount(DropType type, int delta)
     {
         var current = ActiveCharacter;
-        current.Drops[type] = Math.Max(0, current.Drops.GetValueOrDefault(type) + delta);
+        current.LegacyDrops[type] = current.LegacyDrops.GetValueOrDefault(type) + delta;
+        RecalculateCharacterDrops(current);
         SaveAsync();
     }
 
@@ -758,38 +877,80 @@ public class TrackerStateService
 
     public void SaveAsync()
     {
-        _ = Task.Run(SaveToSqlite);
+        Interlocked.Exchange(ref _saveRequested, 1);
+        if (Interlocked.CompareExchange(ref _saveWorkerActive, 1, 0) != 0)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (Volatile.Read(ref _saveRequested) == 1)
+                {
+                    await Task.Delay(500);
+                    Interlocked.Exchange(ref _saveRequested, 0);
+
+                    try
+                    {
+                        SaveToSqlite();
+                    }
+                    catch (Exception ex)
+                    {
+                        // np. kolekcja zmodyfikowana w trakcie snapshotu - ponów
+                        System.Diagnostics.Debug.WriteLine($"SaveToSqlite failed: {ex.Message}");
+                        Interlocked.Exchange(ref _saveRequested, 1);
+                    }
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref _saveWorkerActive, 0);
+                if (Volatile.Read(ref _saveRequested) == 1)
+                    SaveAsync();
+            }
+        });
     }
 
     private void SaveToSqlite()
     {
         lock (_dbLock)
         {
+            var characters = Data.ActiveCharacters.Concat(Data.Graveyard).ToList();
+            var quests = Data.ActiveQuests.ToList();
+            var openings = Data.Openings.ToList();
+            var loot = Data.LootHistory.ToList();
+            var runs = Data.DungeonRuns.ToList();
+            var combat = Data.CombatHistory.ToList();
+            var wishlist = Data.Wishlist.ToList();
+
             using var db = new TrackerDbContext(_dbFilePath);
             db.Database.EnsureCreated();
+            using var tx = db.Database.BeginTransaction();
 
-            db.Characters.RemoveRange(db.Characters);
-            db.Quests.RemoveRange(db.Quests);
-            db.Openings.RemoveRange(db.Openings);
-            db.LootHistory.RemoveRange(db.LootHistory);
-            db.DungeonRuns.RemoveRange(db.DungeonRuns);
-            db.CombatSessions.RemoveRange(db.CombatSessions);
-            db.WishlistTargets.RemoveRange(db.WishlistTargets);
-            db.Settings.RemoveRange(db.Settings);
+            db.Characters.ExecuteDelete();
+            db.Quests.ExecuteDelete();
+            db.Openings.ExecuteDelete();
+            db.LootHistory.ExecuteDelete();
+            db.DungeonRuns.ExecuteDelete();
+            db.CombatSessions.ExecuteDelete();
+            db.WishlistTargets.ExecuteDelete();
+            db.Settings.ExecuteDelete();
 
-            db.Characters.AddRange(Data.ActiveCharacters);
-            db.Characters.AddRange(Data.Graveyard);
-            db.Quests.AddRange(Data.ActiveQuests);
-            db.Openings.AddRange(Data.Openings);
-            db.LootHistory.AddRange(Data.LootHistory);
-            db.DungeonRuns.AddRange(Data.DungeonRuns);
-            db.CombatSessions.AddRange(Data.CombatHistory);
-            db.WishlistTargets.AddRange(Data.Wishlist);
+            db.Characters.AddRange(characters);
+            db.Quests.AddRange(quests);
+            db.Openings.AddRange(openings);
+            db.LootHistory.AddRange(loot);
+            db.DungeonRuns.AddRange(runs);
+            db.CombatSessions.AddRange(combat);
+            db.WishlistTargets.AddRange(wishlist);
 
             db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = Data.ActiveCharacterId.ToString() });
             db.Settings.Add(new AppSetting { Key = "LinkedAccountName", Value = LinkedAccountName });
+            if (_legacyCountersRestored)
+                db.Settings.Add(new AppSetting { Key = "LegacyCountersRestored", Value = "1" });
 
             db.SaveChanges();
+            tx.Commit();
         }
     }
 }

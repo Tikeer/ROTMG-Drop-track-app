@@ -724,13 +724,35 @@ public class GameDataService
         return true;
     }
 
-    private static string? FindRotmgResourcesAssetsPath()
+        private static string? FindRotmgResourcesAssetsPath()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-        string[] candidateRealmRoots =
+        var candidateRealmRoots = new List<string>();
+
+        // 1. Katalog uruchomionej gry (Windows: "RotMG Exalt.exe") - najpewniejsze źródło
+        try
+        {
+            foreach (var proc in System.Diagnostics.Process.GetProcessesByName("RotMG Exalt"))
+            {
+                try
+                {
+                    string? dir = Path.GetDirectoryName(proc.MainModule?.FileName);
+                    if (!string.IsNullOrWhiteSpace(dir))
+                        candidateRealmRoots.Add(dir);
+                }
+                catch { }
+                finally { proc.Dispose(); }
+            }
+        }
+        catch { }
+
+        // 2. Standardowe lokalizacje
+        candidateRealmRoots.AddRange(
         [
+            Path.Combine(localAppData, "RealmOfTheMadGod"),
             Path.Combine(home, ".local", "share", "RealmOfTheMadGod"),
             Path.Combine(home, "Documents", "RealmOfTheMadGod"),
             Path.Combine(docs, "RealmOfTheMadGod"),
@@ -738,7 +760,7 @@ public class GameDataService
             Path.Combine(home, "OneDrive", "Dokumenty", "RealmOfTheMadGod"),
             Path.Combine(home, ".steam", "steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod"),
             Path.Combine(home, ".local", "share", "Steam", "steamapps", "compatdata", "200210", "pfx", "drive_c", "users", "steamuser", "Documents", "RealmOfTheMadGod")
-        ];
+        ]);
 
         foreach (var root in candidateRealmRoots.Distinct())
         {

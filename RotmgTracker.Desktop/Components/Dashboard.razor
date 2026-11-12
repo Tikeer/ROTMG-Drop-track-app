@@ -1044,15 +1044,7 @@
 
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
 
-    private string GetNavBadge(string key) => key switch
-    {
-        "loot" => State.Data.LootHistory.Count.ToString(),
-        "dps" => State.Data.CombatHistory.Count.ToString(),
-        "counters" => State.Data.DungeonRuns.Count.ToString(),
-        "wishlist" => State.Data.Wishlist.Count(w => !w.IsCompleted).ToString(),
-        "graveyard" => State.Data.Graveyard.Count.ToString(),
-        _ => string.Empty
-    };
+    private string GetNavBadge(string key) => string.Empty;
 
     protected override void OnInitialized()
     {

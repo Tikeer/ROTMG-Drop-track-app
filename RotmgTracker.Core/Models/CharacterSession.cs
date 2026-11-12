@@ -39,6 +39,9 @@ public class CharacterSession
 
     // Słownik synchronizowany dynamicznie z tabelą LootHistory
     public Dictionary<DropType, int> Drops { get; set; } = new();
+    
+    // Liczniki sprzed uruchomienia aplikacji (import jednorazowy + ręczne korekty). Drops = LegacyDrops + loot z historii.
+    public Dictionary<DropType, int> LegacyDrops { get; set; } = new();
 
     public int TotalDrops => Drops.Values.Sum();
 

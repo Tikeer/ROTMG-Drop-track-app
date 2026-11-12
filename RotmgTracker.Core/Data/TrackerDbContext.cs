@@ -49,6 +49,12 @@ public class TrackerDbContext : DbContext
                 v => JsonSerializer.Deserialize<Dictionary<DropType, int>>(v, jsonOptions) ?? new());
 
         modelBuilder.Entity<CharacterSession>()
+            .Property(c => c.LegacyDrops)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, jsonOptions),
+                v => JsonSerializer.Deserialize<Dictionary<DropType, int>>(v, jsonOptions) ?? new());
+
+        modelBuilder.Entity<CharacterSession>()
             .Property(c => c.EquipmentIds)
             .HasConversion(
                 v => JsonSerializer.Serialize(v, jsonOptions),
