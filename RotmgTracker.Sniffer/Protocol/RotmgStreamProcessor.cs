@@ -21,8 +21,19 @@ public class RotmgStreamProcessor
         public int BagObjectType { get; init; }
         public float X { get; init; }
         public float Y { get; init; }
-        public Guid? CombatSessionId { get; init; }
+        public Guid? CombatSessionId { get; set; }
+        public bool KillHandled { get; set; }
         public DateTime SpawnedUtc { get; init; } = DateTime.UtcNow;
+    }
+
+    private sealed class KillCandidate
+    {
+        public int ObjectId { get; init; }
+        public EnemyMetadata Meta { get; init; } = null!;
+        public float X { get; init; }
+        public float Y { get; init; }
+        public DateTime AtUtc { get; init; } = DateTime.UtcNow;
+        public bool Consumed { get; set; }
     }
 
     private readonly TrackerStateService _state;
@@ -46,6 +57,16 @@ public class RotmgStreamProcessor
     private readonly Dictionary<int, (string Name, RotmgClass Class)> _playersOnMap = new();
     private readonly Dictionary<int, TrackedMapEnemy> _enemiesOnMap = new();
     private EnemyMetadata? _lastDamagedBossOnMap;
+    private const double KillBagWindowMs = 1500.0;
+    private const float KillRadiusSq = 15f * 15f;
+    private const int StatSeasonalId = 24;
+
+    private readonly List<KillCandidate> _killCandidates = new();
+    private (float X, float Y, DateTime AtUtc, Guid? SessionId, EnemyMetadata Meta)? _lastConfirmedKill;
+    private bool _instanceKillConfirmed;
+    private string? _completionDungeon;
+    private double _completionGraves;
+    private bool? _localSeasonal;
     
     private readonly LocalPlayerStatTracker _localStats = new();
     private RotmgClass? _localClass;
@@ -65,6 +86,8 @@ public class RotmgStreamProcessor
     public void ResetStream()
     {
         Capture?.Note("STREAM_RESET");
+        CommitInstanceCompletion();
+
         _serverCipher = new Rc4Cipher(Rc4Cipher.ServerToClientKeyHex);
         _clientCipher = new Rc4Cipher(Rc4Cipher.ClientToServerKeyHex);
         _serverBuffer.Clear();
@@ -75,7 +98,10 @@ public class RotmgStreamProcessor
         _activeBagsOnMap.Clear();
         _playersOnMap.Clear();
         _enemiesOnMap.Clear();
+        _killCandidates.Clear();
+        _lastConfirmedKill = null;
         _lastDamagedBossOnMap = null;
+        _localSeasonal = null;
     }
 
     public void ProcessTcpPayload(byte[] payload, uint sequenceNumber, bool isServerToClient)
@@ -198,6 +224,9 @@ public class RotmgStreamProcessor
 
     private void ParseMapInfo(ref RotmgPacketReader reader)
     {
+        // Wejście na nową mapę = opuszczenie poprzedniej instancji -> ewentualne zaliczenie dungeona
+        CommitInstanceCompletion();
+
         if (reader.Remaining < 8) return;
         reader.Skip(8); // Width + Height
         string mapName = reader.ReadUtfString();
@@ -217,6 +246,8 @@ public class RotmgStreamProcessor
         _activeBagsOnMap.Clear();
         _playersOnMap.Clear();
         _enemiesOnMap.Clear();
+        _killCandidates.Clear();
+        _lastConfirmedKill = null;
         _lastDamagedBossOnMap = null;
 
         string cleanName = !string.IsNullOrWhiteSpace(displayName) && !displayName.StartsWith('{')
@@ -231,83 +262,69 @@ public class RotmgStreamProcessor
         }
     }
 
-        private void ParseUpdate(ref RotmgPacketReader reader, ReadOnlySpan<byte> body)
+    private void ParseUpdate(ref RotmgPacketReader reader, ReadOnlySpan<byte> body)
     {
-        // Potwierdzenie killa (na razie tylko log): worek zespawnowany <= 200 ms temu,
-        // w promieniu 15 kafli od ostatniej znanej pozycji bossa (z NewTick).
-        const double killBagWindowMs = 200.0;
-        const float killBagRadiusSq = 15f * 15f;
-
-        reader.Skip(8);        // pozycja
-        reader.ReadByte();     // 0x19, stały w logu
-
-        int tileCount = reader.ReadCompressedInt();
-        reader.Skip(tileCount * 6);
-
-        int newObjectsCount = reader.ReadCompressedInt();
-
-        int firstObjectStart = reader.Position;
-        int prevType = -1;
-        int prevId = -1;
-        List<StatEntry>? prevStats = null;
-
-        for (int i = 0; i < newObjectsCount && reader.Remaining > 0; i++)
+        try
         {
-            ushort objectType = reader.ReadUInt16();
-            int objectId = reader.ReadCompressedInt();
-            var (x, y) = reader.ReadWorldPosData();
+            reader.Skip(8);        // pozycja
+            reader.ReadByte();     // 0x19, stały w logu
 
-            if (objectId < 0 || !float.IsFinite(x) || !float.IsFinite(y) || Math.Abs(x) > 5000 || Math.Abs(y) > 5000)
+            int tileCount = reader.ReadCompressedInt();
+            reader.Skip(tileCount * 6);
+
+            int newObjectsCount = reader.ReadCompressedInt();
+
+            int firstObjectStart = reader.Position;
+            int prevType = -1;
+            int prevId = -1;
+            List<StatEntry>? prevStats = null;
+
+            for (int i = 0; i < newObjectsCount && reader.Remaining > 0; i++)
             {
-                // Po desyncu offset nie jest na granicy obiektu - dalsze czytanie dawaloby smieci.
-                // Logujemy okno hex (ostatnie ~1200 B przed bledem), zeby znalezc stat, ktory psuje parsowanie.
-                int failPos = reader.Position;
-                int from = Math.Max(firstObjectStart, failPos - 1200);
-                int to = Math.Min(body.Length, failPos + 16);
-                string window = to > from ? Convert.ToHexString(body.Slice(from, to - from)) : string.Empty;
-                string prevStatTypes = prevStats == null ? "" : string.Join(",", prevStats.Select(s => s.StatType));
+                ushort objectType = reader.ReadUInt16();
+                int objectId = reader.ReadCompressedInt();
+                var (x, y) = reader.ReadWorldPosData();
 
-                Capture?.Note($"UPDATE_DESYNC: object {i}/{newObjectsCount}, type=0x{objectType:X4}, bodyLen={body.Length}, failPos={failPos}, prev=(type=0x{prevType:X4}, id={prevId}, statTypes=[{prevStatTypes}]), hexFrom={from}: {window}");
-                return;
-            }
-
-            var stats = reader.ReadStatDataList();
-            prevType = objectType;
-            prevId = objectId;
-            prevStats = stats;
-
-            InspectObjectStatus(objectType, objectId, x, y, stats);
-        }
-
-        int dropCount = reader.ReadCompressedInt();
-        for (int i = 0; i < dropCount && reader.Remaining > 0; i++)
-        {
-            int id = reader.ReadCompressedInt();
-
-            if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
-            {
-                Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\", Category={gone.Metadata.Category}, LastPos=({gone.X:F1}, {gone.Y:F1})");
-
-                var nowUtc = DateTime.UtcNow;
-                foreach (var bagEntry in _activeBagsOnMap)
+                if (objectId < 0 || !float.IsFinite(x) || !float.IsFinite(y) || Math.Abs(x) > 5000 || Math.Abs(y) > 5000)
                 {
-                    var bag = bagEntry.Value;
-                    if ((nowUtc - bag.SpawnedUtc).TotalMilliseconds > killBagWindowMs)
-                        continue;
+                    // Po desyncu offset nie jest na granicy obiektu - dalsze czytanie dawaloby smieci.
+                    int failPos = reader.Position;
+                    int from = Math.Max(firstObjectStart, failPos - 1200);
+                    int to = Math.Min(body.Length, failPos + 16);
+                    string window = to > from ? Convert.ToHexString(body.Slice(from, to - from)) : string.Empty;
+                    string prevStatTypes = prevStats == null ? "" : string.Join(",", prevStats.Select(s => s.StatType));
 
-                    float dx = bag.X - gone.X;
-                    float dy = bag.Y - gone.Y;
-                    if ((dx * dx) + (dy * dy) > killBagRadiusSq)
-                        continue;
-
-                    Capture?.Note($"BOSS_KILL_CONFIRMED: Id={id}, Name=\"{gone.Metadata.DisplayName}\", Category={gone.Metadata.Category}, BagId={bagEntry.Key}, BagType=0x{bag.BagObjectType:X4}");
-                    break;
+                    Capture?.Note($"UPDATE_DESYNC: object {i}/{newObjectsCount}, type=0x{objectType:X4}, bodyLen={body.Length}, failPos={failPos}, prev=(type=0x{prevType:X4}, id={prevId}, statTypes=[{prevStatTypes}]), hexFrom={from}: {window}");
+                    return;
                 }
+
+                var stats = reader.ReadStatDataList();
+                prevType = objectType;
+                prevId = objectId;
+                prevStats = stats;
+
+                InspectObjectStatus(objectType, objectId, x, y, stats);
             }
 
-            _activeBagsOnMap.Remove(id);
-            _enemiesOnMap.Remove(id);
-            _playersOnMap.Remove(id);
+            int dropCount = reader.ReadCompressedInt();
+            for (int i = 0; i < dropCount && reader.Remaining > 0; i++)
+            {
+                int id = reader.ReadCompressedInt();
+
+                if (_enemiesOnMap.TryGetValue(id, out var gone) && gone.Metadata.IsBoss)
+                {
+                    Capture?.Note($"BOSS_REMOVED: Id={id}, Name=\"{gone.Metadata.DisplayName}\", Category={gone.Metadata.Category}, LastPos=({gone.X:F1}, {gone.Y:F1})");
+                    AddKillCandidate(id, gone);
+                }
+
+                _activeBagsOnMap.Remove(id);
+                _enemiesOnMap.Remove(id);
+                _playersOnMap.Remove(id);
+            }
+        }
+        finally
+        {
+            ConfirmBossKills();
         }
     }
 
@@ -345,103 +362,241 @@ public class RotmgStreamProcessor
             }
         }
     }
-
-    private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
-{
-    if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
-        RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
+    
+    private void CommitInstanceCompletion()
     {
-        string? playerName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
-        if (!string.IsNullOrWhiteSpace(playerName))
-            _playersOnMap[objectId] = (playerName, playerClass);
+        if (!_instanceKillConfirmed) return;
 
-        if (objectId == _myObjectId)
-        {
-            // NOTE: Gracz lokalny (ObjectId, klasa, staty)
-            string statsSummary = string.Join(", ", stats.Select(s => $"{s.StatType}:{(string.IsNullOrEmpty(s.StringValue) ? s.IntValue : s.StringValue)}"));
-            Capture?.Note($"PLAYER_STATUS: Id={objectId}, Class={playerClass}, Stats=[{statsSummary}]");
+        string? name = _completionDungeon;
+        double graves = _completionGraves;
+        _instanceKillConfirmed = false;
+        _completionDungeon = null;
 
-            if (!string.IsNullOrWhiteSpace(playerName))
-                _state.HandleNexusPlayerDetected(playerName, playerClass, true, _currentCharId);
+        if (string.IsNullOrWhiteSpace(name) || graves < 0.5) return;
+        if (_gameData.ResolvePortalByDungeonName(name) == null) return;
 
-            _localClass = playerClass;
-            InspectLocalPlayerStats(stats);
-        }
-        return;
+        _state.RecordDungeonCompletion(name, RarityScoreEngine.GraveCountToTier(graves));
+        Capture?.Note($"DUNGEON_COMPLETED: {name}, graves={graves:F1}");
     }
-
-    if (_gameData.TryResolveEnemy(objectType, out var enemyMeta))
+    
+    private void AddKillCandidate(int objectId, TrackedMapEnemy enemy)
     {
-        _enemiesOnMap[objectId] = new TrackedMapEnemy
-        {
-            Metadata = enemyMeta,
-            X = x,
-            Y = y,
-            LastSeenUtc = DateTime.UtcNow
-        };
-
-        if (enemyMeta.IsBoss)
-        {
-            _lastDamagedBossOnMap = enemyMeta;
-            // NOTE: Wykryty Boss na mapie
-            Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4},Category={enemyMeta.Category}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
-        }
-
-        return;
-    }
-
-    if (RotmgProtocolConstants.IsTrackedBagContainer(objectType))
-    {
-        if ((DateTime.UtcNow - _lastPlayerInvDropTime).TotalSeconds < 2.0)
+        if (_killCandidates.Any(k => k.ObjectId == objectId && !k.Consumed))
             return;
 
-        if (!_activeBagsOnMap.TryGetValue(objectId, out var trackedBag))
+        _killCandidates.Add(new KillCandidate
         {
-            trackedBag = new TrackedLootBag
-            {
-                BagInstanceId = Guid.NewGuid(),
-                BagObjectType = objectType,
-                X = x,
-                Y = y,
-                CombatSessionId = _state.LastCompletedCombatSessionId
-            };
-            _activeBagsOnMap[objectId] = trackedBag;
+            ObjectId = objectId,
+            Meta = enemy.Metadata,
+            X = enemy.X,
+            Y = enemy.Y
+        });
+    }
+    
+        private void ConfirmBossKills()
+    {
+        var now = DateTime.UtcNow;
+        _killCandidates.RemoveAll(k => k.Consumed || (now - k.AtUtc).TotalMilliseconds > 5000);
 
-            // NOTE: Zespawnowany worek na mapie (fioletowe i egg pomijamy - zalałyby capture)
-            if (objectType is not (0x0507 or 0x0508))
-                Capture?.Note($"BAG_SPAWN: Type=0x{objectType:X4}, Id={objectId}, Pos=({x:F1}, {y:F1})");
+        // 1. Worki, które pojawiły się już PO potwierdzonym killu
+        if (_lastConfirmedKill is { } last && last.SessionId.HasValue)
+        {
+            var late = new List<Guid>();
+            foreach (var bag in _activeBagsOnMap.Values)
+            {
+                if (bag.KillHandled) continue;
+
+                double dt = (bag.SpawnedUtc - last.AtUtc).TotalMilliseconds;
+                if (dt < 0 || dt > KillBagWindowMs) continue;
+
+                float dx = bag.X - last.X;
+                float dy = bag.Y - last.Y;
+                if ((dx * dx) + (dy * dy) > KillRadiusSq) continue;
+
+                bag.KillHandled = true;
+                bag.CombatSessionId = last.SessionId;
+                late.Add(bag.BagInstanceId);
+            }
+
+            if (late.Count > 0)
+                _state.AttachCombatSessionToBags(late, last.SessionId.Value);
         }
 
-        InspectBagContents(trackedBag, objectId, stats);
+        if (_killCandidates.Count == 0) return;
+
+        // 2. Nowe kille: kandydat + worek blisko w czasie i przestrzeni (w dowolnej kolejności)
+        foreach (var anchor in _killCandidates.ToList())
+        {
+            if (anchor.Consumed) continue;
+
+            var bags = new List<KeyValuePair<int, TrackedLootBag>>();
+            foreach (var entry in _activeBagsOnMap)
+            {
+                var bag = entry.Value;
+                if (bag.KillHandled) continue;
+                if (Math.Abs((bag.SpawnedUtc - anchor.AtUtc).TotalMilliseconds) > KillBagWindowMs) continue;
+
+                float dx = bag.X - anchor.X;
+                float dy = bag.Y - anchor.Y;
+                if ((dx * dx) + (dy * dy) > KillRadiusSq) continue;
+
+                bags.Add(entry);
+            }
+
+            if (bags.Count == 0) continue;
+
+            var cluster = _killCandidates
+                .Where(k => !k.Consumed)
+                .Where(k =>
+                {
+                    float dx = k.X - anchor.X;
+                    float dy = k.Y - anchor.Y;
+                    return (dx * dx) + (dy * dy) <= KillRadiusSq;
+                })
+                .ToList();
+
+            var main = cluster.OrderByDescending(k => k.Meta.MaxHp).First().Meta;
+            double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
+
+            Guid? sessionId = _state.ArchiveCurrentCombatSession(main.DisplayName, main.ObjectType, graves);
+            _state.ClearDungeonDps();
+
+            var bagIds = new List<Guid>();
+            foreach (var entry in bags)
+            {
+                entry.Value.KillHandled = true;
+                entry.Value.CombatSessionId = sessionId;
+                bagIds.Add(entry.Value.BagInstanceId);
+            }
+
+            if (sessionId.HasValue)
+                _state.AttachCombatSessionToBags(bagIds, sessionId.Value);
+
+            foreach (var c in cluster)
+                c.Consumed = true;
+
+            if (cluster.Any(c => c.Meta.Category == "DungeonBoss"))
+            {
+                _instanceKillConfirmed = true;
+                _completionDungeon = _state.CurrentDungeonName;
+                _completionGraves = graves;
+            }
+
+            _lastConfirmedKill = (anchor.X, anchor.Y, now, sessionId, main);
+
+            Capture?.Note($"BOSS_KILL_CONFIRMED: Name=\"{main.DisplayName}\", Category={main.Category}, Bags={bags.Count}, Candidates={cluster.Count}, Session={(sessionId.HasValue ? "yes" : "no-dps")}");
+        }
     }
-}
+
+        private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
+    {
+        if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
+            RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
+        {
+            string? playerName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
+            if (!string.IsNullOrWhiteSpace(playerName))
+                _playersOnMap[objectId] = (playerName, playerClass);
+
+            if (objectId == _myObjectId)
+            {
+                string statsSummary = string.Join(", ", stats.Select(s => $"{s.StatType}:{(string.IsNullOrEmpty(s.StringValue) ? s.IntValue : s.StringValue)}"));
+                Capture?.Note($"PLAYER_STATUS: Id={objectId}, Class={playerClass}, Stats=[{statsSummary}]");
+
+                int seasonalIdx = stats.FindIndex(s => s.StatType == StatSeasonalId);
+                if (seasonalIdx >= 0)
+                    _localSeasonal = stats[seasonalIdx].IntValue != 0;
+
+                if (!string.IsNullOrWhiteSpace(playerName))
+                    _state.HandleNexusPlayerDetected(playerName, playerClass, _localSeasonal ?? true, _currentCharId);
+
+                _localClass = playerClass;
+                InspectLocalPlayerStats(stats);
+            }
+            return;
+        }
+
+        if (_gameData.TryResolveEnemy(objectType, out var enemyMeta))
+        {
+            _enemiesOnMap[objectId] = new TrackedMapEnemy
+            {
+                Metadata = enemyMeta,
+                X = x,
+                Y = y,
+                LastSeenUtc = DateTime.UtcNow
+            };
+
+            if (enemyMeta.IsBoss)
+                Capture?.Note($"BOSS_SEEN: Type=0x{objectType:X4},Category={enemyMeta.Category}, Id={objectId}, Name=\"{enemyMeta.DisplayName}\", Pos=({x:F1}, {y:F1})");
+
+            return;
+        }
+
+        if (RotmgProtocolConstants.IsTrackedBagContainer(objectType))
+        {
+            if ((DateTime.UtcNow - _lastPlayerInvDropTime).TotalSeconds < 2.0)
+                return;
+
+            if (!_activeBagsOnMap.TryGetValue(objectId, out var trackedBag))
+            {
+                trackedBag = new TrackedLootBag
+                {
+                    BagInstanceId = Guid.NewGuid(),
+                    BagObjectType = objectType,
+                    X = x,
+                    Y = y
+                };
+                _activeBagsOnMap[objectId] = trackedBag;
+
+                // Fioletowe i egg pomijamy w logu - zalałyby capture
+                if (objectType is not (0x0507 or 0x0508))
+                    Capture?.Note($"BAG_SPAWN: Type=0x{objectType:X4}, Id={objectId}, Pos=({x:F1}, {y:F1})");
+            }
+
+            InspectBagContents(trackedBag, objectId, stats);
+        }
+    }
 
     private EnemyMetadata? ResolveBossForBagPosition(float bagX, float bagY)
     {
-        TrackedMapEnemy? closestBoss = null;
-        float bestDistSq = float.MaxValue;
+        TrackedMapEnemy? bestBoss = null;
+        TrackedMapEnemy? nearest = null;
+        float nearestDistSq = float.MaxValue;
 
         foreach (var enemy in _enemiesOnMap.Values)
         {
             float dx = enemy.X - bagX;
             float dy = enemy.Y - bagY;
             float distSq = (dx * dx) + (dy * dy);
+            if (distSq > 64f) continue;
 
-            if (distSq <= 64f)
+            if (enemy.Metadata.IsBoss)
             {
-                float weightedDist = enemy.Metadata.IsBoss ? distSq * 0.25f : distSq;
-                if (weightedDist < bestDistSq)
-                {
-                    bestDistSq = weightedDist;
-                    closestBoss = enemy;
-                }
+                if (bestBoss == null || enemy.Metadata.MaxHp > bestBoss.Metadata.MaxHp)
+                    bestBoss = enemy;
+            }
+            else if (distSq < nearestDistSq)
+            {
+                nearestDistSq = distSq;
+                nearest = enemy;
             }
         }
 
-        return closestBoss?.Metadata ?? _lastDamagedBossOnMap;
+        if (bestBoss != null)
+            return bestBoss.Metadata;
+
+        // Boss już zniknął z mapy, ale zabity przed chwilą obok tego worka
+        if (_lastConfirmedKill is { } kill && (DateTime.UtcNow - kill.AtUtc).TotalMilliseconds <= 3000)
+        {
+            float dx = kill.X - bagX;
+            float dy = kill.Y - bagY;
+            if ((dx * dx) + (dy * dy) <= KillRadiusSq)
+                return kill.Meta;
+        }
+
+        return nearest?.Metadata ?? _lastDamagedBossOnMap;
     }
 
-    private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+        private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
@@ -496,12 +651,11 @@ public class RotmgStreamProcessor
                 if (!quiet)
                     Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
 
-                // Dotychczasowa kwalifikacja zostaje w mocy: item "liczy się" tylko po spełnieniu starych warunków,
-                // reszta jest zapisywana jako Other (bez wpływu na rarity score i statystyki).
                 bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
                 bool qualifies = itemMeta.BagTypeId >= 6 || special;
 
-                if (itemMeta.Quality == DropType.Tiered && itemBag is not (BagType.WhiteBag or BagType.OrangeBag))
+                // Tiered liczy się tylko, gdy FIZYCZNIE leży w białym/pomarańczowym worku
+                if (itemMeta.Quality == DropType.Tiered && physicalBag is not (BagType.WhiteBag or BagType.OrangeBag))
                     qualifies = false;
 
                 itemName = itemMeta.Name;
@@ -511,10 +665,6 @@ public class RotmgStreamProcessor
                 {
                     effectiveQuality = itemMeta.Quality;
                     isShiny = itemMeta.IsShiny;
-
-                    // White Bag z dungeona o trudności >= 9.0 nagrobków (O3, Shatters, MV, Adv) -> LegendaryWhite
-                    if (physicalBag == BagType.WhiteBag && !itemMeta.IsShiny && graves >= 9.0 && effectiveQuality == DropType.RegularWhite)
-                        effectiveQuality = DropType.LegendaryWhite;
                 }
                 else
                 {
@@ -613,26 +763,19 @@ public class RotmgStreamProcessor
         reader.Skip(2);        // bulletId (ushort), nie 1 bajt
         int attackerObjectId = reader.ReadInt32();
 
-        if (_enemiesOnMap.TryGetValue(targetObjectId, out var targetEnemy) && targetEnemy.Metadata.IsBoss)
-        {
-            _lastDamagedBossOnMap = targetEnemy.Metadata;
-        }
+        if (!_enemiesOnMap.TryGetValue(targetObjectId, out var targetEnemy) || !targetEnemy.Metadata.IsBoss)
+            return;
 
-        if (_enemiesOnMap.TryGetValue(targetObjectId, out var dmgTarget) && dmgTarget.Metadata.IsBoss &&
-            _playersOnMap.TryGetValue(attackerObjectId, out var attacker))
-        {
+        _lastDamagedBossOnMap = targetEnemy.Metadata;
+
+        if (_playersOnMap.TryGetValue(attackerObjectId, out var attacker))
             _state.RecordPlayerDamage(attackerObjectId, attacker.Name, attacker.Class, damageAmount);
-        }
 
-        // Gdy Boss ginie: zapisz ukończenie dungeona oraz zarchiwizuj sesję DPS pod wypadający za chwilę worek!
-        if (killedTarget && _enemiesOnMap.TryGetValue(targetObjectId, out var deadEnemy) && deadEnemy.Metadata.IsBoss)
+        // Kill z flagi Damage to tylko kandydat; potwierdza go dopiero worek w pobliżu
+        if (killedTarget)
         {
-            double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
-            var tier = RarityScoreEngine.GraveCountToTier(graves);
-
-            _state.ArchiveCurrentCombatSession(deadEnemy.Metadata.DisplayName, deadEnemy.Metadata.ObjectType, graves);
-            if (deadEnemy.Metadata.Category == "DungeonBoss")
-                _state.RecordDungeonCompletion(_state.CurrentDungeonName, tier);
+            AddKillCandidate(targetObjectId, targetEnemy);
+            ConfirmBossKills();
         }
     }
 
