@@ -110,11 +110,19 @@ public class RotmgSnifferService : IDisposable
         var rawCapture = e.GetPacket();
         var packet = Packet.ParsePacket(rawCapture.LinkLayerType, rawCapture.Data);
         var tcpPacket = packet.Extract<TcpPacket>();
-        if (tcpPacket == null) return;
+        var ipPacket = packet.Extract<IPPacket>();
+        if (tcpPacket == null || ipPacket == null) return;
+
+        bool isServerToClient = tcpPacket.SourcePort == 2050;
+
+        // Klucz połączenia: klient (adres:port) + adres serwera, identyczny w obu kierunkach
+        string flowKey = isServerToClient
+            ? $"{ipPacket.DestinationAddress}:{tcpPacket.DestinationPort}-{ipPacket.SourceAddress}"
+            : $"{ipPacket.SourceAddress}:{tcpPacket.SourcePort}-{ipPacket.DestinationAddress}";
 
         if (tcpPacket.Synchronize)
         {
-            _streamProcessor.ResetStream();
+            _streamProcessor.StartFlow(flowKey);
             return;
         }
 
@@ -122,12 +130,12 @@ public class RotmgSnifferService : IDisposable
             return;
 
         PacketsCaptured++;
-        bool isServerToClient = tcpPacket.SourcePort == 2050;
 
         _streamProcessor.ProcessTcpPayload(
             tcpPacket.PayloadData,
             tcpPacket.SequenceNumber,
-            isServerToClient);
+            isServerToClient,
+            flowKey);
     }
 
     // Jedyny pozostawiony tester: symulacja obrażeń na bossie do weryfikacji Live DPS

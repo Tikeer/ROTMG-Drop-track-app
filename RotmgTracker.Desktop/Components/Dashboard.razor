@@ -509,7 +509,7 @@
                             </div>
                             <div style="min-width: 190px; text-align: right; font-weight: 700;">
                                 @player.TotalDamage.ToString("N0") DMG
-                                <span style="color: var(--accent-gold); margin-left: 6px;">(@pct.ToString("0.1")%)</span>
+                                <span style="color: var(--accent-gold); margin-left: 6px;">(@pct.ToString("0.0")%)</span>
                             </div>
                         </div>
                         rank++;
@@ -560,7 +560,7 @@
                                         <span>
                                             <strong style="color: @(p.IsMe ? "var(--accent-green)" : "var(--text-primary)");">@p.PlayerName</strong> (@p.Class)
                                         </span>
-                                        <span>@p.TotalDamage.ToString("N0") DMG (@pPct.ToString("0.1")%)</span>
+                                        <span>@p.TotalDamage.ToString("N0") DMG (@pPct.ToString("0.0")%)</span>
                                     </div>
                                 }
                             </div>
@@ -786,7 +786,7 @@
 
                             <div style="min-width: 240px; text-align: right; font-size: 0.85rem;">
                                 <div>Runs Since Added: <strong>@runsDone</strong></div>
-                                <div style="color: var(--accent-gold);">Chance so far: <strong>@cumulativeChance.ToString("0.1")%</strong></div>
+                                <div style="color: var(--accent-gold);">Chance so far: <strong>@cumulativeChance.ToString("0.0")%</strong></div>
                             </div>
 
                             <div style="display: flex; gap: 6px;">

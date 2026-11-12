@@ -47,6 +47,9 @@ public class RotmgStreamProcessor
 
     private uint? _expectedServerSeq;
     private uint? _expectedClientSeq;
+    private readonly object _streamLock = new();
+    private bool _serverStreamBroken;
+    private bool _clientStreamBroken;
 
     private int _myObjectId = -1;
     private int _currentCharId = 0;
@@ -65,6 +68,7 @@ public class RotmgStreamProcessor
     private (float X, float Y, DateTime AtUtc, Guid? SessionId, EnemyMetadata Meta)? _lastConfirmedKill;
     private bool _instanceKillConfirmed;
     private string? _completionDungeon;
+    private string? _activeFlow;
     private double _completionGraves;
     private bool? _localSeasonal;
     
@@ -83,48 +87,85 @@ public class RotmgStreamProcessor
         _gameData = gameData;
     }
 
-    public void ResetStream()
-    {
-        Capture?.Note("STREAM_RESET");
-        CommitInstanceCompletion();
+        
 
-        _serverCipher = new Rc4Cipher(Rc4Cipher.ServerToClientKeyHex);
-        _clientCipher = new Rc4Cipher(Rc4Cipher.ClientToServerKeyHex);
-        _serverBuffer.Clear();
-        _clientBuffer.Clear();
-        _expectedServerSeq = null;
-        _expectedClientSeq = null;
-        _loggedBagItems.Clear();
-        _activeBagsOnMap.Clear();
-        _playersOnMap.Clear();
-        _enemiesOnMap.Clear();
-        _killCandidates.Clear();
-        _lastConfirmedKill = null;
-        _lastDamagedBossOnMap = null;
-        _localSeasonal = null;
+        public void StartFlow(string flowKey)
+    {
+        lock (_streamLock)
+        {
+            Capture?.Note($"STREAM_RESET: flow={flowKey}");
+            CommitInstanceCompletion();
+
+            _activeFlow = flowKey;
+            _serverCipher = new Rc4Cipher(Rc4Cipher.ServerToClientKeyHex);
+            _clientCipher = new Rc4Cipher(Rc4Cipher.ClientToServerKeyHex);
+            _serverBuffer.Clear();
+            _clientBuffer.Clear();
+            _expectedServerSeq = null;
+            _expectedClientSeq = null;
+            _serverStreamBroken = false;
+            _clientStreamBroken = false;
+            _loggedBagItems.Clear();
+            _activeBagsOnMap.Clear();
+            _playersOnMap.Clear();
+            _enemiesOnMap.Clear();
+            _killCandidates.Clear();
+            _lastConfirmedKill = null;
+            _lastDamagedBossOnMap = null;
+            _localSeasonal = null;
+        }
     }
 
-    public void ProcessTcpPayload(byte[] payload, uint sequenceNumber, bool isServerToClient)
+    public void ProcessTcpPayload(byte[] payload, uint sequenceNumber, bool isServerToClient, string flowKey)
     {
         if (payload.Length == 0) return;
 
-        if (isServerToClient)
+        lock (_streamLock)
         {
-            if (_expectedServerSeq.HasValue && sequenceNumber < _expectedServerSeq.Value)
-                return;
+            // Dekodujemy tylko połączenie, którego SYN widzieliśmy jako ostatni.
+            // Bez tego bajty starego i nowego połączenia mieszałyby się w jednym szyfrze RC4.
+            if (_activeFlow == null || flowKey != _activeFlow) return;
 
-            _expectedServerSeq = sequenceNumber + (uint)payload.Length;
-            _serverBuffer.AddRange(payload);
-            ProcessBuffer(_serverBuffer, _serverCipher, isServerToClient: true);
-        }
-        else
-        {
-            if (_expectedClientSeq.HasValue && sequenceNumber < _expectedClientSeq.Value)
-                return;
+            bool broken = isServerToClient ? _serverStreamBroken : _clientStreamBroken;
+            if (broken) return;
 
-            _expectedClientSeq = sequenceNumber + (uint)payload.Length;
-            _clientBuffer.AddRange(payload);
-            ProcessBuffer(_clientBuffer, _clientCipher, isServerToClient: false);
+            uint? expected = isServerToClient ? _expectedServerSeq : _expectedClientSeq;
+            int skip = 0;
+
+            if (expected.HasValue)
+            {
+                int diff = unchecked((int)(sequenceNumber - expected.Value));
+
+                if (diff < 0)
+                {
+                    int overlap = -diff;
+                    if (overlap >= payload.Length) return;
+                    skip = overlap;
+                }
+                else if (diff > 0)
+                {
+                    Capture?.Note($"TCP_GAP: {(isServerToClient ? "S->C" : "C->S")} missing={diff} bytes");
+                    if (isServerToClient) _serverStreamBroken = true;
+                    else _clientStreamBroken = true;
+                    return;
+                }
+            }
+
+            uint next = unchecked(sequenceNumber + (uint)payload.Length);
+            byte[] data = skip == 0 ? payload : payload.AsSpan(skip).ToArray();
+
+            if (isServerToClient)
+            {
+                _expectedServerSeq = next;
+                _serverBuffer.AddRange(data);
+                ProcessBuffer(_serverBuffer, _serverCipher, isServerToClient: true);
+            }
+            else
+            {
+                _expectedClientSeq = next;
+                _clientBuffer.AddRange(data);
+                ProcessBuffer(_clientBuffer, _clientCipher, isServerToClient: false);
+            }
         }
     }
 
