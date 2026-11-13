@@ -93,6 +93,10 @@ public class RotmgStreamProcessor
     {
         lock (_streamLock)
         {
+            
+            if (_activeFlow == flowKey)
+                return; // ten sam SYN przyszedł drugim interfejsem
+            
             Capture?.Note($"STREAM_RESET: flow={flowKey}");
             CommitInstanceCompletion();
 
