@@ -5,6 +5,7 @@ using RotmgTrackerV1.Core.Data;
 using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Models;
 using System.Text.Json.Nodes;
+using System.Collections.Concurrent;
 
 namespace RotmgTrackerV1.Core.Services;
 
@@ -25,7 +26,7 @@ public class TrackerSaveData
 public class TrackerStateService
 {
     private readonly string _dbFilePath;
-    private readonly object _dbLock = new();
+    private readonly object _stateLock = new();
     private bool _legacyCountersRestored;
     private int _saveRequested;
     private int _saveWorkerActive;
@@ -45,7 +46,8 @@ public class TrackerStateService
     public double CurrentDungeonGraves { get; private set; } = 0.0;
     public int CurrentDungeonPortalType { get; private set; } = 0;
     public Guid? LastCompletedCombatSessionId { get; private set; }
-    public Dictionary<int, PlayerDpsEntry> CurrentDungeonPlayers { get; } = new();
+    
+    public ConcurrentDictionary<int, PlayerDpsEntry> CurrentDungeonPlayers { get; } = new();
 
     public event Action? OnStateChanged;
 
@@ -54,6 +56,8 @@ public class TrackerStateService
     {
         get
         {
+            using var guard = LockState();
+
             var found = Data.ActiveCharacters.FirstOrDefault(c => c.Id == Data.ActiveCharacterId);
             if (found != null) return found;
 
@@ -145,7 +149,7 @@ public class TrackerStateService
     }
 
     // Rejestruje drop powiązany z workiem (BagInstanceId), trudnością w nagrobkach (1-10) i walką DPS (CombatSessionId)
-        public void RecordLootDrop(
+            public void RecordLootDrop(
         string itemName,
         int itemId,
         DropType bagQuality,
@@ -164,6 +168,8 @@ public class TrackerStateService
         Guid? bagInstanceId = null,
         Guid? combatSessionId = null)
     {
+        using var guard = LockState();
+
         var current = ActiveCharacter;
         double effectiveGraves = graveDifficulty > 0 ? graveDifficulty : CurrentDungeonGraves;
         double score = RarityScoreEngine.CalculateIntrinsicScore(bagQuality, rarity, isShiny, effectiveGraves, difficulty);
@@ -223,6 +229,8 @@ public class TrackerStateService
 
     public void RemoveLootRecord(Guid lootId)
     {
+        using var guard = LockState();
+
         var record = Data.LootHistory.FirstOrDefault(l => l.Id == lootId);
         if (record == null) return;
 
@@ -256,6 +264,8 @@ public class TrackerStateService
     // Zapisuje tabelę obrażeń z walki z bossem i zwraca jej ID do przypięcia pod wypadający worek
     public Guid? ArchiveCurrentCombatSession(string bossName, int bossObjectType, double graveDifficulty)
     {
+        using var guard = LockState();
+
         if (CurrentDungeonPlayers.Count == 0) return null;
 
         var current = ActiveCharacter;
@@ -287,13 +297,21 @@ public class TrackerStateService
         return session.Id;
     }
 
-    public CombatSessionRecord? GetCombatSession(Guid? sessionId) =>
-        sessionId.HasValue ? Data.CombatHistory.FirstOrDefault(c => c.Id == sessionId.Value) : null;
+    public CombatSessionRecord? GetCombatSession(Guid? sessionId)
+    {
+        using var guard = LockState();
+
+        return sessionId.HasValue
+            ? Data.CombatHistory.FirstOrDefault(c => c.Id == sessionId.Value)
+            : null;
+    }
     
     // Dopina sesję DPS do już zapisanych dropów (worek mógł pojawić się przed potwierdzeniem killa)
     public void AttachCombatSessionToBags(IReadOnlyCollection<Guid> bagInstanceIds, Guid sessionId)
     {
         if (bagInstanceIds.Count == 0) return;
+
+        using var guard = LockState();
 
         var ids = new HashSet<Guid>(bagInstanceIds);
         foreach (var loot in Data.LootHistory)
@@ -309,6 +327,8 @@ public class TrackerStateService
     public void RecordDungeonCompletion(string dungeonName, DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands)
     {
         if (string.IsNullOrWhiteSpace(dungeonName)) return;
+
+        using var guard = LockState();
 
         var current = ActiveCharacter;
         Data.DungeonRuns.Insert(0, new DungeonRunRecord
@@ -331,6 +351,8 @@ public class TrackerStateService
     // Automatycznie aktualizuje postęp questów, gdy sniffer wykryje Marki w plecaku / Vaulcie
     public void SyncMarkPickedUp(MarkMetadata mark, int portalObjectType = 0)
     {
+        using var guard = LockState();
+
         var quest = Data.ActiveQuests.FirstOrDefault(q =>
             q.MarkItemId == mark.ItemId ||
             string.Equals(q.DungeonName, mark.DungeonName, StringComparison.OrdinalIgnoreCase) ||
@@ -351,6 +373,8 @@ public class TrackerStateService
 
     public void AddMarkQuestWithMetadata(MarkMetadata mark, int targetMarks, string rewardName = "Mighty Quest Chest", int portalObjectType = 0)
     {
+        using var guard = LockState();
+
         Data.ActiveQuests.Add(new DungeonMarkQuest
         {
             QuestTitle = $"Defeat {mark.BossName}",
@@ -369,6 +393,8 @@ public class TrackerStateService
 
     public int GetRunsSinceWishlistTargetCreated(WishlistTarget target)
     {
+        using var guard = LockState();
+
         return Data.DungeonRuns.Count(r =>
             string.Equals(r.DungeonName, target.TargetDungeonName, StringComparison.OrdinalIgnoreCase) &&
             r.CompletedAt >= target.CreatedAt &&
@@ -378,6 +404,8 @@ public class TrackerStateService
     public void AddWishlistTarget(string itemName, string dungeonName, ItemRarity minRarity, bool requireShiny, double dropRate)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
+
+        using var guard = LockState();
 
         Data.Wishlist.Insert(0, new WishlistTarget
         {
@@ -396,6 +424,8 @@ public class TrackerStateService
     {
         if (string.IsNullOrWhiteSpace(accountName)) return;
 
+        using var guard = LockState();
+
         if (string.Equals(LinkedAccountName, accountName, StringComparison.OrdinalIgnoreCase))
         {
             SyncDetectedCharacter(accountName, charClass, isSeasonal, rotmgCharId);
@@ -411,6 +441,8 @@ public class TrackerStateService
 
     public void ConfirmPendingAccount()
     {
+        using var guard = LockState();
+
         if (string.IsNullOrWhiteSpace(PendingAccountName)) return;
 
         LinkedAccountName = PendingAccountName;
@@ -422,12 +454,16 @@ public class TrackerStateService
 
     public void DismissPendingAccount()
     {
+        using var guard = LockState();
+
         PendingAccountName = null;
         NotifyStateChanged();
     }
 
     public void UnlinkAccount()
     {
+        using var guard = LockState();
+
         LinkedAccountName = string.Empty;
         SaveAsync();
         NotifyStateChanged();
@@ -462,6 +498,8 @@ public class TrackerStateService
 
     public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null, int skinId = 0)
     {
+        using var guard = LockState();
+
         var current = ActiveCharacter;
         current.MaxedStats = Math.Clamp(maxedStats, 0, 8);
         current.BaseFame = Math.Max(0, baseFame);
@@ -478,6 +516,8 @@ public class TrackerStateService
 
     public void KillActiveCharacter(string killedBy, string dungeonName, int totalDeathFame)
     {
+        using var guard = LockState();
+
         var deadChar = ActiveCharacter;
         deadChar.IsAlive = false;
         deadChar.DiedAt = DateTime.Now;
@@ -502,6 +542,8 @@ public class TrackerStateService
 
     public void EnterDungeon(string dungeonName, double graveDifficulty = 3.5, int portalObjectType = 0)
     {
+        using var guard = LockState();
+
         CurrentDungeonName = string.IsNullOrWhiteSpace(dungeonName) ? "Unknown Dungeon" : dungeonName;
         CurrentDungeonGraves = graveDifficulty;
         CurrentDungeonPortalType = portalObjectType;
@@ -513,6 +555,8 @@ public class TrackerStateService
     public void RecordPlayerDamage(int objectId, string playerName, RotmgClass charClass, int damage)
     {
         if (damage <= 0) return;
+
+        using var guard = LockState();
 
         if (!CurrentDungeonPlayers.TryGetValue(objectId, out var entry))
         {
@@ -540,6 +584,8 @@ public class TrackerStateService
 
     public void ClearDungeonDps()
     {
+        using var guard = LockState();
+
         CurrentDungeonPlayers.Clear();
         NotifyStateChanged();
     }
@@ -675,6 +721,8 @@ public class TrackerStateService
 
     public void SelectCharacter(Guid characterId)
     {
+        using var guard = LockState();
+
         if (Data.ActiveCharacters.Any(c => c.Id == characterId))
         {
             Data.ActiveCharacterId = characterId;
@@ -684,6 +732,8 @@ public class TrackerStateService
 
     public void AddNewCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
     {
+        using var guard = LockState();
+
         var newChar = CreateFreshCharacter(name, rotmgClass, isSeasonal, rotmgCharId);
         Data.ActiveCharacters.Add(newChar);
         Data.ActiveCharacterId = newChar.Id;
@@ -692,6 +742,8 @@ public class TrackerStateService
 
     public void DeleteActiveCharacter(Guid characterId)
     {
+        using var guard = LockState();
+
         if (Data.ActiveCharacters.Count <= 1) return;
         Data.ActiveCharacters.RemoveAll(c => c.Id == characterId);
         if (Data.ActiveCharacterId == characterId)
@@ -716,6 +768,8 @@ public class TrackerStateService
 
     public void RemoveGraveyardEntry(Guid id)
     {
+        using var guard = LockState();
+
         Data.Graveyard.RemoveAll(c => c.Id == id);
         SaveAsync();
     }
@@ -800,6 +854,23 @@ public class TrackerStateService
 
     private void NotifyStateChanged() => OnStateChanged?.Invoke();
 
+    // Użycie: using var guard = LockState(); na początku metody dotykającej stanu.
+    // Monitor jest reentrantny, więc zagnieżdżone wywołania są bezpieczne.
+    private StateLockScope LockState() => new(_stateLock);
+
+    private readonly struct StateLockScope : IDisposable
+    {
+        private readonly object _gate;
+
+        public StateLockScope(object gate)
+        {
+            _gate = gate;
+            Monitor.Enter(gate);
+        }
+
+        public void Dispose() => Monitor.Exit(_gate);
+    }
+
     public void SaveAsync()
     {
         Interlocked.Exchange(ref _saveRequested, 1);
@@ -838,7 +909,9 @@ public class TrackerStateService
 
     private void SaveToSqlite()
     {
-        lock (_dbLock)
+        // Cały zapis pod _stateLock: snapshot list ORAZ serializacja encji (np. słownik Drops)
+        // muszą być spójne i niemodyfikowane przez wątek sniffera.
+        lock (_stateLock)
         {
             var characters = Data.ActiveCharacters.Concat(Data.Graveyard).ToList();
             var quests = Data.ActiveQuests.ToList();
