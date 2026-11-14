@@ -123,6 +123,7 @@ public class RotmgSnifferService : IDisposable
         if (tcpPacket.Synchronize)
         {
             _streamProcessor.StartFlow(flowKey);
+            _streamProcessor.NoteSynSequence(flowKey, isServerToClient, tcpPacket.SequenceNumber);
             return;
         }
 

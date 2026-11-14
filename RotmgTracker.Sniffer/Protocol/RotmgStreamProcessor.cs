@@ -2,6 +2,7 @@ using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Services;
 using RotmgTrackerV1.Sniffer.Crypto;
 using RotmgTrackerV1.Sniffer.Diagnostics;
+using RotmgTrackerV1.Sniffer.Services;
 
 namespace RotmgTrackerV1.Sniffer.Protocol;
 
@@ -45,8 +46,8 @@ public class RotmgStreamProcessor
     private readonly List<byte> _serverBuffer = new(65536);
     private readonly List<byte> _clientBuffer = new(8192);
 
-    private uint? _expectedServerSeq;
-    private uint? _expectedClientSeq;
+    private readonly TcpReorderBuffer _serverReorder = new();
+    private readonly TcpReorderBuffer _clientReorder = new();
     private readonly object _streamLock = new();
     private bool _serverStreamBroken;
     private bool _clientStreamBroken;
@@ -89,14 +90,16 @@ public class RotmgStreamProcessor
 
         
 
-        public void StartFlow(string flowKey)
+    public void StartFlow(string flowKey)
     {
         lock (_streamLock)
         {
-            
             if (_activeFlow == flowKey)
                 return; // ten sam SYN przyszedł drugim interfejsem
-            
+
+            if (_activeFlow != null)
+                Capture?.Note($"TCP_STATS: flow={_activeFlow} s2c(held={_serverReorder.HeldSegments}, dup={_serverReorder.DuplicateSegments}) c2s(held={_clientReorder.HeldSegments}, dup={_clientReorder.DuplicateSegments})");
+
             Capture?.Note($"STREAM_RESET: flow={flowKey}");
             CommitInstanceCompletion();
 
@@ -105,8 +108,8 @@ public class RotmgStreamProcessor
             _clientCipher = new Rc4Cipher(Rc4Cipher.ClientToServerKeyHex);
             _serverBuffer.Clear();
             _clientBuffer.Clear();
-            _expectedServerSeq = null;
-            _expectedClientSeq = null;
+            _serverReorder.Reset();
+            _clientReorder.Reset();
             _serverStreamBroken = false;
             _clientStreamBroken = false;
             _loggedBagItems.Clear();
@@ -117,6 +120,18 @@ public class RotmgStreamProcessor
             _lastConfirmedKill = null;
             _lastDamagedBossOnMap = null;
             _localSeasonal = null;
+        }
+    }
+    
+    public void NoteSynSequence(string flowKey, bool isServerToClient, uint synSequenceNumber)
+    {
+        lock (_streamLock)
+        {
+            if (_activeFlow != flowKey) return;
+
+            // SYN zużywa jeden numer, więc pierwszy bajt danych ma seq = ISN + 1
+            var reorder = isServerToClient ? _serverReorder : _clientReorder;
+            reorder.Initialize(unchecked(synSequenceNumber + 1));
         }
     }
 
@@ -133,42 +148,25 @@ public class RotmgStreamProcessor
             bool broken = isServerToClient ? _serverStreamBroken : _clientStreamBroken;
             if (broken) return;
 
-            uint? expected = isServerToClient ? _expectedServerSeq : _expectedClientSeq;
-            int skip = 0;
+            var reorder = isServerToClient ? _serverReorder : _clientReorder;
+            var buffer = isServerToClient ? _serverBuffer : _clientBuffer;
+            var cipher = isServerToClient ? _serverCipher : _clientCipher;
 
-            if (expected.HasValue)
+            // Segmenty z przyszłości czekają w buforze (reordering między interfejsami/wątkami);
+            // dopiero po MaxWaitMs luka jest uznawana za utraconą.
+            var chunks = reorder.Push(sequenceNumber, payload, Environment.TickCount64, out int gapBytes);
+
+            foreach (var chunk in chunks)
             {
-                int diff = unchecked((int)(sequenceNumber - expected.Value));
-
-                if (diff < 0)
-                {
-                    int overlap = -diff;
-                    if (overlap >= payload.Length) return;
-                    skip = overlap;
-                }
-                else if (diff > 0)
-                {
-                    Capture?.Note($"TCP_GAP: {(isServerToClient ? "S->C" : "C->S")} missing={diff} bytes");
-                    if (isServerToClient) _serverStreamBroken = true;
-                    else _clientStreamBroken = true;
-                    return;
-                }
+                buffer.AddRange(chunk);
+                ProcessBuffer(buffer, cipher, isServerToClient);
             }
 
-            uint next = unchecked(sequenceNumber + (uint)payload.Length);
-            byte[] data = skip == 0 ? payload : payload.AsSpan(skip).ToArray();
-
-            if (isServerToClient)
+            if (gapBytes > 0)
             {
-                _expectedServerSeq = next;
-                _serverBuffer.AddRange(data);
-                ProcessBuffer(_serverBuffer, _serverCipher, isServerToClient: true);
-            }
-            else
-            {
-                _expectedClientSeq = next;
-                _clientBuffer.AddRange(data);
-                ProcessBuffer(_clientBuffer, _clientCipher, isServerToClient: false);
+                Capture?.Note($"TCP_GAP: {(isServerToClient ? "S->C" : "C->S")} missing={gapBytes} bytes (po {reorder.MaxWaitMs} ms oczekiwania)");
+                if (isServerToClient) _serverStreamBroken = true;
+                else _clientStreamBroken = true;
             }
         }
     }
@@ -641,11 +639,12 @@ public class RotmgStreamProcessor
         return nearest?.Metadata ?? _lastDamagedBossOnMap;
     }
 
-        private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+            private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
 
+        // Kolor worka w historii = zawsze fizyczny kontener (XML <BagType> opisuje item, nie worek)
         BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
         var matchedBoss = ResolveBossForBagPosition(trackedBag.X, trackedBag.Y);
         double graves = _gameData.ResolveDungeonGraveDifficulty(_state.CurrentDungeonName, _state.CurrentDungeonGraves);
@@ -668,7 +667,6 @@ public class RotmgStreamProcessor
             DropType effectiveQuality;
             bool isShiny = false;
             int itemTier = -1;
-            BagType itemBag = physicalBag;
 
             if (_gameData.TryResolveMark(itemId, out var markMeta))
             {
@@ -691,12 +689,10 @@ public class RotmgStreamProcessor
             }
             else
             {
-                itemBag = _gameData.ResolveBagTypeFromItem(itemMeta.BagTypeId, physicalBag);
-
                 if (!quiet)
-                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4})");
+                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4}, Bag={physicalBag})");
 
-                bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered;
+                bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered or DropType.ST;
                 bool qualifies = itemMeta.BagTypeId >= 6 || special;
 
                 // Tiered liczy się tylko, gdy FIZYCZNIE leży w białym/pomarańczowym worku
@@ -717,10 +713,6 @@ public class RotmgStreamProcessor
                 }
             }
 
-            // Dla Other pokazujemy kolor kontenera, w którym item faktycznie leżał (nie <BagType> z XML-a itemu)
-            if (effectiveQuality == DropType.Other)
-                itemBag = physicalBag;
-
             _state.RecordLootDrop(
                 itemName: itemName,
                 itemId: itemId,
@@ -729,7 +721,7 @@ public class RotmgStreamProcessor
                 rarity: ItemRarity.Common,
                 isShiny: isShiny,
                 difficulty: tier,
-                physicalBag: itemBag,
+                physicalBag: physicalBag,
                 itemTier: itemTier,
                 bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
                 bossObjectType: matchedBoss?.ObjectType ?? 0,

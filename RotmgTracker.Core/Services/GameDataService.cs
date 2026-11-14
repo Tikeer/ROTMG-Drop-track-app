@@ -78,9 +78,9 @@ public class GameDataService
         { 0x0509, BagType.CyanBag },
         { 0x050B, BagType.BlueBag },
         { 0x050C, BagType.WhiteBag },
-        { 0x0510, BagType.WhiteBag },
-        { 0x050E, BagType.RedBag },
-        { 0x050F, BagType.OrangeBag }
+        { 0x050E, BagType.OrangeBag }, // POTWIERDZONE: Tarot Card Pack, XmlBag=7, capture 2026-11-13
+        { 0x050F, BagType.RedBag },    // HIPOTEZA: wcześniej błędnie Orange, brak capture
+        { 0x0510, BagType.WhiteBag }
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =

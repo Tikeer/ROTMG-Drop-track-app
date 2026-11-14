@@ -15,15 +15,19 @@ namespace RotmgTrackerV1.Sniffer.Services
             public byte[] Data;
         }
 
-        private readonly List<Segment> _pending = new List<Segment>();
+        private readonly List<Segment> _pending = new();
         private uint _expected;
         private bool _initialized;
         private long _gapSinceMs = -1;
         private int _pendingBytes;
 
-        public int MaxWaitMs { get; set; } = 200;
+        public int MaxWaitMs { get; set; } = 400;
         public int MaxPendingBytes { get; set; } = 512 * 1024;
         public bool IsInitialized => _initialized;
+
+        // Diagnostyka: ile segmentów musiało czekać na brakujący poprzednik / ile było duplikatów
+        public int HeldSegments { get; private set; }
+        public int DuplicateSegments { get; private set; }
 
         public void Reset()
         {
@@ -32,11 +36,26 @@ namespace RotmgTrackerV1.Sniffer.Services
             _gapSinceMs = -1;
             _initialized = false;
             _expected = 0;
+            HeldSegments = 0;
+            DuplicateSegments = 0;
+        }
+
+        /// <summary>
+        /// Ustawia numer pierwszego oczekiwanego bajtu (ISN + 1 z SYN). Ignorowane, gdy już zainicjowany.
+        /// </summary>
+        public void Initialize(uint expectedSeq)
+        {
+            if (_initialized)
+                return;
+
+            _expected = expectedSeq;
+            _initialized = true;
         }
 
         /// <summary>
         /// Zwraca fragmenty gotowe do dekodowania, w kolejności.
-        /// gapBytes > 0 oznacza, że luka została uznana za utraconą (strumień RC4 jest zepsuty).
+        /// gapBytes > 0: luka uznana za utraconą (strumień RC4 jest zepsuty); zwrócone dane
+        /// to tylko to, co leżało PRZED luką, a reszta oczekujących segmentów jest odrzucana.
         /// </summary>
         public List<byte[]> Push(uint seq, byte[] payload, long nowMs, out int gapBytes)
         {
@@ -54,57 +73,72 @@ namespace RotmgTrackerV1.Sniffer.Services
             Accept(seq, payload, output);
             Drain(output);
 
-            if (_pending.Count > 0)
+            // Postęp = poprzednia luka została wypełniona; czas kolejnej luki liczymy od nowa
+            if (output.Count > 0)
+                _gapSinceMs = -1;
+
+            if (_pending.Count == 0)
             {
-                if (_gapSinceMs < 0)
-                    _gapSinceMs = nowMs;
-
-                if (nowMs - _gapSinceMs >= MaxWaitMs || _pendingBytes > MaxPendingBytes)
-                {
-                    int min = int.MaxValue;
-                    foreach (var s in _pending)
-                    {
-                        int d = (int)(s.Seq - _expected);
-                        if (d < min) min = d;
-                    }
-
-                    gapBytes = min;
-                    _expected += (uint)min;
-                    Drain(output);
-                    _gapSinceMs = _pending.Count > 0 ? nowMs : -1;
-                }
+                _gapSinceMs = -1;
+                return output;
             }
-            else
+
+            if (_gapSinceMs < 0)
+                _gapSinceMs = nowMs;
+
+            if (nowMs - _gapSinceMs >= MaxWaitMs || _pendingBytes > MaxPendingBytes)
             {
+                gapBytes = NearestPendingGap();
+                _pending.Clear();
+                _pendingBytes = 0;
                 _gapSinceMs = -1;
             }
 
             return output;
         }
 
+        private int NearestPendingGap()
+        {
+            int min = int.MaxValue;
+            foreach (var s in _pending)
+            {
+                int d = unchecked((int)(s.Seq - _expected));
+                if (d < min) min = d;
+            }
+
+            return min;
+        }
+
         private void Accept(uint seq, byte[] payload, List<byte[]> output)
         {
-            int diff = (int)(seq - _expected);
+            int diff = unchecked((int)(seq - _expected));
             if (diff <= 0)
             {
                 int skip = -diff;
                 if (skip >= payload.Length)
-                    return; // duplikat / retransmisja
+                {
+                    DuplicateSegments++; // duplikat / retransmisja / kopia z drugiego interfejsu
+                    return;
+                }
 
-                byte[] data = skip == 0 ? payload : payload[skip..];
+                byte[] data = skip == 0 ? payload : payload.AsSpan(skip).ToArray();
                 output.Add(data);
-                _expected += (uint)data.Length;
+                _expected = unchecked(_expected + (uint)data.Length);
                 return;
             }
 
             foreach (var s in _pending)
             {
                 if (s.Seq == seq && s.Data.Length >= payload.Length)
-                    return; // ten sam segment z drugiego interfejsu
+                {
+                    DuplicateSegments++; // ten sam segment z drugiego interfejsu
+                    return;
+                }
             }
 
             _pending.Add(new Segment { Seq = seq, Data = payload });
             _pendingBytes += payload.Length;
+            HeldSegments++;
         }
 
         private void Drain(List<byte[]> output)
@@ -116,7 +150,7 @@ namespace RotmgTrackerV1.Sniffer.Services
                 for (int i = _pending.Count - 1; i >= 0; i--)
                 {
                     var seg = _pending[i];
-                    int diff = (int)(seg.Seq - _expected);
+                    int diff = unchecked((int)(seg.Seq - _expected));
                     if (diff > 0)
                         continue;
 
@@ -126,9 +160,9 @@ namespace RotmgTrackerV1.Sniffer.Services
                     int skip = -diff;
                     if (skip < seg.Data.Length)
                     {
-                        byte[] data = skip == 0 ? seg.Data : seg.Data[skip..];
+                        byte[] data = skip == 0 ? seg.Data : seg.Data.AsSpan(skip).ToArray();
                         output.Add(data);
-                        _expected += (uint)data.Length;
+                        _expected = unchecked(_expected + (uint)data.Length);
                     }
 
                     progress = true;
