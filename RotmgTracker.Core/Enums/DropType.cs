@@ -12,6 +12,6 @@ public enum DropType
     DivineGoodItem,
     Shiny,
     Shivine,
-    Tiered,
+    Tiered, // PRZESTARZAŁE: nigdzie nie przypisywane; zostaje tylko, bo enum jest zapisany w bazie jako liczba
     Other
 }

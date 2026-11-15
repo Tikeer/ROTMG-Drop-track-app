@@ -79,8 +79,8 @@ public class GameDataService
         { 0x050B, BagType.BlueBag },
         { 0x050C, BagType.WhiteBag },
         { 0x050E, BagType.GoldBag },   // POTWIERDZONE: Tarot Card Pack (XmlBag=7)
-        { 0x050F, BagType.RedBag },    // PRAWDOPODOBNE: worki z topowym gearem 
-        { 0x0510, BagType.OrangeBag }  // HIPOTEZA: worek z samym ST, jeszcze niewidziany w capture
+        { 0x050F, BagType.OrangeBag }, // POTWIERDZONE: ST (Bloodstone Ring) i Mystery Chest (XmlBag=8)
+        { 0x0510, BagType.RedBag }     // HIPOTEZA: czysty Red (topowy gear T13-14) jeszcze niewidziany w capture
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =
@@ -117,7 +117,7 @@ public class GameDataService
         Directory.CreateDirectory(_appDataDir);
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
-        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
+        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v8.json");
         _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v9.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
@@ -604,6 +604,9 @@ public class GameDataService
         return string.Empty;
     }
 
+    private static readonly HashSet<int> RingSlotTypes = [9];
+    private static readonly HashSet<int> AbilitySlotTypes = [4, 5, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 23, 25];
+
     private static DropType DetermineDropQuality(
         XElement obj,
         int xmlBagType,
@@ -632,11 +635,13 @@ public class GameDataService
             return DropType.RegularWhite;
         }
 
-        if (tier >= 13)
+        // Tops = najlepszy gear: XML BagType 9 (Red-tier: T13-14 bronie/armory, T7 ringi/abilities) lub T13+
+        if (xmlBagType == 9 || tier >= 13)
             return DropType.Tops;
 
+        // Pozostały gear z tierem (T1-T12 itd.) nie jest już osobną kategorią
         if (tier > 0)
-            return DropType.Tiered;
+            return DropType.Other;
 
         return DropType.UT;
     }

@@ -662,8 +662,7 @@ public class RotmgStreamProcessor
         // Bez _lastDamagedBossOnMap: ostatni uderzony boss mógł być dowolnie daleko (np. bity przez innych graczy)
         return nearest?.Metadata ?? RegularMobSource;
     }
-
-                private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+        private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
@@ -716,13 +715,8 @@ public class RotmgStreamProcessor
                 if (!quiet)
                     Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4}, Bag={physicalBag})");
 
-                bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered or DropType.ST;
+                bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.ST;
                 bool qualifies = itemMeta.BagTypeId >= 6 || special;
-
-                // Tiered liczy się tylko, gdy FIZYCZNIE leży w białym/czerwonym/pomarańczowym worku
-                if (itemMeta.Quality == DropType.Tiered &&
-                    physicalBag is not (BagType.WhiteBag or BagType.RedBag or BagType.OrangeBag))
-                    qualifies = false;
 
                 itemName = itemMeta.Name;
                 itemTier = itemMeta.Tier;
