@@ -438,7 +438,7 @@ public class RotmgStreamProcessor
         });
     }
     
-        private void ConfirmBossKills()
+            private void ConfirmBossKills()
     {
         var now = DateTime.UtcNow;
         _killCandidates.RemoveAll(k => k.Consumed || (now - k.AtUtc).TotalMilliseconds > 5000);
@@ -520,7 +520,9 @@ public class RotmgStreamProcessor
             foreach (var c in cluster)
                 c.Consumed = true;
 
-            if (cluster.Any(c => c.Meta.Category == "DungeonBoss"))
+            // Ukończenie dungeonu decyduje GŁÓWNY boss klastra (największe HP). Encje pomocnicze
+            // (BOSS_SPAWNED) lub mini boss obok nie mogą go wywołać (Spec Pen: Gretch/Oculon).
+            if (main.Category == "DungeonBoss")
             {
                 _instanceKillConfirmed = true;
                 _completionDungeon = _state.CurrentDungeonName;
@@ -529,7 +531,7 @@ public class RotmgStreamProcessor
 
             _lastConfirmedKill = (anchor.X, anchor.Y, now, sessionId, main);
 
-            Capture?.Note($"BOSS_KILL_CONFIRMED: Name=\"{main.DisplayName}\", Category={main.Category}, Bags={bags.Count}, Candidates={cluster.Count}, Session={(sessionId.HasValue ? "yes" : "no-dps")}");
+            Capture?.Note($"BOSS_KILL_CONFIRMED: Name=\"{main.DisplayName}\", Type=0x{main.ObjectType:X4}, Hp={main.MaxHp}, Category={main.Category}, Bags={bags.Count}, Candidates={cluster.Count}, Session={(sessionId.HasValue ? "yes" : "no-dps")}");
         }
     }
 
