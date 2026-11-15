@@ -635,11 +635,21 @@ public class GameDataService
             return DropType.RegularWhite;
         }
 
-        // Tops = najlepszy gear: XML BagType 9 (Red-tier: T13-14 bronie/armory, T7 ringi/abilities) lub T13+
-        if (xmlBagType == 9 || tier >= 13)
-            return DropType.Tops;
+        // Tops: tylko bronie/armory T14 oraz ringi i abilities T7
+        int slotType = int.TryParse(obj.Element("SlotType")?.Value, out int st) ? st : 0;
+        bool isWeaponOrArmor = slotType is 1 or 2 or 3 or 6 or 7 or 8 or 14 or 17 or 24;
 
-        // Pozostały gear z tierem (T1-T12 itd.) nie jest już osobną kategorią
+        if (isWeaponOrArmor)
+        {
+            if (tier >= 14)
+                return DropType.Tops;
+        }
+        else if (tier == 7)
+        {
+            return DropType.Tops;
+        }
+
+        // Pozostały gear z tierem nie jest osobną kategorią; itemy bez tieru to UT
         if (tier > 0)
             return DropType.Other;
 
