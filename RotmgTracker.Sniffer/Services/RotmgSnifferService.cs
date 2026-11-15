@@ -107,36 +107,43 @@ public class RotmgSnifferService : IDisposable
 
     private void OnPacketArrival(object sender, PacketCapture e)
     {
-        var rawCapture = e.GetPacket();
-        var packet = Packet.ParsePacket(rawCapture.LinkLayerType, rawCapture.Data);
-        var tcpPacket = packet.Extract<TcpPacket>();
-        var ipPacket = packet.Extract<IPPacket>();
-        if (tcpPacket == null || ipPacket == null) return;
-
-        bool isServerToClient = tcpPacket.SourcePort == 2050;
-
-        // Klucz połączenia: klient (adres:port) + adres serwera, identyczny w obu kierunkach
-        string flowKey = isServerToClient
-            ? $"{ipPacket.DestinationAddress}:{tcpPacket.DestinationPort}-{ipPacket.SourceAddress}"
-            : $"{ipPacket.SourceAddress}:{tcpPacket.SourcePort}-{ipPacket.DestinationAddress}";
-
-        if (tcpPacket.Synchronize)
+        try
         {
-            _streamProcessor.StartFlow(flowKey);
-            _streamProcessor.NoteSynSequence(flowKey, isServerToClient, tcpPacket.SequenceNumber);
-            return;
+            var rawCapture = e.GetPacket();
+            var packet = Packet.ParsePacket(rawCapture.LinkLayerType, rawCapture.Data);
+            var tcpPacket = packet.Extract<TcpPacket>();
+            var ipPacket = packet.Extract<IPPacket>();
+            if (tcpPacket == null || ipPacket == null) return;
+
+            bool isServerToClient = tcpPacket.SourcePort == 2050;
+
+            // Klucz połączenia: klient (adres:port) + adres serwera, identyczny w obu kierunkach
+            string flowKey = isServerToClient
+                ? $"{ipPacket.DestinationAddress}:{tcpPacket.DestinationPort}-{ipPacket.SourceAddress}"
+                : $"{ipPacket.SourceAddress}:{tcpPacket.SourcePort}-{ipPacket.DestinationAddress}";
+
+            if (tcpPacket.Synchronize)
+            {
+                _streamProcessor.StartFlow(flowKey);
+                _streamProcessor.NoteSynSequence(flowKey, isServerToClient, tcpPacket.SequenceNumber);
+                return;
+            }
+
+            if (tcpPacket.PayloadData == null || tcpPacket.PayloadData.Length == 0)
+                return;
+
+            PacketsCaptured++;
+
+            _streamProcessor.ProcessTcpPayload(
+                tcpPacket.PayloadData,
+                tcpPacket.SequenceNumber,
+                isServerToClient,
+                flowKey);
         }
-
-        if (tcpPacket.PayloadData == null || tcpPacket.PayloadData.Length == 0)
-            return;
-
-        PacketsCaptured++;
-
-        _streamProcessor.ProcessTcpPayload(
-            tcpPacket.PayloadData,
-            tcpPacket.SequenceNumber,
-            isServerToClient,
-            flowKey);
+        catch (Exception ex)
+        {
+            Capture.Note($"SNIFFER_EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     // Jedyny pozostawiony tester: symulacja obrażeń na bossie do weryfikacji Live DPS

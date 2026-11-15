@@ -852,7 +852,32 @@ public class TrackerStateService
         SaveAsync();
     }
 
-    private void NotifyStateChanged() => OnStateChanged?.Invoke();
+    private int _notifyPending;
+
+    // Subskrybenci NIGDY nie są wołani synchronicznie z wątku, który właśnie zmienia stan:
+    // Photino renderuje przez window.Invoke, które blokuje wołającego do końca renderu na wątku UI,
+    // a render czyta stan pod _stateLock - wołanie tego pod lockiem = deadlock.
+    // Powiadomienia są też zlewane (coalescing), więc burza zmian daje jeden render.
+    private void NotifyStateChanged()
+    {
+        if (Interlocked.Exchange(ref _notifyPending, 1) == 1)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            Interlocked.Exchange(ref _notifyPending, 0);
+
+            try
+            {
+                OnStateChanged?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"OnStateChanged failed: {ex.Message}");
+            }
+        });
+    }
 
     // Użycie: using var guard = LockState(); na początku metody dotykającej stanu.
     // Monitor jest reentrantny, więc zagnieżdżone wywołania są bezpieczne.
