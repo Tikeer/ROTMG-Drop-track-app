@@ -57,6 +57,7 @@ public class RotmgStreamProcessor
     private DateTime _lastPlayerInvDropTime = DateTime.MinValue;
 
     private readonly HashSet<(int BagObjectId, int Slot, int ItemId)> _loggedBagItems = new();
+    private readonly HashSet<(int Type, int Id)> _loggedUnknownContainers = new();  
     private readonly Dictionary<int, TrackedLootBag> _activeBagsOnMap = new();
     private readonly Dictionary<int, (string Name, RotmgClass Class)> _playersOnMap = new();
     private readonly Dictionary<int, TrackedMapEnemy> _enemiesOnMap = new();
@@ -113,6 +114,7 @@ public class RotmgStreamProcessor
             _serverStreamBroken = false;
             _clientStreamBroken = false;
             _loggedBagItems.Clear();
+            _loggedUnknownContainers.Clear();
             _activeBagsOnMap.Clear();
             _playersOnMap.Clear();
             _enemiesOnMap.Clear();
@@ -531,7 +533,7 @@ public class RotmgStreamProcessor
         }
     }
 
-        private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
+    private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
     {
         if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
             RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
@@ -597,9 +599,27 @@ public class RotmgStreamProcessor
 
             InspectBagContents(trackedBag, objectId, stats);
         }
+        else if (_loggedUnknownContainers.Add((objectType, objectId)))
+        {
+            // Diagnostyka: obiekt spoza graczy/wrogów/śledzonych worków, który niesie itemy w slotach 8..15
+            // (worek o nieznanym typie kontenera, skrzynia). Ma wyłapać brakujący Red Bag ze Spec Pena.
+            var items = stats
+                .Where(s => s.StatType >= RotmgProtocolConstants.StatInventory0
+                            && s.StatType <= RotmgProtocolConstants.StatInventory7
+                            && s.IntValue > 0)
+                .Select(s => $"0x{s.IntValue:X4}")
+                .ToList();
+
+            if (items.Count > 0)
+                Capture?.Note($"UNKNOWN_CONTAINER: Type=0x{objectType:X4}, Id={objectId}, Pos=({x:F1}, {y:F1}), Items=[{string.Join(" ", items)}]");
+        }
     }
 
-    private EnemyMetadata? ResolveBossForBagPosition(float bagX, float bagY)
+    private const float BossBagRadiusSq = 4f * 4f;
+    private const float MobBagRadiusSq = 8f * 8f;
+    private static readonly EnemyMetadata RegularMobSource = new(0, "RegularMob", "Regular Mob", false, 0);
+
+    private EnemyMetadata ResolveBossForBagPosition(float bagX, float bagY)
     {
         TrackedMapEnemy? bestBoss = null;
         TrackedMapEnemy? nearest = null;
@@ -610,14 +630,15 @@ public class RotmgStreamProcessor
             float dx = enemy.X - bagX;
             float dy = enemy.Y - bagY;
             float distSq = (dx * dx) + (dy * dy);
-            if (distSq > 64f) continue;
 
             if (enemy.Metadata.IsBoss)
             {
-                if (bestBoss == null || enemy.Metadata.MaxHp > bestBoss.Metadata.MaxHp)
+                // Worek bossa pojawia się na jego pozycji; boss stojący dalej to tylko "obok"
+                if (distSq <= BossBagRadiusSq &&
+                    (bestBoss == null || enemy.Metadata.MaxHp > bestBoss.Metadata.MaxHp))
                     bestBoss = enemy;
             }
-            else if (distSq < nearestDistSq)
+            else if (distSq <= MobBagRadiusSq && distSq < nearestDistSq)
             {
                 nearestDistSq = distSq;
                 nearest = enemy;
@@ -636,7 +657,8 @@ public class RotmgStreamProcessor
                 return kill.Meta;
         }
 
-        return nearest?.Metadata ?? _lastDamagedBossOnMap;
+        // Bez _lastDamagedBossOnMap: ostatni uderzony boss mógł być dowolnie daleko (np. bity przez innych graczy)
+        return nearest?.Metadata ?? RegularMobSource;
     }
 
             private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)

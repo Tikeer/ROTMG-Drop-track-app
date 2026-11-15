@@ -78,9 +78,9 @@ public class GameDataService
         { 0x0509, BagType.CyanBag },
         { 0x050B, BagType.BlueBag },
         { 0x050C, BagType.WhiteBag },
-        { 0x050E, BagType.OrangeBag }, // POTWIERDZONE: Tarot Card Pack, XmlBag=7, capture 2026-11-13
-        { 0x050F, BagType.RedBag },    // HIPOTEZA: wcześniej błędnie Orange, brak capture
-        { 0x0510, BagType.WhiteBag }
+        { 0x050E, BagType.GoldBag },   // POTWIERDZONE: Tarot Card Pack (XmlBag=7)
+        { 0x050F, BagType.OrangeBag }, // POTWIERDZONE: Bloodstone Ring ST (XmlBag=8), capture 2026-11-15
+        { 0x0510, BagType.RedBag }     // HIPOTEZA: wzór XmlBag->kontener, jeszcze nie widziany w capture
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =
@@ -118,7 +118,7 @@ public class GameDataService
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
         _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v7.json");
-        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v8.json");
+        _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v9.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
         _lootOnlyCatalogPath = Path.Combine(_appDataDir, "loot_only_catalog_v1.json");
@@ -150,7 +150,7 @@ public class GameDataService
     public BagType ResolveBagType(int containerObjectType) =>
         _bagContainers.GetValueOrDefault(containerObjectType, BagType.BrownBag); // wcześniej domyślnie White
     
-    // Kolor worka wynikający z <BagType> przedmiotu w XML
+    // Kolor worka wynikający z <BagType> przedmiotu w XML (7 i 8 potwierdzone w capture, 9 hipoteza)
     public BagType ResolveBagTypeFromItem(int xmlBagType, BagType fallback) => xmlBagType switch
     {
         0 => BagType.BrownBag,
@@ -160,8 +160,9 @@ public class GameDataService
         4 => BagType.CyanBag,
         5 => BagType.BlueBag,
         6 => BagType.WhiteBag,
-        7 => BagType.RedBag,
+        7 => BagType.GoldBag,
         8 => BagType.OrangeBag,
+        9 => BagType.RedBag,
         _ => fallback
     };
 
@@ -465,8 +466,11 @@ public class GameDataService
         {
             if (hasHealthBar && enemyLabels.Contains("VETERAN_ENCOUNTER")) category = "VeteranEncounter";
             else if (hasHealthBar && enemyLabels.Contains("ADEPT_ENCOUNTER")) category = "AdeptEncounter";
-            else if (obj.Element("Oryx") != null
-                     || enemyLabels.Contains("BOSSFIGHT")
+            else if (obj.Element("Oryx") != null)
+                category = "DungeonBoss";
+            else if (enemyLabels.Contains("MINIBOSS"))
+                category = "MiniBoss"; // kill i DPS liczą się, ale NIE kończy dungeonu (wielopoziomowe dungeony)
+            else if (enemyLabels.Contains("BOSSFIGHT")
                      || (hasHealthBar && enemyLabels.Contains("BOSS")))
                 category = "DungeonBoss";
         }

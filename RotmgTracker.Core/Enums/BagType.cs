@@ -10,5 +10,6 @@ public enum BagType
     PurpleBag,
     BrownBag,
     PinkBag,
-    EggBag
+    EggBag,
+    GoldBag
 }
