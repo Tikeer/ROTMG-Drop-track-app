@@ -79,8 +79,8 @@ public class GameDataService
         { 0x050B, BagType.BlueBag },
         { 0x050C, BagType.WhiteBag },
         { 0x050E, BagType.GoldBag },   // POTWIERDZONE: Tarot Card Pack (XmlBag=7)
-        { 0x050F, BagType.OrangeBag }, // POTWIERDZONE: Bloodstone Ring ST (XmlBag=8), capture 2026-11-15
-        { 0x0510, BagType.RedBag }     // HIPOTEZA: wzór XmlBag->kontener, jeszcze nie widziany w capture
+        { 0x050F, BagType.RedBag },    // PRAWDOPODOBNE: worki z topowym gearem 
+        { 0x0510, BagType.OrangeBag }  // HIPOTEZA: worek z samym ST, jeszcze niewidziany w capture
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =

@@ -663,7 +663,7 @@ public class RotmgStreamProcessor
         return nearest?.Metadata ?? RegularMobSource;
     }
 
-            private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+                private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
@@ -719,8 +719,9 @@ public class RotmgStreamProcessor
                 bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.Tiered or DropType.ST;
                 bool qualifies = itemMeta.BagTypeId >= 6 || special;
 
-                // Tiered liczy się tylko, gdy FIZYCZNIE leży w białym/pomarańczowym worku
-                if (itemMeta.Quality == DropType.Tiered && physicalBag is not (BagType.WhiteBag or BagType.OrangeBag))
+                // Tiered liczy się tylko, gdy FIZYCZNIE leży w białym/czerwonym/pomarańczowym worku
+                if (itemMeta.Quality == DropType.Tiered &&
+                    physicalBag is not (BagType.WhiteBag or BagType.RedBag or BagType.OrangeBag))
                     qualifies = false;
 
                 itemName = itemMeta.Name;
