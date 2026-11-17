@@ -662,10 +662,30 @@ public class RotmgStreamProcessor
         // Bez _lastDamagedBossOnMap: ostatni uderzony boss mógł być dowolnie daleko (np. bity przez innych graczy)
         return nearest?.Metadata ?? RegularMobSource;
     }
+    
+    private readonly HashSet<(int BagObjectId, string Signature)> _loggedBagStats = new();
+
+    private void LogBagStats(int bagObjectId, int bagObjectType, List<StatEntry> stats)
+    {
+        if (Capture == null) return;
+        if (_loggedBagStats.Count > 5000) _loggedBagStats.Clear();
+
+        string signature = string.Join(" ", stats.Select(s =>
+            string.IsNullOrEmpty(s.StringValue)
+                ? $"{s.StatType}:{s.IntValue}:{s.Secondary}"
+                : $"{s.StatType}:\"{s.StringValue}\":{s.Secondary}"));
+
+        if (_loggedBagStats.Add((bagObjectId, signature)))
+            Capture.Note($"BAG_STATS: BagId={bagObjectId}, Type=0x{bagObjectType:X4}, Stats=[{signature}]");
+    }
         private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
+
+        // Surowe staty worka (z wartością secondary) - do ustalenia, gdzie siedzi rarity/enchant
+        if (!quiet)
+            LogBagStats(bagObjectId, trackedBag.BagObjectType, stats);
 
         // Kolor worka w historii = zawsze fizyczny kontener (XML <BagType> opisuje item, nie worek)
         BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);

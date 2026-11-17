@@ -80,7 +80,8 @@ public class GameDataService
         { 0x050C, BagType.WhiteBag },
         { 0x050E, BagType.GoldBag },   // POTWIERDZONE: Tarot Card Pack (XmlBag=7)
         { 0x050F, BagType.OrangeBag }, // POTWIERDZONE: ST (Bloodstone Ring) i Mystery Chest (XmlBag=8)
-        { 0x0510, BagType.RedBag }     // HIPOTEZA: czysty Red (topowy gear T13-14) jeszcze niewidziany w capture
+        { 0x0510, BagType.RedBag },    // HIPOTEZA: zwykły Red jeszcze niewidziany w capture
+        { 0x06C0, BagType.RedBag }     // POTWIERDZONE (itemy): fat red bag z loot bonusem (capture 2026-11-16, Oryx's Sanctuary)
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =

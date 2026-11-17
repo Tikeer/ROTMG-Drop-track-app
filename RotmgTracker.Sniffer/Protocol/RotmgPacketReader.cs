@@ -3,7 +3,7 @@ using System.Text;
 
 namespace RotmgTrackerV1.Sniffer.Protocol;
 
-public readonly record struct StatEntry(int StatType, int IntValue, string StringValue);
+public readonly record struct StatEntry(int StatType, int IntValue, string StringValue, int Secondary = 0);
 
 public ref struct RotmgPacketReader
 {
@@ -92,7 +92,7 @@ public ref struct RotmgPacketReader
         float y = ReadFloat();
         return (x, y);
     }
-
+    
     // Czyta listę statystyk obiektu (gracza lub worka z lootem)
     public List<StatEntry> ReadStatDataList()
     {
@@ -102,19 +102,18 @@ public ref struct RotmgPacketReader
         for (int i = 0; i < count && Remaining > 0; i++)
         {
             int statType = ReadByte();
-            if (RotmgProtocolConstants.IsStringStat(statType))
-            {
-                string strVal = ReadUtfString();
-                list.Add(new StatEntry(statType, 0, strVal));
-            }
-            else
-            {
-                int intVal = ReadCompressedInt();
-                list.Add(new StatEntry(statType, intVal, string.Empty));
-            }
+            string strVal = string.Empty;
+            int intVal = 0;
 
-            // Wartość dodatkowa (secondary) dodana w nowym protokole Exalta:
-            ReadCompressedInt();
+            if (RotmgProtocolConstants.IsStringStat(statType))
+                strVal = ReadUtfString();
+            else
+                intVal = ReadCompressedInt();
+
+            // Wartość dodatkowa (secondary) z nowego protokołu Exalta - kandydat na rarity/enchanty itemów
+            int secondary = ReadCompressedInt();
+
+            list.Add(new StatEntry(statType, intVal, strVal, secondary));
         }
 
         return list;
