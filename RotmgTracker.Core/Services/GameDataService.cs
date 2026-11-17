@@ -80,8 +80,17 @@ public class GameDataService
         { 0x050C, BagType.WhiteBag },
         { 0x050E, BagType.GoldBag },   // POTWIERDZONE: Tarot Card Pack (XmlBag=7)
         { 0x050F, BagType.OrangeBag }, // POTWIERDZONE: ST (Bloodstone Ring) i Mystery Chest (XmlBag=8)
-        { 0x0510, BagType.RedBag },    // HIPOTEZA: zwykły Red jeszcze niewidziany w capture
-        { 0x06C0, BagType.RedBag }     // POTWIERDZONE (itemy): fat red bag z loot bonusem (capture 2026-11-16, Oryx's Sanctuary)
+        { 0x0510, BagType.RedBag },    // HIPOTEZA: nigdy niewidziany w capture (czerwone bagi to 0x06AC / 0x06C0)
+
+        // Bagi z loot bonusem (fat) - POTWIERDZONE z zawartości (capture 2026-11-17)
+        { 0x06AD, BagType.BrownBag },
+        { 0x06AE, BagType.PinkBag },
+        { 0x06BA, BagType.PurpleBag },
+        { 0x06BB, BagType.EggBag },
+        { 0x06BD, BagType.CyanBag },
+        { 0x06BE, BagType.BlueBag },
+        { 0x06AC, BagType.RedBag },    // Dominion Armor (White Snake)
+        { 0x06C0, BagType.RedBag }     // T7 ring + T14 staff (Oryx's Sanctuary)
     };
 
     private static readonly HashSet<int> ValidEquipmentSlotTypes =

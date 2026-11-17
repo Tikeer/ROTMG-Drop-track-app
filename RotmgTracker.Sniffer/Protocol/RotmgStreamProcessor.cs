@@ -429,6 +429,13 @@ public class RotmgStreamProcessor
         if (_killCandidates.Any(k => k.ObjectId == objectId && !k.Consumed))
             return;
 
+        // Pomocnicze encje bossów (Small Worker Bee hp=125, Oryx Cleric hp=0) nie są killem bossa
+        if (enemy.Metadata.Category == "DungeonBoss" && enemy.Metadata.MaxHp < 1000)
+        {
+            Capture?.Note($"KILL_CANDIDATE_SKIPPED_LOW_HP: Name=\"{enemy.Metadata.DisplayName}\", Type=0x{enemy.Metadata.ObjectType:X4}, Hp={enemy.Metadata.MaxHp}");
+            return;
+        }
+
         _killCandidates.Add(new KillCandidate
         {
             ObjectId = objectId,

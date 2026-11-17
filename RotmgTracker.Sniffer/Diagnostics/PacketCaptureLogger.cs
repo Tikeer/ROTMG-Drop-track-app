@@ -276,9 +276,15 @@ public sealed class PacketCaptureLogger : IDisposable
                 if (s.StatType is 38 or 54)
                     value = "<id>";
                 else
+                {
                     value = string.IsNullOrEmpty(s.StringValue)
                         ? s.IntValue.ToString(CultureInfo.InvariantCulture)
                         : $"\"{s.StringValue}\"";
+
+                    // Wartość secondary (kandydat na rarity/enchant itemów w ekwipunku)
+                    if (s.Secondary != 0)
+                        value += $"/{s.Secondary.ToString(CultureInfo.InvariantCulture)}";
+                }
 
                 if (_lastLocalStats.TryGetValue(s.StatType, out var previous) && previous == value) continue;
 
