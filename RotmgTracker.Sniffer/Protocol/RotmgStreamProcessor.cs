@@ -267,6 +267,8 @@ public class RotmgStreamProcessor
         }
     }
 
+    private bool _currentMapIsRealm;
+
     private void ParseMapInfo(ref RotmgPacketReader reader)
     {
         // Wejście na nową mapę = opuszczenie poprzedniej instancji -> ewentualne zaliczenie dungeona
@@ -276,7 +278,7 @@ public class RotmgStreamProcessor
         reader.Skip(8); // Width + Height
         string mapName = reader.ReadUtfString();
         string displayName = reader.ReadUtfString();
-        reader.ReadUtfString(); // RealmName
+        string realmName = reader.ReadUtfString();
 
         double mapDifficultyGraves = 0;
         if (reader.Remaining >= 13)
@@ -294,6 +296,13 @@ public class RotmgStreamProcessor
         _killCandidates.Clear();
         _lastConfirmedKill = null;
         _lastDamagedBossOnMap = null;
+
+        // Realm of the Mad God: białe itemy z tej mapy to Realm White (nie Regular White)
+        _currentMapIsRealm =
+            mapName.Contains("Realm of the Mad God", StringComparison.OrdinalIgnoreCase) ||
+            displayName.Contains("Realm of the Mad God", StringComparison.OrdinalIgnoreCase);
+
+        Capture?.Note($"MAP_INFO: Name=\"{mapName}\", Display=\"{displayName}\", RealmName=\"{realmName}\", Graves={mapDifficultyGraves}, Realm={_currentMapIsRealm}");
 
         string cleanName = !string.IsNullOrWhiteSpace(displayName) && !displayName.StartsWith('{')
             ? displayName
@@ -685,7 +694,11 @@ public class RotmgStreamProcessor
         if (_loggedBagStats.Add((bagObjectId, signature)))
             Capture.Note($"BAG_STATS: BagId={bagObjectId}, Type=0x{bagObjectType:X4}, Stats=[{signature}]");
     }
-        private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
+    
+    private readonly Dictionary<int, string> _bagUniqueData = new();
+    private readonly Dictionary<(int BagObjectId, int Slot), (int ItemId, int EnchantCount)> _bagItemEnchants = new();
+
+    private void InspectBagContents(TrackedLootBag trackedBag, int bagObjectId, List<StatEntry> stats)
     {
         // Fioletowe i egg: pełna zawartość trafia do historii, ale bez logów w capture (limit MaxEventLines)
         bool quiet = trackedBag.BagObjectType is 0x0507 or 0x0508;
@@ -693,6 +706,34 @@ public class RotmgStreamProcessor
         // Surowe staty worka (z wartością secondary) - do ustalenia, gdzie siedzi rarity/enchant
         if (!quiet)
             LogBagStats(bagObjectId, trackedBag.BagObjectType, stats);
+
+        // Dane itemów (stat 80): zapamiętujemy ostatnią wartość worka, bo NewTick może jej nie powtarzać
+        if (_bagUniqueData.Count > 2000)
+        {
+            _bagUniqueData.Clear();
+            _bagItemEnchants.Clear();
+        }
+
+        var uniqueStat = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatUniqueData);
+        if (!string.IsNullOrEmpty(uniqueStat.StringValue))
+        {
+            _bagUniqueData[bagObjectId] = uniqueStat.StringValue;
+
+            // Enchanty mogły dojść po spawnie worka -> korekta rarity już zapisanych itemów
+            for (int slot = 0; slot < 8; slot++)
+            {
+                if (!_bagItemEnchants.TryGetValue((bagObjectId, slot), out var known)) continue;
+
+                var updated = ItemDataParser.ParseSlot(uniqueStat.StringValue, slot);
+                if (updated == null || updated.EnchantIds.Count == known.EnchantCount) continue;
+
+                _bagItemEnchants[(bagObjectId, slot)] = (known.ItemId, updated.EnchantIds.Count);
+                _state.UpdateLootRarity(trackedBag.BagInstanceId, known.ItemId, updated.Rarity, updated.EnchantmentsText);
+                Capture?.Note($"ITEM_DATA_CHANGED: BagId={bagObjectId}, Slot={slot}, ItemId=0x{known.ItemId:X4}, Enchants {known.EnchantCount}->{updated.EnchantIds.Count}");
+            }
+        }
+
+        string uniqueData = _bagUniqueData.GetValueOrDefault(bagObjectId, string.Empty);
 
         // Kolor worka w historii = zawsze fizyczny kontener (XML <BagType> opisuje item, nie worek)
         BagType physicalBag = _gameData.ResolveBagType(trackedBag.BagObjectType);
@@ -712,6 +753,12 @@ public class RotmgStreamProcessor
             int slotIndex = stat.StatType - RotmgProtocolConstants.StatInventory0;
             if (!_loggedBagItems.Add((bagObjectId, slotIndex, itemId)))
                 continue;
+
+            // Rarity itemu = liczba zajętych slotów enchantów w blobie tego slotu
+            var itemData = ItemDataParser.ParseSlot(uniqueData, slotIndex);
+            ItemRarity itemRarity = itemData?.Rarity ?? ItemRarity.Common;
+            string enchantments = itemData?.EnchantmentsText ?? string.Empty;
+            _bagItemEnchants[(bagObjectId, slotIndex)] = (itemId, itemData?.EnchantIds.Count ?? 0);
 
             string itemName;
             DropType effectiveQuality;
@@ -740,7 +787,7 @@ public class RotmgStreamProcessor
             else
             {
                 if (!quiet)
-                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4}, Bag={physicalBag})");
+                    Capture?.Note($"BAG_ITEM: BagId={bagObjectId}, Slot={slotIndex}, ItemId=0x{itemId:X4} (\"{itemMeta.Name}\", Quality={itemMeta.Quality}, XmlBag={itemMeta.BagTypeId}, Container=0x{trackedBag.BagObjectType:X4}, Bag={physicalBag}, Rarity={itemRarity})");
 
                 bool special = itemMeta.Quality is DropType.BPs or DropType.Tops or DropType.ST;
                 bool qualifies = itemMeta.BagTypeId >= 6 || special;
@@ -752,6 +799,10 @@ public class RotmgStreamProcessor
                 {
                     effectiveQuality = itemMeta.Quality;
                     isShiny = itemMeta.IsShiny;
+
+                    // Biały item wypadnięty w Realmie = Realm White (EventWhite w enumie, zapisany w bazie jako liczba)
+                    if (_currentMapIsRealm && effectiveQuality == DropType.RegularWhite)
+                        effectiveQuality = DropType.EventWhite;
                 }
                 else
                 {
@@ -764,11 +815,12 @@ public class RotmgStreamProcessor
                 itemId: itemId,
                 bagQuality: effectiveQuality,
                 dungeonName: _state.CurrentDungeonName,
-                rarity: ItemRarity.Common,
+                rarity: itemRarity,
                 isShiny: isShiny,
                 difficulty: tier,
                 physicalBag: physicalBag,
                 itemTier: itemTier,
+                enchantments: enchantments,
                 bossName: matchedBoss?.DisplayName ?? "Dungeon Boss",
                 bossObjectType: matchedBoss?.ObjectType ?? 0,
                 graveDifficulty: graves,

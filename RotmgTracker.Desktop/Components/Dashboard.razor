@@ -640,7 +640,7 @@
                 <select class="select" @bind="CollectionCategoryFilter">
                     <option value="ALL">All Categories</option>
                     <option value="LEGENDARY_WHITE">Legendary Whites (Forge Tier S)</option>
-                    <option value="EVENT_WHITE">Event Whites (Realm Whites)</option>
+                    <option value="EVENT_WHITE">Realm Whites</option>
                     <option value="REGULAR_WHITE">Regular Whites (Tier A–D)</option>
                     <option value="ST">ST Sets</option>
                     <option value="SHINY">✨ Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
@@ -1319,7 +1319,7 @@
         DropType.RegularWhite => "Regular White",
         DropType.LegendaryWhite => "Legendary White",
         DropType.DivineGoodItem => "Divine Good Item",
-        DropType.EventWhite => "Event White",
+        DropType.EventWhite => "Realm White",
         _ => t.ToString()
     };
 

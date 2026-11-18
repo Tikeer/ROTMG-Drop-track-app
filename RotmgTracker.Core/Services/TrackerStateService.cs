@@ -226,6 +226,23 @@ public class TrackerStateService
         SaveAsync();
         NotifyStateChanged();
     }
+            
+    // Korekta rarity już zapisanego dropu, gdy dane enchantów dojdą po spawnie worka
+    public void UpdateLootRarity(Guid bagInstanceId, int itemId, ItemRarity rarity, string enchantments)
+    {
+        using var guard = LockState();
+
+        var record = Data.LootHistory.FirstOrDefault(l => l.BagInstanceId == bagInstanceId && l.ItemId == itemId);
+        if (record == null) return;
+
+        record.Rarity = rarity;
+        record.Enchantments = enchantments;
+        record.RarityScore = RarityScoreEngine.CalculateIntrinsicScore(
+            record.BagType, rarity, record.IsShiny, record.GraveDifficulty, record.DungeonDifficulty);
+
+        SaveAsync();
+        NotifyStateChanged();
+    }
 
     public void RemoveLootRecord(Guid lootId)
     {
