@@ -553,8 +553,17 @@ public class RotmgStreamProcessor
 
     private void InspectObjectStatus(int objectType, int objectId, float x, float y, List<StatEntry> stats)
     {
-        if (_gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
-            RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass))
+        bool isKnownPlayerClass = _gameData.TryResolvePlayerClass(objectType, out var playerClass) ||
+                                  RotmgProtocolConstants.TryGetPlayerClass(objectType, out playerClass);
+
+        // Diagnostyka: własny obiekt gracza o nierozpoznanym typie klasy = postać nie zostanie zarejestrowana
+        if (!isKnownPlayerClass && objectId == _myObjectId)
+        {
+            string? ownName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
+            Capture?.Note($"OWN_OBJECT_UNRESOLVED: Type=0x{objectType:X4}, Id={objectId}, Name=\"{ownName}\"");
+        }
+
+        if (isKnownPlayerClass)
         {
             string? playerName = stats.FirstOrDefault(s => s.StatType == RotmgProtocolConstants.StatName).StringValue;
             if (!string.IsNullOrWhiteSpace(playerName))
@@ -800,8 +809,21 @@ public class RotmgStreamProcessor
                     effectiveQuality = itemMeta.Quality;
                     isShiny = itemMeta.IsShiny;
 
-                    // Biały item wypadnięty w Realmie = Realm White (EventWhite w enumie, zapisany w bazie jako liczba)
-                    if (_currentMapIsRealm && effectiveQuality == DropType.RegularWhite)
+                    // Shiny zachowuje kategorię bazową z XML (biały -> Regular/Legendary White, ST) i dostaje flagę IsShiny;
+                    // licznik Shiny liczy IsShiny, więc jeden drop zalicza się w obu kategoriach
+                    if (isShiny && effectiveQuality == DropType.Shiny)
+                    {
+                        effectiveQuality = itemMeta.BagTypeId switch
+                        {
+                            6 => itemMeta.ForgeTier == "S" ? DropType.LegendaryWhite : DropType.RegularWhite,
+                            8 => DropType.ST,
+                            _ => DropType.Shiny
+                        };
+                    }
+
+                    // Biały item wypadnięty w Realmie = Realm White (EventWhite w enumie, zapisany w bazie jako liczba),
+                    // niezależnie od forge tier (decyzja 2026-11-19: Realm White nie jest Legendary White)
+                    if (_currentMapIsRealm && effectiveQuality is DropType.RegularWhite or DropType.LegendaryWhite)
                         effectiveQuality = DropType.EventWhite;
                 }
                 else

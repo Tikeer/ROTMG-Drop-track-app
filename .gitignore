@@ -42,6 +42,7 @@ rotmg_data.json
 *.py
 *.csv
 SPECIFICATION.md
+*.patch
 
 ## OS Generated
 .DS_Store

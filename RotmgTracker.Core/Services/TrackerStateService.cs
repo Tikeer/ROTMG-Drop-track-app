@@ -124,6 +124,18 @@ public class TrackerStateService
         // Drops = LegacyDrops + loot z historii (naprawia wcześniej wyzerowane liczniki)
         foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
             RecalculateCharacterDrops(ch);
+
+        // Punkty rzadkości liczone wzorem z RarityScoreEngine + item_value.json (zmiana wzoru działa wstecz)
+        RecalculateAllRarityScores();
+    }
+
+    private void RecalculateAllRarityScores()
+    {
+        foreach (var l in Data.LootHistory)
+        {
+            l.RarityScore = RarityScoreEngine.CalculateIntrinsicScore(
+                l.BagType, l.Rarity, l.IsShiny, l.GraveDifficulty, l.DungeonDifficulty, l.ItemName);
+        }
     }
 
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
@@ -172,7 +184,7 @@ public class TrackerStateService
 
         var current = ActiveCharacter;
         double effectiveGraves = graveDifficulty > 0 ? graveDifficulty : CurrentDungeonGraves;
-        double score = RarityScoreEngine.CalculateIntrinsicScore(bagQuality, rarity, isShiny, effectiveGraves, difficulty);
+        double score = RarityScoreEngine.CalculateIntrinsicScore(bagQuality, rarity, isShiny, effectiveGraves, difficulty, itemName);
 
         var record = new LootDropRecord
         {
@@ -238,7 +250,7 @@ public class TrackerStateService
         record.Rarity = rarity;
         record.Enchantments = enchantments;
         record.RarityScore = RarityScoreEngine.CalculateIntrinsicScore(
-            record.BagType, rarity, record.IsShiny, record.GraveDifficulty, record.DungeonDifficulty);
+            record.BagType, rarity, record.IsShiny, record.GraveDifficulty, record.DungeonDifficulty, record.ItemName);
 
         SaveAsync();
         NotifyStateChanged();
@@ -274,7 +286,13 @@ public class TrackerStateService
             }
 
             int legacy = character.LegacyDrops.GetValueOrDefault(type);
-            character.Drops[type] = Math.Max(0, legacy + charLoot.Count(l => l.BagType == type));
+
+            // Shiny liczy się zawsze, także gdy kategoria bazowa dropu to np. Realm White (BagType != Shiny)
+            int fromHistory = type == DropType.Shiny
+                ? charLoot.Count(l => l.BagType == DropType.Shiny || (l.IsShiny && l.BagType != DropType.Shivine))
+                : charLoot.Count(l => l.BagType == type);
+
+            character.Drops[type] = Math.Max(0, legacy + fromHistory);
         }
     }
 

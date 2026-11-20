@@ -12,18 +12,22 @@ public class TrophyCaseEntry
 
 public static class RarityScoreEngine
 {
+    // Stałe do strojenia punktacji
+    private const double ShinyMultiplier = 5.0;
+
     public static double CalculateIntrinsicScore(
         DropType quality,
         ItemRarity rarity,
         bool isShiny,
         double graveDifficulty,
-        DungeonDifficultyTier fallbackTier = DungeonDifficultyTier.Tier2_Godlands)
+        DungeonDifficultyTier fallbackTier = DungeonDifficultyTier.Tier2_Godlands,
+        string itemName = "")
     {
         // Other (potki, jajka, śmieci, Marki) trafiają tylko do historii - bez punktów rzadkości
         if (quality == DropType.Other)
             return 0.0;
 
-        // 1. Bazowa jakość przedmiotu
+        // 1. Bazowa jakość kategorii dropu (Realm White waży najwięcej spośród białych)
         double basePoints = quality switch
         {
             DropType.Shivine => 550.0,
@@ -40,24 +44,27 @@ public static class RarityScoreEngine
             _ => 100.0
         };
 
-        // 2. Mnożnik Rarity / Liczby slotów na enchanty (0..4 sloty)
+        // 2. Mnożnik rarity (liczba slotów enchantów 0..4)
         double rarityMultiplier = rarity switch
         {
-            ItemRarity.Common => 1.0,      // 0 slotów
-            ItemRarity.Uncommon => 1.15,   // 1 slot
-            ItemRarity.Rare => 1.35,       // 2 sloty
-            ItemRarity.Legendary => 1.75,  // 3 sloty
-            ItemRarity.Divine => 2.50,     // 4 sloty
+            ItemRarity.Common => 1.0,
+            ItemRarity.Uncommon => 1.2,
+            ItemRarity.Rare => 1.5,
+            ItemRarity.Legendary => 2.0,
+            ItemRarity.Divine => 3.0,
             _ => 1.0
         };
 
-        // 3. Modyfikator Shiny Sprite
-        double shinyMultiplier = (isShiny || quality is DropType.Shiny or DropType.Shivine) ? 3.0 : 1.0;
+        // 3. Shiny to osobny, duży mnożnik (działa też, gdy kategoria bazowa to np. Realm White)
+        double shinyMultiplier = (isShiny || quality is DropType.Shiny or DropType.Shivine) ? ShinyMultiplier : 1.0;
 
-        // 4. Współczynnik trudności z oficjalnych nagrobków w grze (1.0 - 10.0 Graves)
+        // 4. Ręczna wartość itemu z item_value.json (przydatność / chciany drop; domyślnie 1.0)
+        double itemValue = ItemValueTable.GetMultiplier(itemName);
+
+        // 5. Trudność źródła z nagrobków - tylko niewielki, ograniczony modyfikator (0.9 - 1.25)
         double dungeonMultiplier = GetDungeonGraveMultiplier(graveDifficulty, fallbackTier);
 
-        return Math.Round(basePoints * rarityMultiplier * shinyMultiplier * dungeonMultiplier, 1);
+        return Math.Round(basePoints * rarityMultiplier * shinyMultiplier * itemValue * dungeonMultiplier, 1);
     }
 
     public static double GetDungeonGraveMultiplier(double graveDifficulty, DungeonDifficultyTier fallbackTier)
@@ -66,25 +73,23 @@ public static class RarityScoreEngine
         {
             return graveDifficulty switch
             {
-                >= 10.0 => 3.00, // 10/10 Graves: The Shatters
-                >= 9.5  => 2.75, // 9.5/10 Graves: Moonlight Village, Oryx's Sanctuary (O3)
-                >= 9.0  => 2.40, // 9.0/10 Graves: Advanced Kogbold, Plagued Nest, Stromwell
-                >= 8.0  => 2.00, // 8.0-8.5/10 Graves: The Void, Lost Halls, Spectral Penitentiary, Kogbold
-                >= 6.5  => 1.65, // 6.5-7.5/10 Graves: Fungal, Crystal, The Nest, Cultist, Ice Citadel
-                >= 5.0  => 1.35, // 5.0-6.0/10 Graves: Epic Dungeons, Wine Cellar (O2), Shaitan, Encore
-                >= 3.0  => 1.00, // 3.0-4.5/10 Graves: Godlands (UDL, Abyss, Sewers, Oryx's Castle/O1)
-                _       => 0.80  // 1.0-2.5/10 Graves: Early (Pirate Cave, Snake Pit, Sprite World)
+                >= 9.5 => 1.25, // O3, Moonlight Village, Shatters
+                >= 8.0 => 1.18,
+                >= 6.5 => 1.12,
+                >= 5.0 => 1.06,
+                >= 3.0 => 1.00,
+                _      => 0.90
             };
         }
 
         return fallbackTier switch
         {
-            DungeonDifficultyTier.Tier6_PinnacleEndgame => 3.00,
-            DungeonDifficultyTier.Tier5_HighExalt => 2.65,
-            DungeonDifficultyTier.Tier4_ExaltAndHardEvent => 1.90,
-            DungeonDifficultyTier.Tier3_EpicAndRealm => 1.35,
+            DungeonDifficultyTier.Tier6_PinnacleEndgame => 1.25,
+            DungeonDifficultyTier.Tier5_HighExalt => 1.18,
+            DungeonDifficultyTier.Tier4_ExaltAndHardEvent => 1.12,
+            DungeonDifficultyTier.Tier3_EpicAndRealm => 1.06,
             DungeonDifficultyTier.Tier2_Godlands => 1.00,
-            _ => 0.80
+            _ => 0.90
         };
     }
 
