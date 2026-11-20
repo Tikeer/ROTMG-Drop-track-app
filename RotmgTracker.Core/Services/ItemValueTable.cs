@@ -49,7 +49,7 @@ public static class ItemValueTable
                 if (!File.Exists(path))
                 {
                     File.WriteAllText(path,
-                        "{\n  \"_info\": \"Mnoznik wartosci itemu (1.0 = neutralny, zakres 0.25-5.0). Klucz = nazwa itemu bez 'Shiny '. Zmiany dzialaja po restarcie aplikacji.\",\n  \"items\": {\n  }\n}\n");
+                        "{\n  \"_info\": \"Item value multiplier (1.0 = neutral, range 0.25-5.0). Key = item name without the 'Shiny ' prefix. Changes take effect after restarting the app.\",\n  \"items\": {\n  }\n}\n");
                 }
                 else
                 {

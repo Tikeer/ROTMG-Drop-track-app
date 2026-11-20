@@ -63,7 +63,7 @@ public partial class TrackerStateService
 
         if (files.Count == 0)
         {
-            result.Errors.Add($"Brak plików .json w folderze importu: {ImportFolder}");
+            result.Errors.Add($"No .json files in the import folder: {ImportFolder}");
             return result;
         }
 
@@ -74,7 +74,7 @@ public partial class TrackerStateService
         }
         catch (Exception ex)
         {
-            result.Errors.Add($"Nie udało się wykonać kopii przed importem - import przerwany ({ex.Message})");
+            result.Errors.Add($"Could not back up the database before importing - import aborted ({ex.Message})");
             return result;
         }
 
@@ -88,7 +88,7 @@ public partial class TrackerStateService
 
                 if (file == null || file.Format != "rotmg-tracker-history" || file.Version != 1)
                 {
-                    result.Errors.Add($"{Path.GetFileName(path)}: to nie jest plik historii RotMG Tracker (format/wersja)");
+                    result.Errors.Add($"{Path.GetFileName(path)}: not a RotMG Tracker history file (wrong format/version)");
                     continue;
                 }
 
@@ -133,14 +133,26 @@ public partial class TrackerStateService
             !string.IsNullOrWhiteSpace(LinkedAccountName) &&
             !string.Equals(file.AccountName, LinkedAccountName, StringComparison.OrdinalIgnoreCase))
         {
-            result.Errors.Add($"{fileName}: plik z konta '{file.AccountName}', a aplikacja jest połączona z '{LinkedAccountName}' - pominięto");
+            result.Errors.Add($"{fileName}: file is from account '{file.AccountName}', but the app is linked to '{LinkedAccountName}' - skipped");
             return false;
         }
+
+        // Postacie, do których odwołuje się jakikolwiek rekord w pliku
+        var referencedCharacters = file.Loot.Select(l => l.CharacterId)
+            .Concat(file.DungeonRuns.Select(r => r.CharacterId))
+            .Concat(file.CombatSessions.Select(c => c.CharacterId))
+            .ToHashSet();
 
         // Id postaci z pliku -> Id postaci w tej bazie (Id są losowe i różne na każdym komputerze)
         var characterMap = new Dictionary<Guid, Guid>();
         foreach (var ec in file.Characters)
+        {
+            // Pusty placeholder bez ID z gry i bez żadnych rekordów - nie tworzymy duplikatu
+            if (ec.RotmgCharId <= 0 && !referencedCharacters.Contains(ec.Id))
+                continue;
+
             characterMap[ec.Id] = ResolveImportedCharacter(ec, result).Id;
+        }
 
         // Duplikaty: to samo Id albo ten sam item o tej samej chwili (np. drop wpisany ręcznie na obu komputerach)
         var lootIds = Data.LootHistory.Select(l => l.Id).ToHashSet();

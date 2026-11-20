@@ -68,8 +68,8 @@ public static class DatabaseMigrator
         {
             if (!ColumnExists(db, table, column))
                 throw new InvalidOperationException(
-                    $"Baza '{dbFilePath}' ma przestarzały schemat (brak {table}.{column}). " +
-                    "Nie wykonuję migracji, żeby jej nie uszkodzić. Plik bazy nie został zmieniony.");
+                    $"Database '{dbFilePath}' has an outdated schema (missing {table}.{column}). " +
+                    "Migration was skipped to avoid corrupting it. The database file was not changed.");
         }
     }
 
@@ -78,7 +78,7 @@ public static class DatabaseMigrator
         string? initial = db.Database.GetMigrations().FirstOrDefault();
         if (initial == null)
             throw new InvalidOperationException(
-                "Brak migracji InitialCreate w projekcie Core. Wygeneruj ją: dotnet ef migrations add InitialCreate.");
+                "The InitialCreate migration is missing from the Core project. Generate it with: dotnet ef migrations add InitialCreate.");
 
         db.Database.ExecuteSqlRaw(
             "CREATE TABLE IF NOT EXISTS \"__EFMigrationsHistory\" (" +

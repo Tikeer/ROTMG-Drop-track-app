@@ -7,15 +7,15 @@
 
 <div class="opening-card" style="margin-bottom: 16px;">
     <div style="padding: 14px 16px;">
-        <h3 style="margin: 0 0 8px 0;">Kopie zapasowe bazy</h3>
+        <h3 style="margin: 0 0 8px 0;">Database backups</h3>
         <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
-            Automatycznie: jedna kopia dziennie (stan z początku dnia, 14 ostatnich) oraz „latest” odświeżana co godzinę.
+            Automatic: one backup per day (state from the start of the day, last 14 kept) plus a "latest" backup refreshed hourly.
             Folder: <code>@State.BackupFolder</code>
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn" @onclick="CreateBackup">💾 Utwórz kopię teraz</button>
-            <button class="btn" @onclick="() => OpenFolder(State.BackupFolder)">📂 Otwórz folder kopii</button>
+            <button class="btn" @onclick="CreateBackup">💾 Create backup now</button>
+            <button class="btn" @onclick="() => OpenFolder(State.BackupFolder)">📂 Open backup folder</button>
         </div>
 
         @if (!string.IsNullOrEmpty(BackupMessage))
@@ -28,7 +28,7 @@
         }
         @if (backups.Count == 0)
         {
-            <div style="color: var(--text-muted); font-size: 0.85rem;">Brak kopii (pierwsza powstanie przy następnym zapisie bazy).</div>
+            <div style="color: var(--text-muted); font-size: 0.85rem;">No backups yet (the first one is created on the next database save).</div>
         }
         else
         {
@@ -41,26 +41,26 @@
         }
 
         <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
-            Przywracanie: zamknij aplikację, skopiuj wybrany plik z folderu kopii jako <code>rotmg_tracker.db</code> (zastąp istniejący)
-            i usuń ewentualne pliki <code>rotmg_tracker.db-wal</code> / <code>-shm</code>.
+            Restoring: close the app, copy the chosen file from the backup folder as <code>rotmg_tracker.db</code> (replace the existing one)
+            and delete any <code>rotmg_tracker.db-wal</code> / <code>-shm</code> files.
         </div>
     </div>
 </div>
 
 <div class="opening-card">
     <div style="padding: 14px 16px;">
-        <h3 style="margin: 0 0 8px 0;">Wymiana historii między komputerami</h3>
+        <h3 style="margin: 0 0 8px 0;">History transfer between computers</h3>
         <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
-            1) Na komputerze A: „Eksportuj historię” → plik JSON w folderze exports.<br />
-            2) Skopiuj plik na komputer B (chmura, pendrive) do jego folderu import.<br />
-            3) Na komputerze B: „Importuj z folderu import”. Duplikaty są pomijane, przed importem powstaje kopia bazy, zaimportowane pliki trafiają do import/done.
+            1) On computer A: "Export history" → a JSON file in the exports folder.<br />
+            2) Copy the file to computer B (cloud, USB drive) into its import folder..<br />
+            3) On computer B: "Import from import folder". Duplicates are skipped, a database backup is made before importing, and imported files are moved to import/done.
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn" @onclick="Export">📤 Eksportuj historię</button>
-            <button class="btn" @onclick="() => OpenFolder(State.ExportFolder)">📂 Folder exports</button>
-            <button class="btn" @onclick="Import">📥 Importuj z folderu import</button>
-            <button class="btn" @onclick="() => OpenFolder(State.ImportFolder)">📂 Folder import</button>
+            <button class="btn" @onclick="Export">📤 Export history</button>
+            <button class="btn" @onclick="() => OpenFolder(State.ExportFolder)">📂 Open Exports Folder</button>
+            <button class="btn" @onclick="Import">📥 Import from import folder</button>
+            <button class="btn" @onclick="() => OpenFolder(State.ImportFolder)">📂 Open Imports Folder</button>
         </div>
 
         @if (!string.IsNullOrEmpty(TransferMessage))
@@ -69,8 +69,8 @@
         }
 
         <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
-            Wymieniane: dropy, ukończenia dungeonów, walki DPS i postacie. Nie wymieniane: liczniki ręczne (+/−), quest tracker, wishlista, openings.
-            Import działa tylko dla tego samego konta (nazwa z pliku musi zgadzać się z połączonym kontem).
+            Transferred: drops, dungeon completions, DPS fights and characters. Not transferred: manual counters (+/−), quest tracker, wishlist, openings.
+            Import only works for the same account (the account name in the file must match the linked account).
         </div>
     </div>
 </div>
@@ -83,11 +83,11 @@
     {
         try
         {
-            BackupMessage = $"Utworzono kopię: {State.CreateBackupNow()}";
+            BackupMessage = $"Backup created: {State.CreateBackupNow()}";
         }
         catch (Exception ex)
         {
-            BackupMessage = $"Nie udało się utworzyć kopii: {ex.Message}";
+            BackupMessage = $"Could not create backup: {ex.Message}";
         }
     }
 
@@ -95,11 +95,11 @@
     {
         try
         {
-            TransferMessage = $"Wyeksportowano: {State.ExportHistory()}";
+            TransferMessage = $"Exported: {State.ExportHistory()}";
         }
         catch (Exception ex)
         {
-            TransferMessage = $"Eksport nie powiódł się: {ex.Message}";
+            TransferMessage = $"Export failed: {ex.Message}";
         }
     }
 
@@ -111,7 +111,7 @@
         }
         catch (Exception ex)
         {
-            TransferMessage = $"Import nie powiódł się: {ex.Message}";
+            TransferMessage = $"Import failed: {ex.Message}";
         }
     }
 

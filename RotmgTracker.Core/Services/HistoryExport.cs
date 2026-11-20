@@ -70,7 +70,7 @@ public class HistoryImportResult
     public List<string> Errors { get; } = new();
 
     public string Summary =>
-        $"Zaimportowane pliki: {FilesImported} • dropy: +{LootAdded} (pominięte duplikaty: {LootSkipped}) • " +
-        $"ukończenia: +{RunsAdded} (pominięte: {RunsSkipped}) • walki DPS: +{CombatAdded} • nowe postacie: {CharactersCreated}" +
-        (Errors.Count > 0 ? $" • BŁĘDY: {string.Join(" | ", Errors)}" : string.Empty);
+        $"Files imported: {FilesImported} • drops: +{LootAdded} (duplicates skipped: {LootSkipped}) • " +
+        $"completions: +{RunsAdded} (skipped: {RunsSkipped}) • DPS fights: +{CombatAdded} • new characters: {CharactersCreated}" +
+        (Errors.Count > 0 ? $" • ERRORS: {string.Join(" | ", Errors)}" : string.Empty);
 }

@@ -92,7 +92,7 @@ public static class DatabaseBackup
     private static void CreateSnapshot(string dbFilePath, string targetPath)
     {
         if (!HasData(dbFilePath))
-            throw new InvalidOperationException("Baza jest pusta lub nie istnieje - kopia nie została utworzona.");
+            throw new InvalidOperationException("The database is empty or does not exist - backup was not created.");
 
         string tmp = targetPath + ".tmp";
         if (File.Exists(tmp))
