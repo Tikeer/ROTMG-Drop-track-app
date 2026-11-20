@@ -23,7 +23,7 @@ public class TrackerSaveData
     public List<WishlistTarget> Wishlist { get; set; } = new();
 }
 
-public class TrackerStateService
+public partial class TrackerStateService
 {
     private readonly string _dbFilePath;
     private readonly object _stateLock = new();
@@ -87,6 +87,9 @@ public class TrackerStateService
     private void InitializeDatabaseAndLoad()
     {
         DatabaseMigrator.Initialize(_dbFilePath);
+
+        // Dzienna kopia zapasowa bazy (stan z początku dnia, przed jakimikolwiek zmianami)
+        DatabaseBackup.Run(_dbFilePath);
 
         using var db = new TrackerDbContext(_dbFilePath);
 
@@ -1009,5 +1012,8 @@ public class TrackerStateService
             db.SaveChanges();
             tx.Commit();
         }
+
+        // Poza lockiem (nie blokuje sniffera): kopie zapasowe - dzienna i godzinna "latest"
+        DatabaseBackup.Run(_dbFilePath);
     }
 }

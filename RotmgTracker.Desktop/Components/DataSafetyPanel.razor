@@ -1,0 +1,136 @@
+@using System.Diagnostics
+@inject TrackerStateService State
+
+<div class="section-header">
+    <h2>🛡️ Backup & Sync (Mac ↔ Windows)</h2>
+</div>
+
+<div class="opening-card" style="margin-bottom: 16px;">
+    <div style="padding: 14px 16px;">
+        <h3 style="margin: 0 0 8px 0;">Kopie zapasowe bazy</h3>
+        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
+            Automatycznie: jedna kopia dziennie (stan z początku dnia, 14 ostatnich) oraz „latest” odświeżana co godzinę.
+            Folder: <code>@State.BackupFolder</code>
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            <button class="btn" @onclick="CreateBackup">💾 Utwórz kopię teraz</button>
+            <button class="btn" @onclick="() => OpenFolder(State.BackupFolder)">📂 Otwórz folder kopii</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(BackupMessage))
+        {
+            <div style="font-size: 0.85rem; margin-bottom: 8px;">@BackupMessage</div>
+        }
+
+        @{
+            var backups = State.GetBackupFiles();
+        }
+        @if (backups.Count == 0)
+        {
+            <div style="color: var(--text-muted); font-size: 0.85rem;">Brak kopii (pierwsza powstanie przy następnym zapisie bazy).</div>
+        }
+        else
+        {
+            <div style="font-size: 0.8rem; color: var(--text-muted);">
+                @foreach (var f in backups.Take(8))
+                {
+                    <div>@f.Name — @(f.Length / 1024) KB — @f.LastWriteTime.ToString("yyyy-MM-dd HH:mm")</div>
+                }
+            </div>
+        }
+
+        <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
+            Przywracanie: zamknij aplikację, skopiuj wybrany plik z folderu kopii jako <code>rotmg_tracker.db</code> (zastąp istniejący)
+            i usuń ewentualne pliki <code>rotmg_tracker.db-wal</code> / <code>-shm</code>.
+        </div>
+    </div>
+</div>
+
+<div class="opening-card">
+    <div style="padding: 14px 16px;">
+        <h3 style="margin: 0 0 8px 0;">Wymiana historii między komputerami</h3>
+        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
+            1) Na komputerze A: „Eksportuj historię” → plik JSON w folderze exports.<br />
+            2) Skopiuj plik na komputer B (chmura, pendrive) do jego folderu import.<br />
+            3) Na komputerze B: „Importuj z folderu import”. Duplikaty są pomijane, przed importem powstaje kopia bazy, zaimportowane pliki trafiają do import/done.
+        </div>
+
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+            <button class="btn" @onclick="Export">📤 Eksportuj historię</button>
+            <button class="btn" @onclick="() => OpenFolder(State.ExportFolder)">📂 Folder exports</button>
+            <button class="btn" @onclick="Import">📥 Importuj z folderu import</button>
+            <button class="btn" @onclick="() => OpenFolder(State.ImportFolder)">📂 Folder import</button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(TransferMessage))
+        {
+            <div style="font-size: 0.85rem;">@TransferMessage</div>
+        }
+
+        <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
+            Wymieniane: dropy, ukończenia dungeonów, walki DPS i postacie. Nie wymieniane: liczniki ręczne (+/−), quest tracker, wishlista, openings.
+            Import działa tylko dla tego samego konta (nazwa z pliku musi zgadzać się z połączonym kontem).
+        </div>
+    </div>
+</div>
+
+@code {
+    private string BackupMessage { get; set; } = string.Empty;
+    private string TransferMessage { get; set; } = string.Empty;
+
+    private void CreateBackup()
+    {
+        try
+        {
+            BackupMessage = $"Utworzono kopię: {State.CreateBackupNow()}";
+        }
+        catch (Exception ex)
+        {
+            BackupMessage = $"Nie udało się utworzyć kopii: {ex.Message}";
+        }
+    }
+
+    private void Export()
+    {
+        try
+        {
+            TransferMessage = $"Wyeksportowano: {State.ExportHistory()}";
+        }
+        catch (Exception ex)
+        {
+            TransferMessage = $"Eksport nie powiódł się: {ex.Message}";
+        }
+    }
+
+    private void Import()
+    {
+        try
+        {
+            TransferMessage = State.ImportHistoryFromFolder().Summary;
+        }
+        catch (Exception ex)
+        {
+            TransferMessage = $"Import nie powiódł się: {ex.Message}";
+        }
+    }
+
+    private static void OpenFolder(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+
+            if (OperatingSystem.IsWindows())
+                Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS())
+                Process.Start("open", $"\"{path}\"");
+            else
+                Process.Start("xdg-open", $"\"{path}\"");
+        }
+        catch
+        {
+            // Brak menedżera plików - ścieżka jest widoczna w interfejsie
+        }
+    }
+}

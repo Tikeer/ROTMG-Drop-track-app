@@ -981,6 +981,11 @@
                 </div>
             }
         }
+
+        @if (ActiveTab == "data")
+        {
+            <DataSafetyPanel />
+        }
     </main>
 </div>
 
@@ -1039,7 +1044,8 @@
         ("collection", "📖", "Item Collection"),
         ("wishlist",   "🎯", "Target Wishlist"),
         ("quests",     "📜", "Quests & Openings"),
-        ("graveyard",  "🪦", "Graveyard")
+        ("graveyard",  "🪦", "Graveyard"),
+        ("data",       "🛡️", "Backup & Sync")
     };
 
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
