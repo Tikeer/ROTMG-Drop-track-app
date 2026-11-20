@@ -61,7 +61,7 @@ public static class RotmgProtocolConstants
         { 0x0324, RotmgClass.Trickster },
         { 0x0325, RotmgClass.Sorcerer },
         { 0x0326, RotmgClass.Ninja },
-        { 0x030d, RotmgClass.Samurai },
+        { 0x0311, RotmgClass.Samurai }, // potwierdzone w capture 2026-11-20 (OWN_OBJECT_UNRESOLVED)
         { 0x031b, RotmgClass.Bard },
         { 0x0331, RotmgClass.Summoner },
         { 0x0336, RotmgClass.Kensei },

@@ -44,7 +44,12 @@ public static class RarityScoreEngine
             _ => 100.0
         };
 
-        // 2. Mnożnik rarity (liczba slotów enchantów 0..4)
+        // 2. Mnożnik rarity (liczba slotów enchantów 0..4); każdy shiny ma minimum Rare (2 sloty),
+        // także drop zapisany zanim aplikacja czytała rarity
+        bool shiny = isShiny || quality is DropType.Shiny or DropType.Shivine;
+        if (shiny && rarity < ItemRarity.Rare)
+            rarity = ItemRarity.Rare;
+
         double rarityMultiplier = rarity switch
         {
             ItemRarity.Common => 1.0,
@@ -56,7 +61,7 @@ public static class RarityScoreEngine
         };
 
         // 3. Shiny to osobny, duży mnożnik (działa też, gdy kategoria bazowa to np. Realm White)
-        double shinyMultiplier = (isShiny || quality is DropType.Shiny or DropType.Shivine) ? ShinyMultiplier : 1.0;
+        double shinyMultiplier = shiny ? ShinyMultiplier : 1.0;
 
         // 4. Ręczna wartość itemu z item_value.json (przydatność / chciany drop; domyślnie 1.0)
         double itemValue = ItemValueTable.GetMultiplier(itemName);
