@@ -1,0 +1,39 @@
+@inject TrackerStateService State
+
+<div class="section-header">
+    <h2>🪦 Fallen Characters </h2>
+</div>
+
+@if (State.Data.Graveyard.Count == 0)
+{
+    <div class="empty-state">No fallen characters in the Graveyard yet. Stay safe in the Nexus!</div>
+}
+else
+{
+    <div class="quest-list">
+        @foreach (var dead in State.Data.Graveyard)
+        {
+            <div class="opening-card">
+                <div class="opening-header" style="cursor: default;">
+                    <div>
+                        <strong style="font-size: 1.05rem;">💀 @dead.FormattedTitle</strong>
+                        <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl")" style="margin-left: 8px;">
+                            @(dead.IsSeasonal ? $"SSNL ({dead.SeasonTag})" : "NOSSNL")
+                        </span>
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                            Killed by <strong style="color: #ef4444;">@(dead.KilledBy ?? "Unknown")</strong>
+                            in <strong>@(dead.DeathDungeon ?? "Unknown")</strong> (@(dead.DeathServer ?? "EUWest"))
+                            • @dead.DiedAt?.ToString("yyyy-MM-dd HH:mm")
+                        </div>
+                    </div>
+                    <div class="opening-summary">
+                        <span>Base Fame: <strong>@dead.BaseFame</strong></span>
+                        <span style="color: var(--accent-gold);">Total Fame: <strong>@dead.TotalFame</strong></span>
+                        <span>Logged Drops: <strong style="color: var(--accent-white);">@dead.TotalDrops</strong></span>
+                        <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveGraveyardEntry(dead.Id)">✕</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}

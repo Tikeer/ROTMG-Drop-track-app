@@ -1,0 +1,191 @@
+@inject TrackerStateService State
+@inject GameDataService GameData
+
+<div class="section-header">
+    <h2>💎 Rich Bag & Loot History</h2>
+</div>
+
+<div class="quest-add-bar" style="flex-wrap: wrap;">
+    <input class="input" list="xml-items-list" style="min-width: 220px;" placeholder="Item name (from 2191 XML items)..." @bind="ManualDropItemName" />
+    <datalist id="xml-items-list">
+        @foreach (var item in GameData.GetAllKnownItems().Take(600))
+        {
+            <option value="@item.Name">@UiHelpers.FormatDropType(item.Quality) @(string.IsNullOrEmpty(item.ForgeTier) ? "" : $"[Tier {item.ForgeTier}]")</option>
+        }
+    </datalist>
+
+    <input class="input" list="xml-dungeons-list" style="max-width: 200px;" placeholder="Dungeon..." @bind="ManualDropDungeon" />
+    <datalist id="xml-dungeons-list">
+        @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+        {
+            <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
+        }
+    </datalist>
+
+    <input class="input" list="xml-bosses-list" style="max-width: 190px;" placeholder="Boss / Entity..." @bind="ManualDropBoss" />
+    <datalist id="xml-bosses-list">
+        @foreach (var b in GameData.GetAllKnownBosses().Take(300))
+        {
+            <option value="@b.DisplayName"></option>
+        }
+    </datalist>
+
+    <select class="select" @bind="ManualDropRarity">
+        @foreach (var r in Enum.GetValues<ItemRarity>())
+        {
+            <option value="@r">@r (@((int)r) slots)</option>
+        }
+    </select>
+
+    <button class="btn btn-primary" @onclick="AddManualRealDrop">+ Log Drop</button>
+</div>
+
+<div class="quest-add-bar">
+    <input class="input" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
+    <select class="select" @bind="LootFilterType">
+        <option value="">All Qualities</option>
+        @foreach (var dt in Enum.GetValues<DropType>())
+        {
+            <option value="@dt">@UiHelpers.FormatDropType(dt)</option>
+        }
+    </select>
+    <select class="select" @bind="LootFilterRarity">
+        <option value="">All Rarities</option>
+        @foreach (var r in Enum.GetValues<ItemRarity>())
+        {
+            <option value="@r">@r (@((int)r) slots)</option>
+        }
+    </select>
+    <label class="checkbox-label">
+        <input type="checkbox" @bind="LootShowOther" /> Show potions / eggs / junk
+    </label>
+</div>
+
+@{
+    var filteredBagGroups = UiHelpers.GroupByBagInstance(GetFilteredLootHistory());
+}
+
+@if (filteredBagGroups.Count == 0)
+{
+    <div class="empty-state">No bag drops match the current filters.</div>
+}
+else
+{
+    <div class="quest-list">
+        @foreach (var bagGroup in filteredBagGroups)
+        {
+            var first = bagGroup[0];
+            <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
+                <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
+                    <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                    <div>⭐ Fame: <strong>@first.BaseFameAtDrop</strong> • @first.ServerName</div>
+                </div>
+                <div class="badge-nossnl" title="Bag Sprite ObjectType: 0x@(first.BagObjectType.ToString("X4"))">
+                    🎒 @first.PhysicalBag
+                </div>
+                <div class="badge-ssnl" title="Character SkinId: @first.CharacterSkinId">
+                    🧙 @first.CharacterName
+                </div>
+                <div class="badge-nossnl" title="Portal ObjectType: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
+                    🌀 @first.DungeonName (@first.GraveDifficulty/10 💀)
+                </div>
+                <div class="badge-nossnl" title="Boss ObjectType: 0x@(first.BossObjectType.ToString("X4"))">
+                    👾 @first.BossName
+                </div>
+                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                    @foreach (var item in bagGroup)
+                    {
+                        <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
+                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
+                                @(item.IsShiny ? "✨ " : "")@item.ItemName
+                            </strong>
+                            <span style="font-size: 0.75rem; color: #c084fc;">
+                                [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
+                            </span>
+                            <button class="btn btn-danger btn-sm" style="padding: 1px 6px;" @onclick="() => State.RemoveLootRecord(item.Id)">✕</button>
+                        </div>
+                    }
+                </div>
+                @if (first.CombatSessionId.HasValue)
+                {
+                    <button class="btn btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                            @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
+                        ⚔️ View Fight DPS
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
+
+    private string ManualDropItemName { get; set; } = "";
+    private string ManualDropDungeon { get; set; } = "";
+    private string ManualDropBoss { get; set; } = "";
+    private ItemRarity ManualDropRarity { get; set; } = ItemRarity.Common;
+    private string LootSearchQuery { get; set; } = "";
+    private string LootFilterType { get; set; } = "";
+    private string LootFilterRarity { get; set; } = "";
+    private bool LootShowOther { get; set; } = true;
+
+    private void AddManualRealDrop()
+    {
+        if (string.IsNullOrWhiteSpace(ManualDropItemName)) return;
+
+        var matchedItem = GameData.GetAllKnownItems()
+            .FirstOrDefault(i => string.Equals(i.Name, ManualDropItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        string dung = string.IsNullOrWhiteSpace(ManualDropDungeon) ? State.CurrentDungeonName : ManualDropDungeon.Trim();
+        double graves = GameData.ResolveDungeonGraveDifficulty(dung);
+        var portal = GameData.ResolvePortalByDungeonName(dung);
+        var matchedBoss = GameData.GetAllKnownBosses()
+            .FirstOrDefault(b => string.Equals(b.DisplayName, ManualDropBoss.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        DropType quality = matchedItem?.Quality ?? DropType.RegularWhite;
+        BagType physBag = quality == DropType.ST ? BagType.OrangeBag : BagType.WhiteBag;
+
+        State.RecordLootDrop(
+            itemName: matchedItem?.Name ?? ManualDropItemName.Trim(),
+            itemId: matchedItem?.ItemId ?? 0,
+            bagQuality: quality,
+            dungeonName: dung,
+            rarity: ManualDropRarity,
+            isShiny: matchedItem?.IsShiny ?? false,
+            difficulty: RarityScoreEngine.GraveCountToTier(graves),
+            physicalBag: physBag,
+            itemTier: matchedItem?.Tier ?? -1,
+            bossName: matchedBoss?.DisplayName ?? (string.IsNullOrWhiteSpace(ManualDropBoss) ? "Dungeon Boss" : ManualDropBoss.Trim()),
+            bossObjectType: matchedBoss?.ObjectType ?? 0,
+            graveDifficulty: graves,
+            dungeonPortalObjectType: portal?.ObjectType ?? 0);
+
+        ManualDropItemName = "";
+    }
+
+    private IEnumerable<LootDropRecord> GetFilteredLootHistory()
+    {
+        var query = State.Data.LootHistory.AsEnumerable();
+
+        if (!LootShowOther)
+            query = query.Where(l => l.BagType != DropType.Other);
+
+        if (!string.IsNullOrWhiteSpace(LootSearchQuery))
+        {
+            query = query.Where(l =>
+                l.ItemName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.DungeonName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.BossName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.CharacterName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(LootFilterType) && Enum.TryParse<DropType>(LootFilterType, out var dt))
+            query = query.Where(l => l.BagType == dt);
+
+        if (!string.IsNullOrWhiteSpace(LootFilterRarity) && Enum.TryParse<ItemRarity>(LootFilterRarity, out var r))
+            query = query.Where(l => l.Rarity == r);
+
+        return query;
+    }
+}

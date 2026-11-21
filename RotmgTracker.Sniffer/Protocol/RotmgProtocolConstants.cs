@@ -45,11 +45,10 @@ public static class RotmgProtocolConstants
             or 0x06AC or 0x06BA or 0x06BB or 0x06BD or 0x06BE or 0x06C0;
     
     // Mapowanie wewnętrznych ObjectType klas w RotMG na nasz enum RotmgClass
-    // Potwierdzone w capture 2026-11-20/21 (wejście każdą klasą z włączoną apką). Niepotwierdzony: Archer.
     private static readonly Dictionary<int, RotmgClass> ClassObjectTypes = new()
     {
         { 0x0300, RotmgClass.Rogue },
-        { 0x0307, RotmgClass.Archer }, // niepotwierdzone
+        { 0x0307, RotmgClass.Archer }, 
         { 0x030e, RotmgClass.Wizard },
         { 0x0310, RotmgClass.Priest },
         { 0x0311, RotmgClass.Samurai },

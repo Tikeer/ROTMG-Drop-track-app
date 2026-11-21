@@ -1,0 +1,101 @@
+@inject TrackerStateService State
+
+<div class="section-header">
+    <h2>@State.ActiveCharacter.FormattedTitle — Drop Counters</h2>
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <span class="badge-nossnl">
+            📍 Map: @State.CurrentDungeonName
+            @if (State.CurrentDungeonGraves > 0)
+            {
+                <span>(@State.CurrentDungeonGraves/10 💀)</span>
+            }
+        </span>
+        <span style="color: var(--text-muted); font-size: 0.9rem;">
+            Total Drops: <strong style="color: var(--accent-gold);">@State.ActiveCharacter.TotalDrops</strong>
+        </span>
+    </div>
+</div>
+
+<div class="drops-grid">
+    @foreach (var dropType in Enum.GetValues<DropType>())
+    {
+        int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
+        <div class="drop-card">
+            <div class="drop-card-header">
+                <span class="drop-title">@UiHelpers.FormatDropType(dropType)</span>
+                <span class="bag-dot @UiHelpers.GetDotClass(dropType)"></span>
+            </div>
+            <div class="drop-value">@val</div>
+            <div class="drop-actions">
+                <button class="btn" @onclick="() => State.ChangeDropCount(dropType, -1)">−</button>
+                <button class="btn" @onclick="() => State.ChangeDropCount(dropType, 1)">+</button>
+            </div>
+        </div>
+    }
+</div>
+
+<div class="section-header" style="margin-top: 8px;">
+    <h2>Recent Bag Drops (Grouped by Physical Bag)</h2>
+    <button class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("loot")'>View Full Loot History →</button>
+</div>
+
+@{
+    var recentBagGroups = UiHelpers.GroupByBagInstance(State.Data.LootHistory.Where(l => l.BagType != DropType.Other).Take(12));
+}
+
+@if (recentBagGroups.Count == 0)
+{
+    <div class="empty-state">No bag drops recorded yet.</div>
+}
+else
+{
+    <div class="quest-list">
+        @foreach (var bagGroup in recentBagGroups)
+        {
+            var first = bagGroup[0];
+            <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
+                <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
+                    <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                    <div>⭐ Fame: <strong>@first.BaseFameAtDrop</strong> • @first.ServerName</div>
+                </div>
+                <div class="badge-nossnl" title="Bag Sprite ObjectType: 0x@(first.BagObjectType.ToString("X4"))">
+                    🎒 @first.PhysicalBag
+                </div>
+                <div class="badge-ssnl" title="Character SkinId: @first.CharacterSkinId">
+                    🧙 @first.CharacterName
+                </div>
+                <div class="badge-nossnl" title="Portal ObjectType: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
+                    🌀 @first.DungeonName (@first.GraveDifficulty/10 💀)
+                </div>
+                <div class="badge-nossnl" title="Boss ObjectType: 0x@(first.BossObjectType.ToString("X4"))">
+                    👾 @first.BossName
+                </div>
+                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                    @foreach (var item in bagGroup)
+                    {
+                        <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
+                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
+                                @(item.IsShiny ? "✨ " : "")@item.ItemName
+                            </strong>
+                            <span style="font-size: 0.75rem; color: #c084fc;">
+                                [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
+                            </span>
+                        </div>
+                    }
+                </div>
+                @if (first.CombatSessionId.HasValue)
+                {
+                    <button class="btn btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                            @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
+                        ⚔️ View Fight DPS
+                    </button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback<string> OnSetTab { get; set; }
+    [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
+}

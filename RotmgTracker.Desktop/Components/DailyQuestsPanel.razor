@@ -1,0 +1,54 @@
+@inject TrackerStateService State
+
+@if (State.Data.ActiveQuests.Count > 0)
+{
+    int readyCount = State.Data.ActiveQuests.Count(q => q.IsCompleted);
+
+    <div class="daily-quests">
+        <div class="daily-quests-header">
+            <button type="button" class="daily-quests-toggle" @onclick="ToggleCollapsed">
+                @(IsCollapsed ? "▶" : "▼") 📜 Daily Quests
+                <span class="daily-quests-count">@readyCount / @State.Data.ActiveQuests.Count ready</span>
+            </button>
+            <button type="button" class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("quests")'>Manage →</button>
+        </div>
+
+        @if (!IsCollapsed)
+        {
+            <div class="daily-quests-grid">
+                @foreach (var quest in State.Data.ActiveQuests)
+                {
+                    double pct = quest.TargetMarks > 0
+                        ? Math.Min(100, (double)quest.CurrentMarks / quest.TargetMarks * 100)
+                        : 0;
+
+                    <div class="daily-quest @(quest.IsCompleted ? "done" : "")"
+                         title="Drops from @quest.BossName in @quest.DungeonName • Reward: @quest.RewardName">
+                        <div class="daily-quest-top">
+                            <strong class="daily-quest-name">@(string.IsNullOrEmpty(quest.MarkName) ? quest.DungeonName : quest.MarkName)</strong>
+                            <span class="daily-quest-count">
+                                @if (quest.IsCompleted)
+                                {
+                                    <span>✓ </span>
+                                }
+                                @quest.CurrentMarks / @quest.TargetMarks
+                            </span>
+                        </div>
+                        <div class="quest-progress-bar">
+                            <div class="quest-progress-fill" style="width: @(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                        <div class="daily-quest-sub">📍 @quest.DungeonName • 🎁 @quest.RewardName</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public EventCallback<string> OnSetTab { get; set; }
+
+    private bool IsCollapsed { get; set; }
+
+    private void ToggleCollapsed() => IsCollapsed = !IsCollapsed;
+}

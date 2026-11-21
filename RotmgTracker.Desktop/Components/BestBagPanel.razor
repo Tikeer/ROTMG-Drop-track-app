@@ -1,0 +1,42 @@
+@inject TrackerStateService State
+
+<div class="section-header" style="margin-top: 16px;">
+    <h2>🎒 Best Bag (highest total Rarity Score in one bag)</h2>
+</div>
+
+@{
+    var bestBag = UiHelpers.GroupByBagInstance(State.Data.LootHistory)
+        .OrderByDescending(g => g.Sum(r => r.RarityScore))
+        .FirstOrDefault();
+}
+
+@if (bestBag == null || bestBag.Sum(r => r.RarityScore) <= 0)
+{
+    <div class="empty-state">No bags scored yet.</div>
+}
+else
+{
+    var first = bestBag[0];
+
+    <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid var(--accent-gold);">
+        <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
+            <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+            <div>📍 @first.DungeonName (@first.GraveDifficulty/10 💀)</div>
+            <div>🧙 @first.CharacterName • 👾 @first.BossName</div>
+        </div>
+        <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+            @foreach (var item in bestBag.Where(i => i.RarityScore > 0))
+            {
+                <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
+                    <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
+                        @(item.IsShiny ? "✨ " : "")@item.ItemName
+                    </strong>
+                    <span style="font-size: 0.75rem; color: #c084fc;">
+                        [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
+                    </span>
+                </div>
+            }
+        </div>
+        <strong style="color: var(--accent-gold); font-size: 1.1rem;">@bestBag.Sum(r => r.RarityScore) pts</strong>
+    </div>
+}

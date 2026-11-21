@@ -1,0 +1,131 @@
+@inject TrackerStateService State
+@inject GameDataService GameData
+
+<div class="section-header">
+    <h2>
+        ⚔️ Live Dungeon Damage — @State.CurrentDungeonName
+        @if (State.CurrentDungeonGraves > 0)
+        {
+            <span style="font-size: 0.9rem; color: var(--accent-gold);">(@State.CurrentDungeonGraves/10 💀)</span>
+        }
+    </h2>
+    <div style="display: flex; gap: 8px;">
+        @if (State.CurrentDungeonPlayers.Count > 0)
+        {
+            <button class="btn btn-primary btn-sm" @onclick="ArchiveTestFight">💾 Save Fight to History</button>
+        }
+        <button class="btn btn-sm" @onclick="State.ClearDungeonDps">Clear Live Meter</button>
+    </div>
+</div>
+
+@if (State.CurrentDungeonPlayers.Count == 0)
+{
+    <div class="empty-state">
+        Waiting for boss damage packets (`DAMAGE` on TCP:2050)... Enter a dungeon or click "⚡ Test Boss DPS" on the top bar.
+    </div>
+}
+else
+{
+    int totalBossHpDamage = State.CurrentDungeonPlayers.Values.Sum(p => p.TotalDamage);
+    int rank = 1;
+
+    <div class="quest-list">
+        @foreach (var player in State.CurrentDungeonPlayers.Values.OrderByDescending(p => p.TotalDamage))
+        {
+            double pct = totalBossHpDamage > 0 ? (double)player.TotalDamage / totalBossHpDamage * 100.0 : 0;
+            <div class="quest-row" style="@(player.IsMe ? "border-color: var(--accent-green);" : "")">
+                <div style="min-width: 240px;">
+                    <span style="color: var(--text-muted); font-weight: 700; margin-right: 8px;">#@rank</span>
+                    <strong>@player.PlayerName</strong>
+                    <span class="badge-nossnl" style="margin-left: 8px;">@player.Class</span>
+                    @if (player.IsMe)
+                    {
+                        <span class="badge-ssnl" style="margin-left: 6px;">YOU</span>
+                    }
+                </div>
+                <div class="quest-progress-bar">
+                    <div class="quest-progress-fill" style="width: @pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                </div>
+                <div style="min-width: 190px; text-align: right; font-weight: 700;">
+                    @player.TotalDamage.ToString("N0") DMG
+                    <span style="color: var(--accent-gold); margin-left: 6px;">(@pct.ToString("0.0")%)</span>
+                </div>
+            </div>
+            rank++;
+        }
+    </div>
+}
+
+<div class="section-header" style="margin-top: 16px;">
+    <h2>📜 Recorded Boss Fights (Combat History)</h2>
+    @if (HighlightedSessionId.HasValue)
+    {
+        <button class="btn btn-sm" @onclick="ClearHighlight">Show All Fights</button>
+    }
+</div>
+
+@{
+    var fights = HighlightedSessionId.HasValue
+        ? State.Data.CombatHistory.Where(c => c.Id == HighlightedSessionId.Value).ToList()
+        : State.Data.CombatHistory;
+}
+
+@if (fights.Count == 0)
+{
+    <div class="empty-state">No recorded boss fights yet. Defeating a boss automatically archives the damage breakdown and links it to dropped bags!</div>
+}
+else
+{
+    <div class="quest-list">
+        @foreach (var fight in fights)
+        {
+            bool isHighlighted = HighlightedSessionId == fight.Id;
+            <div class="opening-card" style="@(isHighlighted ? "border: 2px solid var(--accent-gold);" : "")">
+                <div class="opening-header">
+                    <div>
+                        <strong style="font-size: 1.05rem;">👾 @fight.BossName</strong>
+                        <span class="badge-nossnl" style="margin-left: 8px;">📍 @fight.DungeonName (@fight.GraveDifficulty/10 💀)</span>
+                        <span style="color: var(--text-muted); font-size: 0.82rem; margin-left: 10px;">
+                            🧙 @fight.CharacterName • @fight.EndedAt.ToString("yyyy-MM-dd HH:mm:ss")
+                        </span>
+                    </div>
+                    <div style="font-weight: 800; color: var(--accent-green);">
+                        Your DMG: @fight.MyDamage.ToString("N0") / @fight.TotalBossDamage.ToString("N0") (@fight.MySharePercent%)
+                    </div>
+                </div>
+                <div class="opening-body" style="padding: 10px 16px;">
+                    @foreach (var p in fight.Participants.Take(10))
+                    {
+                        double pPct = fight.TotalBossDamage > 0 ? (double)p.TotalDamage / fight.TotalBossDamage * 100.0 : 0;
+                        <div style="display: flex; justify-content: space-between; font-size: 0.82rem; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.04);">
+                            <span>
+                                <strong style="color: @(p.IsMe ? "var(--accent-green)" : "var(--text-primary)");">@p.PlayerName</strong> (@p.Class)
+                            </span>
+                            <span>@p.TotalDamage.ToString("N0") DMG (@pPct.ToString("0.0")%)</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid? HighlightedSessionId { get; set; }
+    [Parameter] public EventCallback<Guid?> HighlightedSessionIdChanged { get; set; }
+
+    private async Task ClearHighlight()
+    {
+        HighlightedSessionId = null;
+        await HighlightedSessionIdChanged.InvokeAsync(null);
+    }
+
+    private void ArchiveTestFight()
+    {
+        var firstBoss = GameData.GetAllKnownBosses().FirstOrDefault();
+        State.ArchiveCurrentCombatSession(
+            firstBoss?.DisplayName ?? "Oryx the Mad God 3",
+            firstBoss?.ObjectType ?? 0,
+            State.CurrentDungeonGraves > 0 ? State.CurrentDungeonGraves : 9.5);
+    }
+}

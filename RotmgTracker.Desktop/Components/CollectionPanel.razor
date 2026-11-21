@@ -1,0 +1,145 @@
+@inject TrackerStateService State
+@inject GameDataService GameData
+
+<div class="section-header">
+    <h2>📖 Item Collection & Checklist (@GameData.GetAllKnownItems().Count XML Items)</h2>
+</div>
+
+<div class="quest-add-bar" style="flex-wrap: wrap; gap: 14px;">
+    <input class="input" style="max-width: 240px;" placeholder="Search item name..." @bind="CollectionSearch" @bind:event="oninput" />
+
+    <select class="select" @bind="CollectionCategoryFilter">
+        <option value="ALL">All Categories</option>
+        <option value="LEGENDARY_WHITE">Legendary Whites (Forge Tier S)</option>
+        <option value="EVENT_WHITE">Realm Whites</option>
+        <option value="REGULAR_WHITE">Regular Whites (Tier A–D)</option>
+        <option value="ST">ST Sets</option>
+        <option value="SHINY">✨ Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
+        <option value="BP">Blueprints</option>
+    </select>
+
+    <select class="select" @bind="CollectionOwnershipFilter">
+        <option value="ALL">Show All (Owned & Missing)</option>
+        <option value="OWNED">Owned Only</option>
+        <option value="MISSING">Missing Only</option>
+    </select>
+
+    <label class="checkbox-label" style="background: var(--bg-input); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+        <input type="checkbox" @bind="CollectionIncludeTiered" />
+        Include Tiered Items
+    </label>
+
+    @if (CollectionIncludeTiered)
+    {
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+            <span>Min Tier:</span>
+            <select class="select" style="padding: 4px 8px;" @bind="CollectionMinTier">
+                @for (int t = 1; t <= 14; t++)
+                {
+                    <option value="@t">T@(t)+</option>
+                }
+            </select>
+        </div>
+    }
+</div>
+
+@{
+    var filteredCollection = GetFilteredCollectionItems().ToList();
+    var ownedCountsById = State.Data.LootHistory
+        .GroupBy(l => l.ItemId)
+        .ToDictionary(g => g.Key, g => g.Count());
+    var ownedCountsByName = State.Data.LootHistory
+        .GroupBy(l => l.ItemName, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+    int ownedInView = filteredCollection.Count(i =>
+        ownedCountsById.ContainsKey(i.ItemId) || ownedCountsByName.ContainsKey(i.Name));
+}
+
+<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
+    Showing <strong>@filteredCollection.Count</strong> items • Collected in this view:
+    <strong style="color: var(--accent-green);">@ownedInView / @filteredCollection.Count</strong>
+    (@(filteredCollection.Count > 0 ? Math.Round((double)ownedInView / filteredCollection.Count * 100.0, 1) : 0)%)
+</div>
+
+<div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
+    @foreach (var item in filteredCollection.Take(120))
+    {
+        int count = ownedCountsById.GetValueOrDefault(item.ItemId, ownedCountsByName.GetValueOrDefault(item.Name, 0));
+        bool isOwned = count > 0;
+
+        <div class="drop-card" style="opacity: @(isOwned ? "1.0" : "0.55"); border-color: @(isOwned ? "var(--accent-green)" : "var(--border-color)");">
+            <div class="drop-card-header">
+                <span class="drop-title">
+                    @UiHelpers.FormatDropType(item.Quality)
+                    @if (!string.IsNullOrEmpty(item.ForgeTier))
+                    {
+                        <span>• Forge @item.ForgeTier</span>
+                    }
+                </span>
+                @if (isOwned)
+                {
+                    <span class="badge-ssnl">[Owned x@(count)]</span>
+                }
+                else
+                {
+                    <span class="badge-nossnl">Missing</span>
+                }
+            </div>
+
+            <div style="font-weight: 700; font-size: 0.95rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); margin: 4px 0;">
+                @(item.IsShiny ? "✨ " : "")@item.Name
+            </div>
+
+            <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                <span>ID: 0x@(item.ItemId.ToString("X4"))</span>
+                <span>Sprite: @item.TextureFile #@item.TextureIndex</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string CollectionSearch { get; set; } = "";
+    private string CollectionCategoryFilter { get; set; } = "ALL";
+    private string CollectionOwnershipFilter { get; set; } = "ALL";
+    private bool CollectionIncludeTiered { get; set; } = false;
+    private int CollectionMinTier { get; set; } = 12;
+
+    private IEnumerable<ItemMetadata> GetFilteredCollectionItems()
+    {
+        var items = GameData.GetAllKnownItems().AsEnumerable();
+
+        if (!CollectionIncludeTiered)
+            items = items.Where(i => i.Tier <= 0);
+        else
+            items = items.Where(i => i.Tier <= 0 || i.Tier >= CollectionMinTier);
+
+        items = CollectionCategoryFilter switch
+        {
+            "LEGENDARY_WHITE" => items.Where(i => i.Quality == DropType.LegendaryWhite && !i.IsShiny),
+            "EVENT_WHITE" => items.Where(i => i.Quality == DropType.EventWhite && !i.IsShiny),
+            "REGULAR_WHITE" => items.Where(i => i.Quality == DropType.RegularWhite && !i.IsShiny),
+            "ST" => items.Where(i => i.Quality == DropType.ST),
+            "SHINY" => items.Where(i => i.IsShiny),
+            "BP" => items.Where(i => i.Quality == DropType.BPs),
+            _ => items
+        };
+
+        if (!string.IsNullOrWhiteSpace(CollectionSearch))
+            items = items.Where(i => i.Name.Contains(CollectionSearch, StringComparison.OrdinalIgnoreCase));
+
+        if (CollectionOwnershipFilter != "ALL")
+        {
+            var ownedIds = State.Data.LootHistory.Select(l => l.ItemId).ToHashSet();
+            var ownedNames = State.Data.LootHistory.Select(l => l.ItemName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (CollectionOwnershipFilter == "OWNED")
+                items = items.Where(i => ownedIds.Contains(i.ItemId) || ownedNames.Contains(i.Name));
+            else if (CollectionOwnershipFilter == "MISSING")
+                items = items.Where(i => !ownedIds.Contains(i.ItemId) && !ownedNames.Contains(i.Name));
+        }
+
+        return items.OrderByDescending(i => i.IsShiny).ThenBy(i => i.Name);
+    }
+}

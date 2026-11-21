@@ -1,0 +1,37 @@
+@inject TrackerStateService State
+
+@{
+    var activeId = State.ActiveCharacter.Id;
+}
+
+<div class="char-tiles">
+    @foreach (var ch in State.Data.ActiveCharacters)
+    {
+        bool isActive = ch.Id == activeId;
+        bool isMaxed = ch.MaxedStats >= 8;
+
+        <button type="button"
+                class="char-tile @(isActive ? "active" : "") @(isMaxed ? "maxed" : "")"
+                title="@ch.FormattedTitle"
+                @onclick="() => State.SelectCharacter(ch.Id)">
+            <div class="char-tile-top">
+                <span class="char-tile-class">@ch.Class</span>
+                <span class="char-tile-stats">@ch.MaxedStats/8</span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(ch.Name) && ch.Name != ch.Class.ToString())
+            {
+                <div class="char-tile-name">@ch.Name</div>
+            }
+
+            <div class="char-tile-meta">
+                <span>⭐ @ch.BaseFame.ToString("N0")</span>
+                <span>🎁 @ch.TotalDrops</span>
+            </div>
+
+            <span class="@(ch.IsSeasonal ? "badge-ssnl" : "badge-nossnl") char-tile-badge">
+                @(ch.IsSeasonal ? $"SSNL ({ch.SeasonTag})" : "NOSSNL")
+            </span>
+        </button>
+    }
+</div>

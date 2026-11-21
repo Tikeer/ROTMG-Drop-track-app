@@ -1,0 +1,115 @@
+@inject TrackerStateService State
+@inject GameDataService GameData
+
+<div class="section-header">
+    <h2>🎯 Dream Set</h2>
+</div>
+
+<div class="quest-add-bar" style="flex-wrap: wrap;">
+    <input class="input" list="wish-items-list" style="min-width: 220px;" placeholder="Target item name..." @bind="WishItemName" />
+    <datalist id="wish-items-list">
+        @foreach (var item in GameData.GetAllKnownItems().Take(600))
+        {
+            <option value="@item.Name"></option>
+        }
+    </datalist>
+
+    <input class="input" list="wish-dungeons-list" style="max-width: 200px;" placeholder="Target dungeon..." @bind="WishDungeonName" />
+    <datalist id="wish-dungeons-list">
+        @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+        {
+            <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
+        }
+    </datalist>
+
+    <select class="select" @bind="WishMinRarity">
+        @foreach (var r in Enum.GetValues<ItemRarity>())
+        {
+            <option value="@r">Min: @r (@((int)r)+ slots)</option>
+        }
+    </select>
+
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+        <span>Drop Rate (1/X):</span>
+        <input class="input" type="number" style="width: 80px;" @bind="WishOneInX" min="1" max="10000" />
+    </div>
+
+    <label class="checkbox-label">
+        <input type="checkbox" @bind="WishRequireShiny" /> ✨ Shiny Only
+    </label>
+
+    <button class="btn btn-primary" @onclick="CreateWishlistTarget">+ Add to Dream Set</button>
+</div>
+
+@if (State.Data.Wishlist.Count == 0)
+{
+    <div class="empty-state">Your dream set is empty. Add an item above to track dungeon runs and cumulative drop probability!</div>
+}
+else
+{
+    <div class="quest-list">
+        @foreach (var wish in State.Data.Wishlist)
+        {
+            int runsDone = State.GetRunsSinceWishlistTargetCreated(wish);
+            double cumulativeChance = CalculateWishProbabilityPercent(wish, runsDone);
+            double graves = GameData.ResolveDungeonGraveDifficulty(wish.TargetDungeonName);
+
+            <div class="quest-row" style="@(wish.IsCompleted ? "border-color: var(--accent-green); background: rgba(34, 197, 94, 0.08);" : "")">
+                <div style="min-width: 260px;">
+                    <strong style="font-size: 1rem; color: @(wish.RequireShiny ? "#f472b6" : "var(--accent-white)");">
+                        @(wish.RequireShiny ? "✨ " : "")@wish.ItemName
+                    </strong>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">
+                        📍 @wish.TargetDungeonName (@graves/10 💀) • Min: @wish.MinimumRarity
+                    </div>
+                </div>
+
+                <div class="quest-progress-bar">
+                    <div class="quest-progress-fill" style="width: @Math.Min(100, cumulativeChance).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                </div>
+
+                <div style="min-width: 240px; text-align: right; font-size: 0.85rem;">
+                    <div>Runs Since Added: <strong>@runsDone</strong></div>
+                    <div style="color: var(--accent-gold);">Chance so far: <strong>@cumulativeChance.ToString("0.0")%</strong></div>
+                </div>
+
+                <div style="display: flex; gap: 6px;">
+                    @if (wish.IsCompleted)
+                    {
+                        <span class="badge-ssnl">OWNED ✓</span>
+                    }
+                    <button class="btn btn-danger btn-sm" @onclick="() => RemoveWishlistItem(wish.Id)">✕</button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string WishItemName { get; set; } = "";
+    private string WishDungeonName { get; set; } = "";
+    private ItemRarity WishMinRarity { get; set; } = ItemRarity.Common;
+    private int WishOneInX { get; set; } = 100;
+    private bool WishRequireShiny { get; set; }
+
+    private static double CalculateWishProbabilityPercent(WishlistTarget wish, int runs)
+    {
+        if (runs <= 0 || wish.EstimatedDropRate <= 0) return 0.0;
+        double p = Math.Clamp(wish.EstimatedDropRate, 0.00001, 1.0);
+        return Math.Round((1.0 - Math.Pow(1.0 - p, runs)) * 100.0, 2);
+    }
+
+    private void CreateWishlistTarget()
+    {
+        if (string.IsNullOrWhiteSpace(WishItemName)) return;
+        double rate = 1.0 / Math.Max(1, WishOneInX);
+        State.AddWishlistTarget(WishItemName, WishDungeonName, WishMinRarity, WishRequireShiny, rate);
+        WishItemName = "";
+    }
+
+    private void RemoveWishlistItem(Guid id)
+    {
+        State.Data.Wishlist.RemoveAll(w => w.Id == id);
+        State.SaveAsync();
+    }
+}

@@ -1,0 +1,91 @@
+@inject TrackerStateService State
+@inject GameDataService GameData
+
+<div class="section-header">
+    <h2>📈 Dungeon Completion Counter & Analytics</h2>
+    <div style="display: flex; gap: 8px;">
+        <select class="select" @bind="CounterScopeFilter">
+            <option value="ALL">All-Time (Global)</option>
+            <option value="SEASON">Current Season (@State.CurrentSeasonTag)</option>
+            <option value="CHAR">Active Character (@State.ActiveCharacter.FormattedTitle)</option>
+        </select>
+    </div>
+</div>
+
+<div class="quest-add-bar">
+    <input class="input" list="counter-dungeons-list" placeholder="Select dungeon from 90 extracted portals..." @bind="ManualRunDungeonName" />
+    <datalist id="counter-dungeons-list">
+        @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+        {
+            <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
+        }
+    </datalist>
+    <button class="btn btn-primary" @onclick="AddManualDungeonRun">+1 Completed Run</button>
+</div>
+
+@{
+    var scopedRuns = GetScopedDungeonRuns().ToList();
+    var groupedRuns = scopedRuns
+        .GroupBy(r => r.DungeonName, StringComparer.OrdinalIgnoreCase)
+        .Select(g => new
+        {
+            DungeonName = g.Key,
+            Count = g.Count(),
+            Graves = GameData.ResolveDungeonGraveDifficulty(g.Key),
+            Portal = GameData.ResolvePortalByDungeonName(g.Key),
+            LastRun = g.Max(x => x.CompletedAt)
+        })
+        .OrderByDescending(x => x.Count)
+        .ThenByDescending(x => x.Graves)
+        .ToList();
+}
+
+<div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));">
+    @foreach (var d in groupedRuns)
+    {
+        <div class="drop-card">
+            <div class="drop-card-header">
+                <span class="drop-title" style="color: var(--text-primary); font-weight: 700;">@d.DungeonName</span>
+                <span class="badge-nossnl">@d.Graves/10 💀</span>
+            </div>
+            <div class="drop-value" style="color: var(--accent-green);">@d.Count</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">
+                <span>Portal ID: 0x@((d.Portal?.ObjectType ?? 0).ToString("X4"))</span>
+                <button class="btn btn-sm" @onclick="() => QuickIncrementDungeon(d.DungeonName)">+1</button>
+            </div>
+        </div>
+    }
+</div>
+
+@if (groupedRuns.Count == 0)
+{
+    <div class="empty-state">No dungeon runs logged for this filter yet.</div>
+}
+
+@code {
+    private string CounterScopeFilter { get; set; } = "ALL";
+    private string ManualRunDungeonName { get; set; } = "";
+
+    private IEnumerable<DungeonRunRecord> GetScopedDungeonRuns()
+    {
+        return CounterScopeFilter switch
+        {
+            "SEASON" => State.Data.DungeonRuns.Where(r => r.IsSeasonal && r.SeasonTag == State.CurrentSeasonTag),
+            "CHAR" => State.Data.DungeonRuns.Where(r => r.CharacterId == State.ActiveCharacter.Id),
+            _ => State.Data.DungeonRuns
+        };
+    }
+
+    private void AddManualDungeonRun()
+    {
+        if (string.IsNullOrWhiteSpace(ManualRunDungeonName)) return;
+        QuickIncrementDungeon(ManualRunDungeonName.Trim());
+        ManualRunDungeonName = "";
+    }
+
+    private void QuickIncrementDungeon(string dungeonName)
+    {
+        var tier = GameData.ResolveDungeonDifficulty(dungeonName);
+        State.RecordDungeonCompletion(dungeonName, tier);
+    }
+}
