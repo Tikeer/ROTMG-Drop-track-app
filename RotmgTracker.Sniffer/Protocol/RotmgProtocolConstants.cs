@@ -43,14 +43,17 @@ public static class RotmgProtocolConstants
     public static bool IsTrackedBagContainer(int objectType) =>
         objectType is 0x0507 or 0x0508 or 0x0509 or 0x050B or 0x050C or 0x050E or 0x050F or 0x0510
             or 0x06AC or 0x06BA or 0x06BB or 0x06BD or 0x06BE or 0x06C0;
-
+    
     // Mapowanie wewnętrznych ObjectType klas w RotMG na nasz enum RotmgClass
+    // Potwierdzone w capture 2026-11-20/21 (wejście każdą klasą z włączoną apką). Niepotwierdzony: Archer.
     private static readonly Dictionary<int, RotmgClass> ClassObjectTypes = new()
     {
         { 0x0300, RotmgClass.Rogue },
-        { 0x0307, RotmgClass.Archer },
+        { 0x0307, RotmgClass.Archer }, // niepotwierdzone
         { 0x030e, RotmgClass.Wizard },
         { 0x0310, RotmgClass.Priest },
+        { 0x0311, RotmgClass.Samurai },
+        { 0x031c, RotmgClass.Bard },
         { 0x031d, RotmgClass.Warrior },
         { 0x031e, RotmgClass.Knight },
         { 0x031f, RotmgClass.Paladin },
@@ -61,11 +64,9 @@ public static class RotmgProtocolConstants
         { 0x0324, RotmgClass.Trickster },
         { 0x0325, RotmgClass.Sorcerer },
         { 0x0326, RotmgClass.Ninja },
-        { 0x0311, RotmgClass.Samurai }, // potwierdzone w capture 2026-11-20 (OWN_OBJECT_UNRESOLVED)
-        { 0x031b, RotmgClass.Bard },
         { 0x0331, RotmgClass.Summoner },
-        { 0x0336, RotmgClass.Kensei },
-        { 0x0339, RotmgClass.Druid }
+        { 0x0332, RotmgClass.Kensei },
+        { 0x0333, RotmgClass.Druid }
     };
 
     public static bool TryGetPlayerClass(int objectType, out RotmgClass rotmgClass) =>
