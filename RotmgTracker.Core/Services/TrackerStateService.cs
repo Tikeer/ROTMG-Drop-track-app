@@ -765,6 +765,7 @@ public partial class TrackerStateService
         {
             Data.ActiveCharacterId = characterId;
             SaveAsync();
+            NotifyStateChanged();
         }
     }
 

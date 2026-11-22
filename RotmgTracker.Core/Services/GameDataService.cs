@@ -142,11 +142,49 @@ public class GameDataService
         }
     }
 
-    public IReadOnlyCollection<ItemMetadata> GetAllKnownItems() => _items.Values;
-    public IReadOnlyCollection<EnemyMetadata> GetAllKnownBosses() => _enemies.Values.Where(e => e.IsBoss).ToList();
+    private IReadOnlyCollection<ItemMetadata>? _itemsCache;
+    private IReadOnlyCollection<EnemyMetadata>? _bossesCache;
+    private IReadOnlyCollection<string>? _dungeonNamesCache;
+
+    private void InvalidateCollectionCaches()
+    {
+        _itemsCache = null;
+        _bossesCache = null;
+        _dungeonNamesCache = null;
+    }
+
+    public IReadOnlyCollection<ItemMetadata> GetAllKnownItems()
+    {
+        var cache = _itemsCache;
+        if (cache != null) return cache;
+
+        cache = _items.Values.ToArray();
+        _itemsCache = cache;
+        return cache;
+    }
+
+    public IReadOnlyCollection<EnemyMetadata> GetAllKnownBosses()
+    {
+        var cache = _bossesCache;
+        if (cache != null) return cache;
+
+        cache = _enemies.Values.Where(e => e.IsBoss).ToArray();
+        _bossesCache = cache;
+        return cache;
+    }
+
     public IReadOnlyCollection<MarkMetadata> GetAllKnownMarks() => _marks.Values;
     public IReadOnlyCollection<PortalMetadata> GetAllKnownPortals() => _portalsByName.Values;
-    public IReadOnlyCollection<string> GetAllKnownDungeons() => _portalsByName.Keys.ToList();
+
+    public IReadOnlyCollection<string> GetAllKnownDungeons()
+    {
+        var cache = _dungeonNamesCache;
+        if (cache != null) return cache;
+
+        cache = _portalsByName.Keys.ToArray();
+        _dungeonNamesCache = cache;
+        return cache;
+    }
 
     public bool TryResolvePlayerClass(int objectType, out RotmgClass rotmgClass) =>
         _playerClasses.TryGetValue(objectType, out rotmgClass);
@@ -872,6 +910,8 @@ public class GameDataService
 
     private void SaveCachedCatalogs()
     {
+        InvalidateCollectionCaches();
+
         try
         {
             var options = new JsonSerializerOptions { WriteIndented = true };
