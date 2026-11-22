@@ -2,7 +2,9 @@
 @inject TrackerStateService State
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
+@using Microsoft.JSInterop
 @inject AppStartup Startup
+@inject IJSRuntime JS
 
 @if (Startup.Error != null)
 {
@@ -268,7 +270,36 @@ else
 
     private void HandleExternalStateChanged() => InvokeAsync(StateHasChanged);
 
-    private void SetTab(string tab) => ActiveTab = tab;
+    private System.Diagnostics.Stopwatch? _tabWatch;
+    private string _tabWatchName = "";
+
+    private void SetTab(string tab)
+    {
+        if (tab != ActiveTab)
+        {
+            _tabWatch = System.Diagnostics.Stopwatch.StartNew();
+            _tabWatchName = tab;
+        }
+
+        ActiveTab = tab;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var watch = _tabWatch;
+        if (watch == null) return;
+
+        _tabWatch = null;
+        string name = _tabWatchName;
+
+        try
+        {
+            long netMs = watch.ElapsedMilliseconds;
+            int clickToPaintMs = await JS.InvokeAsync<int>("rotmgNextPaint");
+            UiTiming.Log($"tab '{name}': .NET render {netMs} ms, click -> painted {clickToPaintMs} ms");
+        }
+        catch { }
+    }
 
     private void ToggleSniffer()
     {

@@ -10,6 +10,19 @@
 <body>
 <div id="app">Loading RotMG Tracker...</div>
 
+<script>
+    window.__lastClick = 0;
+    document.addEventListener('click', function () { window.__lastClick = performance.now(); }, true);
+    window.rotmgNextPaint = function () {
+        return new Promise(function (resolve) {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    resolve(Math.round(performance.now() - window.__lastClick));
+                });
+            });
+        });
+    };
+</script>
 <script src="_framework/blazor.webview.js"></script>
 </body>
 </html>
