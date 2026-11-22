@@ -80,6 +80,15 @@ public partial class TrackerStateService
 
         Directory.CreateDirectory(appDataDir);
         _dbFilePath = Path.Combine(appDataDir, "rotmg_tracker.db");
+    }
+
+    private bool _initialized;
+
+    /// <summary>Migracje, kopia dzienna i wczytanie bazy. Wołane raz z AppStartup w tle.</summary>
+    public void Initialize()
+    {
+        if (_initialized) return;
+        _initialized = true;
 
         InitializeDatabaseAndLoad();
     }
@@ -971,20 +980,40 @@ public partial class TrackerStateService
         });
     }
 
+        private readonly object _dbWriteLock = new();
+
     private void SaveToSqlite()
     {
-        // Cały zapis pod _stateLock: snapshot list ORAZ serializacja encji (np. słownik Drops)
-        // muszą być spójne i niemodyfikowane przez wątek sniffera.
+        List<CharacterSession> characters;
+        List<DungeonMarkQuest> quests;
+        List<OpeningSession> openings;
+        List<LootDropRecord> loot;
+        List<DungeonRunRecord> runs;
+        List<CombatSessionRecord> combat;
+        List<WishlistTarget> wishlist;
+        string activeCharacterId;
+        string linkedAccountName;
+        bool legacyCountersRestored;
+
+        // Krótki lock: tylko migawka stanu. Postacie kopiowane głęboko (sniffer zmienia ich słowniki),
+        // reszta to listy referencji - zmiana rekordu w trakcie zapisu wywoła kolejny SaveAsync.
         lock (_stateLock)
         {
-            var characters = Data.ActiveCharacters.Concat(Data.Graveyard).ToList();
-            var quests = Data.ActiveQuests.ToList();
-            var openings = Data.Openings.ToList();
-            var loot = Data.LootHistory.ToList();
-            var runs = Data.DungeonRuns.ToList();
-            var combat = Data.CombatHistory.ToList();
-            var wishlist = Data.Wishlist.ToList();
+            characters = Data.ActiveCharacters.Concat(Data.Graveyard).Select(c => c.CloneForSave()).ToList();
+            quests = Data.ActiveQuests.ToList();
+            openings = Data.Openings.ToList();
+            loot = Data.LootHistory.ToList();
+            runs = Data.DungeonRuns.ToList();
+            combat = Data.CombatHistory.ToList();
+            wishlist = Data.Wishlist.ToList();
+            activeCharacterId = Data.ActiveCharacterId.ToString();
+            linkedAccountName = LinkedAccountName;
+            legacyCountersRestored = _legacyCountersRestored;
+        }
 
+        // Zapisy do bazy wykluczają się wzajemnie (SaveAsync, Backup, Import), ale nie blokują renderu
+        lock (_dbWriteLock)
+        {
             using var db = new TrackerDbContext(_dbFilePath);
             using var tx = db.Database.BeginTransaction();
 
@@ -1005,16 +1034,16 @@ public partial class TrackerStateService
             db.CombatSessions.AddRange(combat);
             db.WishlistTargets.AddRange(wishlist);
 
-            db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = Data.ActiveCharacterId.ToString() });
-            db.Settings.Add(new AppSetting { Key = "LinkedAccountName", Value = LinkedAccountName });
-            if (_legacyCountersRestored)
+            db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = activeCharacterId });
+            db.Settings.Add(new AppSetting { Key = "LinkedAccountName", Value = linkedAccountName });
+            if (legacyCountersRestored)
                 db.Settings.Add(new AppSetting { Key = "LegacyCountersRestored", Value = "1" });
 
             db.SaveChanges();
             tx.Commit();
         }
 
-        // Poza lockiem (nie blokuje sniffera): kopie zapasowe - dzienna i godzinna "latest"
+        // Poza lockami (nie blokuje sniffera ani renderu): kopie zapasowe - dzienna i godzinna "latest"
         DatabaseBackup.Run(_dbFilePath);
     }
 }

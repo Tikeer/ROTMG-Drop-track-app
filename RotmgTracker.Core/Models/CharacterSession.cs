@@ -4,6 +4,17 @@ namespace RotmgTrackerV1.Core.Models;
 
 public class CharacterSession
 {
+    
+    /// <summary>Kopia do zapisu w bazie poza lockiem (słowniki i tablice kopiowane, reszta to wartości).</summary>
+    public CharacterSession CloneForSave()
+    {
+        var copy = (CharacterSession)MemberwiseClone();
+        copy.EquipmentIds = (int[])EquipmentIds.Clone();
+        copy.Drops = new Dictionary<DropType, int>(Drops);
+        copy.LegacyDrops = new Dictionary<DropType, int>(LegacyDrops);
+        return copy;
+    }
+    
     // Unikalny klucz główny w bazie (character_uuid)
     public Guid Id { get; set; } = Guid.NewGuid();
 

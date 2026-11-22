@@ -690,3 +690,24 @@ input, select { user-select: text; }
 .daily-quest-name { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .daily-quest-count { font-size: 0.8rem; font-weight: 700; white-space: nowrap; }
 .daily-quest-sub { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.startup-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-primary);
+}
+.startup-title { font-size: 1.3rem; font-weight: 700; }
+.startup-sub { font-size: 0.9rem; color: var(--text-muted); max-width: 520px; text-align: center; }
+.startup-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-white);
+    animation: startup-spin 0.9s linear infinite;
+}
+@keyframes startup-spin { to { transform: rotate(360deg); } }

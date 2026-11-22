@@ -17,6 +17,7 @@ public class Program
         appBuilder.Services.AddSingleton<GameDataService>();
         appBuilder.Services.AddSingleton<RotmgSnifferService>();
         appBuilder.Services.AddSingleton<UiSettings>();
+        appBuilder.Services.AddSingleton<AppStartup>();
         appBuilder.RootComponents.Add<Dashboard>("#app");
 
         var app = appBuilder.Build();

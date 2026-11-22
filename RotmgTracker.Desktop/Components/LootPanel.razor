@@ -1,47 +1,49 @@
 @inherits StateAwareComponent
-@inject GameDataService GameData
 
 <div class="section-header">
     <h2>💎 Rich Bag & Loot History</h2>
 </div>
 
+@{
+    var allGroups = UiHelpers.GroupByBagInstance(GetFilteredLootHistory());
+    var visibleGroups = allGroups.Take(VisibleBags).ToList();
+    int totalDrops = allGroups.Sum(g => g.Count);
+    var dungeonOptions = GetDungeonOptions();
+    var bossOptions = GetBossOptions();
+    var itemSuggestions = GetItemSuggestions();
+}
+
 <div class="quest-add-bar" style="flex-wrap: wrap;">
-    <input class="input" list="xml-items-list" style="min-width: 220px;" placeholder="Item name (from 2191 XML items)..." @bind="ManualDropItemName" />
-    <datalist id="xml-items-list">
-        @foreach (var item in GameData.GetAllKnownItems().Take(600))
-        {
-            <option value="@item.Name">@UiHelpers.FormatDropType(item.Quality) @(string.IsNullOrEmpty(item.ForgeTier) ? "" : $"[Tier {item.ForgeTier}]")</option>
-        }
-    </datalist>
+    <input class="input" list="loot-item-suggestions" style="min-width: 240px;" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
+    @if (itemSuggestions.Count > 0)
+    {
+        <datalist id="loot-item-suggestions">
+            @foreach (var name in itemSuggestions)
+            {
+                <option value="@name"></option>
+            }
+        </datalist>
+    }
 
-    <input class="input" list="xml-dungeons-list" style="max-width: 200px;" placeholder="Dungeon..." @bind="ManualDropDungeon" />
-    <datalist id="xml-dungeons-list">
-        @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+    <select class="select" value="@LootFilterDungeon" @onchange="OnDungeonChanged">
+        <option value="">All Dungeons</option>
+        @foreach (var d in dungeonOptions)
         {
-            <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
-        }
-    </datalist>
-
-    <input class="input" list="xml-bosses-list" style="max-width: 190px;" placeholder="Boss / Entity..." @bind="ManualDropBoss" />
-    <datalist id="xml-bosses-list">
-        @foreach (var b in GameData.GetAllKnownBosses().Take(300))
-        {
-            <option value="@b.DisplayName"></option>
-        }
-    </datalist>
-
-    <select class="select" @bind="ManualDropRarity">
-        @foreach (var r in Enum.GetValues<ItemRarity>())
-        {
-            <option value="@r">@r (@((int)r) slots)</option>
+            <option value="@d">@d</option>
         }
     </select>
 
-    <button class="btn btn-primary" @onclick="AddManualRealDrop">+ Log Drop</button>
-</div>
+    @if (!string.IsNullOrEmpty(LootFilterDungeon))
+    {
+        <select class="select" @bind="LootFilterBoss">
+            <option value="">All Bosses</option>
+            @foreach (var b in bossOptions)
+            {
+                <option value="@b">@b</option>
+            }
+        </select>
+    }
 
-<div class="quest-add-bar">
-    <input class="input" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
     <select class="select" @bind="LootFilterType">
         <option value="">All Qualities</option>
         @foreach (var dt in Enum.GetValues<DropType>())
@@ -59,20 +61,26 @@
     <label class="checkbox-label">
         <input type="checkbox" @bind="LootShowOther" /> Show potions / eggs / junk
     </label>
+    <select class="select" @bind="PageSize" title="Bags per page">
+        <option value="50">50 per page</option>
+        <option value="100">100 per page</option>
+        <option value="250">250 per page</option>
+        <option value="500">500 per page</option>
+    </select>
 </div>
 
-@{
-    var filteredBagGroups = UiHelpers.GroupByBagInstance(GetFilteredLootHistory());
-}
+<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
+    Showing <strong>@visibleGroups.Count</strong> of <strong>@allGroups.Count</strong> bags (@totalDrops items match)
+</div>
 
-@if (filteredBagGroups.Count == 0)
+@if (allGroups.Count == 0)
 {
     <div class="empty-state">No bag drops match the current filters.</div>
 }
 else
 {
     <div class="quest-list">
-        @foreach (var bagGroup in filteredBagGroups)
+        @foreach (var bagGroup in visibleGroups)
         {
             var first = bagGroup[0];
             <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
@@ -116,74 +124,142 @@ else
             </div>
         }
     </div>
+
+    @if (visibleGroups.Count < allGroups.Count)
+    {
+        <div style="display: flex; justify-content: center; margin: 14px 0;">
+            <button class="btn" @onclick="LoadMore">Load @PageSize more (@(allGroups.Count - visibleGroups.Count) left)</button>
+        </div>
+    }
 }
 
 @code {
     [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
 
-    private string ManualDropItemName { get; set; } = "";
-    private string ManualDropDungeon { get; set; } = "";
-    private string ManualDropBoss { get; set; } = "";
-    private ItemRarity ManualDropRarity { get; set; } = ItemRarity.Common;
-    private string LootSearchQuery { get; set; } = "";
-    private string LootFilterType { get; set; } = "";
-    private string LootFilterRarity { get; set; } = "";
-    private bool LootShowOther { get; set; } = true;
+    private const int DefaultPageSize = 100;
 
-    private void AddManualRealDrop()
+    private int _pageSize = DefaultPageSize;
+    private string _searchQuery = "";
+    private string _filterDungeon = "";
+    private string _filterBoss = "";
+    private string _filterType = "";
+    private string _filterRarity = "";
+    private bool _showOther = true;
+
+    private int VisibleBags { get; set; } = DefaultPageSize;
+
+    private int PageSize
     {
-        if (string.IsNullOrWhiteSpace(ManualDropItemName)) return;
+        get => _pageSize;
+        set { _pageSize = value; VisibleBags = value; }
+    }
 
-        var matchedItem = GameData.GetAllKnownItems()
-            .FirstOrDefault(i => string.Equals(i.Name, ManualDropItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+    private string LootSearchQuery
+    {
+        get => _searchQuery;
+        set { _searchQuery = value ?? ""; VisibleBags = PageSize; }
+    }
 
-        string dung = string.IsNullOrWhiteSpace(ManualDropDungeon) ? State.CurrentDungeonName : ManualDropDungeon.Trim();
-        double graves = GameData.ResolveDungeonGraveDifficulty(dung);
-        var portal = GameData.ResolvePortalByDungeonName(dung);
-        var matchedBoss = GameData.GetAllKnownBosses()
-            .FirstOrDefault(b => string.Equals(b.DisplayName, ManualDropBoss.Trim(), StringComparison.OrdinalIgnoreCase));
+    private string LootFilterDungeon => _filterDungeon;
 
-        DropType quality = matchedItem?.Quality ?? DropType.RegularWhite;
-        BagType physBag = quality == DropType.ST ? BagType.OrangeBag : BagType.WhiteBag;
+    private string LootFilterBoss
+    {
+        get => _filterBoss;
+        set { _filterBoss = value ?? ""; VisibleBags = PageSize; }
+    }
 
-        State.RecordLootDrop(
-            itemName: matchedItem?.Name ?? ManualDropItemName.Trim(),
-            itemId: matchedItem?.ItemId ?? 0,
-            bagQuality: quality,
-            dungeonName: dung,
-            rarity: ManualDropRarity,
-            isShiny: matchedItem?.IsShiny ?? false,
-            difficulty: RarityScoreEngine.GraveCountToTier(graves),
-            physicalBag: physBag,
-            itemTier: matchedItem?.Tier ?? -1,
-            bossName: matchedBoss?.DisplayName ?? (string.IsNullOrWhiteSpace(ManualDropBoss) ? "Dungeon Boss" : ManualDropBoss.Trim()),
-            bossObjectType: matchedBoss?.ObjectType ?? 0,
-            graveDifficulty: graves,
-            dungeonPortalObjectType: portal?.ObjectType ?? 0);
+    private string LootFilterType
+    {
+        get => _filterType;
+        set { _filterType = value ?? ""; VisibleBags = PageSize; }
+    }
 
-        ManualDropItemName = "";
+    private string LootFilterRarity
+    {
+        get => _filterRarity;
+        set { _filterRarity = value ?? ""; VisibleBags = PageSize; }
+    }
+
+    private bool LootShowOther
+    {
+        get => _showOther;
+        set { _showOther = value; VisibleBags = PageSize; }
+    }
+
+    private void LoadMore() => VisibleBags += PageSize;
+
+    private void OnDungeonChanged(ChangeEventArgs e)
+    {
+        _filterDungeon = e.Value?.ToString() ?? "";
+        _filterBoss = "";
+        VisibleBags = PageSize;
+    }
+
+    private List<string> GetDungeonOptions()
+    {
+        return State.Data.LootHistory
+            .Select(l => l.DungeonName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private List<string> GetBossOptions()
+    {
+        if (string.IsNullOrEmpty(_filterDungeon))
+            return new List<string>();
+
+        return State.Data.LootHistory
+            .Where(l => string.Equals(l.DungeonName, _filterDungeon, StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.BossName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private List<string> GetItemSuggestions()
+    {
+        string q = _searchQuery.Trim();
+        if (q.Length < 2)
+            return new List<string>();
+
+        return State.Data.LootHistory
+            .Select(l => l.ItemName)
+            .Where(n => n.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList();
     }
 
     private IEnumerable<LootDropRecord> GetFilteredLootHistory()
     {
         var query = State.Data.LootHistory.AsEnumerable();
 
-        if (!LootShowOther)
+        if (!_showOther)
             query = query.Where(l => l.BagType != DropType.Other);
 
-        if (!string.IsNullOrWhiteSpace(LootSearchQuery))
+        if (!string.IsNullOrEmpty(_filterDungeon))
+            query = query.Where(l => string.Equals(l.DungeonName, _filterDungeon, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(_filterBoss))
+            query = query.Where(l => string.Equals(l.BossName, _filterBoss, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(_searchQuery))
         {
             query = query.Where(l =>
-                l.ItemName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.DungeonName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.BossName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.CharacterName.Contains(LootSearchQuery, StringComparison.OrdinalIgnoreCase));
+                l.ItemName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.DungeonName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.BossName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                l.CharacterName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrWhiteSpace(LootFilterType) && Enum.TryParse<DropType>(LootFilterType, out var dt))
+        if (!string.IsNullOrWhiteSpace(_filterType) && Enum.TryParse<DropType>(_filterType, out var dt))
             query = query.Where(l => l.BagType == dt);
 
-        if (!string.IsNullOrWhiteSpace(LootFilterRarity) && Enum.TryParse<ItemRarity>(LootFilterRarity, out var r))
+        if (!string.IsNullOrWhiteSpace(_filterRarity) && Enum.TryParse<ItemRarity>(_filterRarity, out var r))
             query = query.Where(l => l.Rarity == r);
 
         return query;

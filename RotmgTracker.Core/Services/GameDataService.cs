@@ -132,6 +132,15 @@ public class GameDataService
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
         _lootOnlyCatalogPath = Path.Combine(_appDataDir, "loot_only_catalog_v1.json");
+    }
+
+    private bool _initialized;
+
+    /// <summary>Ciężki start (katalogi z dysku, ewentualny skan gry). Wołane raz z AppStartup w tle.</summary>
+    public void Initialize()
+    {
+        if (_initialized) return;
+        _initialized = true;
 
         LoadCachedCatalogs();
 

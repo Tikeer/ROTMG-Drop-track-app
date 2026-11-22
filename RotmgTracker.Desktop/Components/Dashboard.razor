@@ -2,7 +2,25 @@
 @inject TrackerStateService State
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
+@inject AppStartup Startup
 
+@if (Startup.Error != null)
+{
+    <div class="startup-screen">
+        <div class="startup-title">RotMG Tracker could not start</div>
+        <div class="startup-sub">@Startup.Error</div>
+    </div>
+}
+else if (!Startup.IsReady)
+{
+    <div class="startup-screen">
+        <div class="startup-spinner"></div>
+        <div class="startup-title">RotMG Tracker</div>
+        <div class="startup-sub">Loading game data and database...</div>
+    </div>
+}
+else
+{
 <div class="app-shell">
     <!-- LEFT NAVIGATION SIDEBAR (zwijany hamburgerem) -->
     <aside class="sidebar @(SidebarCollapsed ? "collapsed" : "")">
@@ -205,6 +223,8 @@
     </main>
 </div>
 
+}
+
 @code {
     private string ActiveTab { get; set; } = "dashboard";
 
@@ -238,11 +258,12 @@
 
     private string GetNavBadge(string key) => string.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         State.OnStateChanged += HandleExternalStateChanged;
-        if (!Sniffer.IsListening)
-            Sniffer.StartListening();
+        Startup.Changed += HandleExternalStateChanged;
+
+        await Startup.StartAsync();
     }
 
     private void HandleExternalStateChanged() => InvokeAsync(StateHasChanged);
@@ -292,5 +313,6 @@
     public void Dispose()
     {
         State.OnStateChanged -= HandleExternalStateChanged;
+        Startup.Changed -= HandleExternalStateChanged;
     }
 }
