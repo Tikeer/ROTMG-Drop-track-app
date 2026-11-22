@@ -65,9 +65,10 @@ else
 </div>
 
 @{
-    var fights = HighlightedSessionId.HasValue
+    var allFights = HighlightedSessionId.HasValue
         ? State.Data.CombatHistory.Where(c => c.Id == HighlightedSessionId.Value).ToList()
         : State.Data.CombatHistory;
+    var fights = allFights.Take(VisibleFights).ToList();
 }
 
 @if (fights.Count == 0)
@@ -110,7 +111,20 @@ else
     </div>
 }
 
+@if (fights.Count < allFights.Count)
+{
+    <div style="display: flex; justify-content: center; margin: 14px 0;">
+        <button class="btn" @onclick="LoadMoreFights">Show @FightsPageSize more (@(allFights.Count - fights.Count) left)</button>
+    </div>
+}
+
 @code {
+    private const int FightsPageSize = 20;
+
+    private int VisibleFights { get; set; } = FightsPageSize;
+
+    private void LoadMoreFights() => VisibleFights += FightsPageSize;
+
     [Parameter] public Guid? HighlightedSessionId { get; set; }
     [Parameter] public EventCallback<Guid?> HighlightedSessionIdChanged { get; set; }
 
