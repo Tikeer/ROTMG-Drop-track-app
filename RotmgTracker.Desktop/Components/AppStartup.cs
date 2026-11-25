@@ -42,6 +42,8 @@ public sealed class AppStartup
         var total = System.Diagnostics.Stopwatch.StartNew();
         long gameMs = 0, stateMs = 0;
 
+        StartPoolProbe();
+
         try
         {
             await Task.WhenAll(
@@ -68,6 +70,13 @@ public sealed class AppStartup
             return;
         }
 
+        if (Environment.GetEnvironmentVariable("ROTMG_NO_SNIFFER") == "1")
+        {
+            LogTiming("sniffer DISABLED by ROTMG_NO_SNIFFER");
+            Changed?.Invoke();
+            return;
+        }
+
         // Sniffer (otwieranie interfejsów pcap) w tle, bez blokowania UI
         _ = Task.Run(() =>
         {
@@ -79,6 +88,32 @@ public sealed class AppStartup
                 Changed?.Invoke();
             }
         });
+    }
+    
+    // Diagnostyka: co 500 ms wrzuca zadanie do puli wątków i mierzy, ile czeka na uruchomienie
+    private static void StartPoolProbe()
+    {
+        var thread = new Thread(() =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                while (sw.ElapsedMilliseconds < 20000)
+                {
+                    long queuedAt = sw.ElapsedMilliseconds;
+                    long ranAt = -1;
+                    using var done = new ManualResetEventSlim(false);
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        ranAt = sw.ElapsedMilliseconds;
+                        done.Set();
+                    });
+                    bool ok = done.Wait(5000);
+                    string delay = ok ? $"{ranAt - queuedAt} ms" : ">5000 ms";
+                    LogTiming($"pool probe t={queuedAt} ms: queue delay {delay}, threads {ThreadPool.ThreadCount}, pending {ThreadPool.PendingWorkItemCount}");
+                    Thread.Sleep(500);
+                }
+            })
+            { IsBackground = true };
+        thread.Start();
     }
 
     private static void LogTiming(string line)

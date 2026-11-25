@@ -268,7 +268,13 @@ else
         await Startup.StartAsync();
     }
 
-    private void HandleExternalStateChanged() => InvokeAsync(StateHasChanged);
+    private int _notifyCount;
+
+    private void HandleExternalStateChanged()
+    {
+        Interlocked.Increment(ref _notifyCount);
+        InvokeAsync(StateHasChanged);
+    }
 
     private System.Diagnostics.Stopwatch? _tabWatch;
     private string _tabWatchName = "";
@@ -295,8 +301,10 @@ else
         try
         {
             long netMs = watch.ElapsedMilliseconds;
-            int clickToPaintMs = await JS.InvokeAsync<int>("rotmgNextPaint");
-            UiTiming.Log($"tab '{name}': .NET render {netMs} ms, click -> painted {clickToPaintMs} ms");
+            int notifies = Interlocked.Exchange(ref _notifyCount, 0);
+            int[] r = await JS.InvokeAsync<int[]>("rotmgNextPaint");
+            int[] stalls = await JS.InvokeAsync<int[]>("rotmgTakeStalls");
+            UiTiming.Log($"tab '{name}': .NET render {netMs} ms, click->DOM change {r[0]} ms, click->painted {r[1]} ms, state notifies {notifies}, JS stalls [{string.Join(",", stalls)}]");
         }
         catch { }
     }

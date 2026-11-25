@@ -11,6 +11,7 @@ public class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        //ThreadPool.SetMinThreads(200, 200);
         var appBuilder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
         appBuilder.Services.AddSingleton<TrackerStateService>();
