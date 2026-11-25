@@ -11,7 +11,10 @@ public class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        //ThreadPool.SetMinThreads(200, 200);
+        // SharpPcap trzyma po jednym wątku z puli na każdy interfejs sieciowy (na macOS ~25).
+        // Bez wyższego minimum pula dokłada wątki co ~500 ms i przez ~15 s kolejka zdarzeń UI stoi.
+        ThreadPool.SetMinThreads(Math.Max(Environment.ProcessorCount * 4, 64), 64);
+
         var appBuilder = PhotinoBlazorAppBuilder.CreateDefault(args);
 
         appBuilder.Services.AddSingleton<TrackerStateService>();
