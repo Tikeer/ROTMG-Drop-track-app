@@ -5,6 +5,7 @@
 </div>
 
 @{
+    _loot = State.GetLootSnapshot(_scope);
     var allGroups = UiHelpers.GroupByBagInstance(GetFilteredLootHistory());
     var visibleGroups = allGroups.Take(VisibleBags).ToList();
     int totalDrops = allGroups.Sum(g => g.Count);
@@ -24,6 +25,11 @@
             }
         </datalist>
     }
+    
+    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Which characters' drops to show">
+        <option value="ALL">All characters</option>
+        <option value="ACTIVE">Active: @State.ActiveCharacter.FormattedTitle</option>
+    </select>
 
     <select class="select" value="@LootFilterDungeon" @onchange="OnDungeonChanged">
         <option value="">All Dungeons</option>
@@ -145,6 +151,9 @@ else
     private string _filterType = "";
     private string _filterRarity = "";
     private bool _showOther = true;
+    
+    private DataScope _scope = DataScope.AllCharacters;
+    private List<LootDropRecord> _loot = new();
 
     private int VisibleBags { get; set; } = DefaultPageSize;
 
@@ -194,10 +203,18 @@ else
         _filterBoss = "";
         VisibleBags = PageSize;
     }
+    
+    private void OnScopeChanged(ChangeEventArgs e)
+    {
+        _scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
+        _filterDungeon = "";
+        _filterBoss = "";
+        VisibleBags = PageSize;
+    }
 
     private List<string> GetDungeonOptions()
     {
-        return State.Data.LootHistory
+        return _loot
             .Select(l => l.DungeonName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -210,7 +227,7 @@ else
         if (string.IsNullOrEmpty(_filterDungeon))
             return new List<string>();
 
-        return State.Data.LootHistory
+        return _loot
             .Where(l => string.Equals(l.DungeonName, _filterDungeon, StringComparison.OrdinalIgnoreCase))
             .Select(l => l.BossName)
             .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -225,7 +242,7 @@ else
         if (q.Length < 2)
             return new List<string>();
 
-        return State.Data.LootHistory
+        return _loot
             .Select(l => l.ItemName)
             .Where(n => n.Contains(q, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -236,7 +253,7 @@ else
 
     private IEnumerable<LootDropRecord> GetFilteredLootHistory()
     {
-        var query = State.Data.LootHistory.AsEnumerable();
+        var query = _loot.AsEnumerable();
 
         if (!_showOther)
             query = query.Where(l => l.BagType != DropType.Other);

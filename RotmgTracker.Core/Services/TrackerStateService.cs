@@ -322,6 +322,21 @@ public partial class TrackerStateService
         SaveAsync();
         NotifyStateChanged();
     }
+    
+    // Bezpieczna kopia historii lootu (render nie enumeruje żywej listy, do której sniffer dopisuje)
+    public List<LootDropRecord> GetLootSnapshot(DataScope scope = DataScope.AllCharacters)
+    {
+        lock (_stateLock)
+        {
+            if (scope == DataScope.ActiveCharacter)
+            {
+                Guid activeId = ActiveCharacter.Id;
+                return Data.LootHistory.Where(l => l.CharacterId == activeId).ToList();
+            }
+
+            return Data.LootHistory.ToList();
+        }
+    }
 
     public void RemoveLootRecord(Guid lootId)
     {

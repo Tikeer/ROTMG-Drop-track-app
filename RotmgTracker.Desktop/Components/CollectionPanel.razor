@@ -7,6 +7,11 @@
 
 <div class="quest-add-bar" style="flex-wrap: wrap; gap: 14px;">
     <input class="input" style="max-width: 240px;" placeholder="Search item name..." @bind="CollectionSearch" @bind:event="oninput" />
+    
+    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Whose drops count as owned">
+        <option value="ALL">All characters</option>
+        <option value="ACTIVE">Active: @State.ActiveCharacter.FormattedTitle</option>
+    </select>
 
     <select class="select" @bind="CollectionCategoryFilter">
         <option value="ALL">All Categories</option>
@@ -44,11 +49,12 @@
 </div>
 
 @{
+    _loot = State.GetLootSnapshot(_scope);
     var filteredCollection = GetFilteredCollectionItems().ToList();
-    var ownedCountsById = State.Data.LootHistory
+    var ownedCountsById = _loot
         .GroupBy(l => l.ItemId)
         .ToDictionary(g => g.Key, g => g.Count());
-    var ownedCountsByName = State.Data.LootHistory
+    var ownedCountsByName = _loot
         .GroupBy(l => l.ItemName, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
@@ -105,6 +111,14 @@
     private string CollectionOwnershipFilter { get; set; } = "ALL";
     private bool CollectionIncludeTiered { get; set; } = false;
     private int CollectionMinTier { get; set; } = 12;
+    
+    private DataScope _scope = DataScope.AllCharacters;
+    private List<LootDropRecord> _loot = new();
+
+    private void OnScopeChanged(ChangeEventArgs e)
+    {
+        _scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
+    }
 
     private IEnumerable<ItemMetadata> GetFilteredCollectionItems()
     {
@@ -131,8 +145,8 @@
 
         if (CollectionOwnershipFilter != "ALL")
         {
-            var ownedIds = State.Data.LootHistory.Select(l => l.ItemId).ToHashSet();
-            var ownedNames = State.Data.LootHistory.Select(l => l.ItemName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var ownedIds = _loot.Select(l => l.ItemId).ToHashSet();
+            var ownedNames = _loot.Select(l => l.ItemName).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             if (CollectionOwnershipFilter == "OWNED")
                 items = items.Where(i => ownedIds.Contains(i.ItemId) || ownedNames.Contains(i.Name));
