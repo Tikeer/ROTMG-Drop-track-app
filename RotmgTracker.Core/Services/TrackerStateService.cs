@@ -35,7 +35,10 @@ public partial class TrackerStateService
     public TrackerSaveData Data { get; private set; } = new();
 
     public string LinkedAccountName { get; private set; } = string.Empty;
-    public string CurrentSeasonTag { get; private set; } = "S1";
+    public const string DefaultSeasonTag = "S31";
+    private bool _seasonTagsMigrated;
+
+    public string CurrentSeasonTag { get; private set; } = DefaultSeasonTag;
     public string CurrentServerName { get; private set; } = "EUWest";
 
     public string? PendingAccountName { get; private set; }
@@ -93,7 +96,7 @@ public partial class TrackerStateService
         InitializeDatabaseAndLoad();
     }
 
-    private void InitializeDatabaseAndLoad()
+        private void InitializeDatabaseAndLoad()
     {
         DatabaseMigrator.Initialize(_dbFilePath);
 
@@ -106,6 +109,7 @@ public partial class TrackerStateService
         {
             TryMigrateLegacyJson();
             EnsureDropsInitialized();
+            MigrateSeasonTagsOnce();
             SaveToSqlite();
             return;
         }
@@ -128,10 +132,19 @@ public partial class TrackerStateService
         if (accountSetting != null)
             LinkedAccountName = accountSetting.Value;
 
+        var seasonSetting = db.Settings.FirstOrDefault(s => s.Key == "CurrentSeasonTag");
+        if (seasonSetting != null && IsValidSeasonTag(seasonSetting.Value))
+            CurrentSeasonTag = seasonSetting.Value;
+
+        _seasonTagsMigrated = db.Settings.Any(s => s.Key == "SeasonTagsMigrated" && s.Value == "1");
         _legacyCountersRestored = db.Settings.Any(s => s.Key == "LegacyCountersRestored" && s.Value == "1");
 
         EnsureDropsInitialized();
         RestoreLegacyCountersOnce();
+
+        // Jednorazowo: stare rekordy (tagi S1-S4 z dawnego dropdownu) -> S31
+        if (MigrateSeasonTagsOnce())
+            SaveAsync();
 
         // Drops = LegacyDrops + loot z historii (naprawia wcześniej wyzerowane liczniki)
         foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
@@ -148,6 +161,48 @@ public partial class TrackerStateService
             l.RarityScore = RarityScoreEngine.CalculateIntrinsicScore(
                 l.BagType, l.Rarity, l.IsShiny, l.GraveDifficulty, l.DungeonDifficulty, l.ItemName);
         }
+    }
+    
+    // Tag sezonu: "S" + liczba, np. "S31" (bez części sezonu - D2)
+    public static bool IsValidSeasonTag(string? tag)
+    {
+        return !string.IsNullOrEmpty(tag)
+               && tag.Length is >= 2 and <= 4
+               && tag[0] == 'S'
+               && tag.Skip(1).All(char.IsDigit);
+    }
+
+    // Zmienia aktualny sezon (używany przez nowo tworzone postacie); istniejące postacie zachowują swój tag
+    public bool SetCurrentSeason(string tag)
+    {
+        tag = (tag ?? string.Empty).Trim().ToUpperInvariant();
+        if (!IsValidSeasonTag(tag)) return false;
+
+        lock (_stateLock)
+        {
+            if (CurrentSeasonTag == tag) return true;
+            CurrentSeasonTag = tag;
+        }
+
+        SaveAsync();
+        NotifyStateChanged();
+        return true;
+    }
+
+    // Jednorazowa migracja (D1): wszystkie dotychczasowe rekordy należą do sezonu S31
+    private bool MigrateSeasonTagsOnce()
+    {
+        if (_seasonTagsMigrated) return false;
+        _seasonTagsMigrated = true;
+
+        foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
+            ch.SeasonTag = DefaultSeasonTag;
+        foreach (var l in Data.LootHistory)
+            l.SeasonTag = DefaultSeasonTag;
+        foreach (var r in Data.DungeonRuns)
+            r.SeasonTag = DefaultSeasonTag;
+
+        return true;
     }
 
     private CharacterSession CreateFreshCharacter(string name, RotmgClass rotmgClass, bool isSeasonal, int rotmgCharId = 0)
@@ -982,7 +1037,7 @@ public partial class TrackerStateService
 
         private readonly object _dbWriteLock = new();
 
-    private void SaveToSqlite()
+        private void SaveToSqlite()
     {
         List<CharacterSession> characters;
         List<DungeonMarkQuest> quests;
@@ -993,6 +1048,8 @@ public partial class TrackerStateService
         List<WishlistTarget> wishlist;
         string activeCharacterId;
         string linkedAccountName;
+        string currentSeasonTag;
+        bool seasonTagsMigrated;
         bool legacyCountersRestored;
 
         // Krótki lock: tylko migawka stanu. Postacie kopiowane głęboko (sniffer zmienia ich słowniki),
@@ -1008,6 +1065,8 @@ public partial class TrackerStateService
             wishlist = Data.Wishlist.ToList();
             activeCharacterId = Data.ActiveCharacterId.ToString();
             linkedAccountName = LinkedAccountName;
+            currentSeasonTag = CurrentSeasonTag;
+            seasonTagsMigrated = _seasonTagsMigrated;
             legacyCountersRestored = _legacyCountersRestored;
         }
 
@@ -1036,6 +1095,9 @@ public partial class TrackerStateService
 
             db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = activeCharacterId });
             db.Settings.Add(new AppSetting { Key = "LinkedAccountName", Value = linkedAccountName });
+            db.Settings.Add(new AppSetting { Key = "CurrentSeasonTag", Value = currentSeasonTag });
+            if (seasonTagsMigrated)
+                db.Settings.Add(new AppSetting { Key = "SeasonTagsMigrated", Value = "1" });
             if (legacyCountersRestored)
                 db.Settings.Add(new AppSetting { Key = "LegacyCountersRestored", Value = "1" });
 

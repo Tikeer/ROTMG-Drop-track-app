@@ -102,11 +102,11 @@ else
         <!-- GLOBAL CHARACTER & SEASON BAR -->
         <div class="char-bar">
             <div class="char-selector-group">
-                <select class="select" style="width: 85px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged" title="Active Season Tag">
-                    <option value="S1">S1</option>
-                    <option value="S2">S2</option>
-                    <option value="S3">S3</option>
-                    <option value="S4">S4</option>
+                <select class="select" style="width: 85px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged" title="Current season (applies to newly created characters)">
+                    @foreach (var s in SeasonChoices())
+                    {
+                        <option value="@s">@s</option>
+                    }
                 </select>
                 
                 <span class="@(State.ActiveCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
@@ -323,11 +323,20 @@ else
 
     private void OnSeasonChanged(ChangeEventArgs e)
     {
-        if (e.Value is string s && !string.IsNullOrWhiteSpace(s))
-        {
-            State.ActiveCharacter.SeasonTag = s;
-            State.SaveAsync();
-        }
+        if (e.Value is string s)
+            State.SetCurrentSeason(s);
+    }
+
+    private List<string> SeasonChoices()
+    {
+        int cur = int.TryParse(State.CurrentSeasonTag.AsSpan(1), out int n) ? n : 31;
+        int first = Math.Min(cur, 31);
+        int last = Math.Max(cur, 31) + 3;
+
+        var list = new List<string>();
+        for (int i = first; i <= last; i++)
+            list.Add($"S{i}");
+        return list;
     }
 
     private void OnBaseFameChanged(ChangeEventArgs e)
