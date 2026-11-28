@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """
-Builds RotmgTracker.Core/Data/item_sources.json (v3) directly from DECA's official ORG_*, REALMWHITE,
-and ST setName metadata inside RotMG Exalt's resources.assets XML, grouped by Dungeon -> Boss -> Items
-plus Dungeon -> ST Items.
+Builds RotmgTracker.Core/Data/item_sources.json (v4) from:
+  1. TrollOutt/rotmg-tools RealmEye archive (realmeye-enrichment.json + realmeye-data.json),
+     providing exact Dungeon -> Boss / Miniboss / Dungeon Minions -> Items, ST Sets with exact
+     enemy/boss sources, and Realm Event Bosses / Biomes.
+  2. Official DECA ORG_* and REALMWHITE labels from local resources.assets as a fallback for
+     brand-new items not yet linked on RealmEye.
 
 Usage:
     python3 tools/build_item_sources.py
+    python3 tools/build_item_sources.py --fetch   # re-downloads latest JSONs from GitHub into /tmp
 """
 
 import argparse
@@ -13,6 +17,7 @@ import json
 import os
 import re
 import sys
+import urllib.request
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
@@ -20,7 +25,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO_ROOT / "RotmgTracker.Core" / "Data" / "item_sources.json"
 
-# Official DECA XML <Labels> ORG_* tags -> exact PortalMetadata.DungeonName in GameDataService
+ENRICHMENT_URL = "https://raw.githubusercontent.com/TrollOutt/rotmg-tools/main/data/Index/realmeye-enrichment.json"
+REALMEYE_DATA_URL = "https://raw.githubusercontent.com/TrollOutt/rotmg-tools/main/web/realmeye-data.json"
+DEFAULT_ENRICHMENT_CACHE = Path("/tmp/rt_enrichment.json")
+DEFAULT_REALMEYE_DATA_CACHE = Path("/tmp/rt_realmeye_data.json")
+
+# Official DECA XML <Labels> ORG_* tags -> canonical DungeonName (fallback only)
 ORG_LABEL_TO_DUNGEON: dict[str, str] = {
     "ORG_OSANC": "Oryx's Sanctuary",
     "ORG_OSANC_S": "Oryx's Sanctuary",
@@ -60,7 +70,7 @@ ORG_LABEL_TO_DUNGEON: dict[str, str] = {
     "ORG_REEF": "Cnidarian Reef",
     "ORG_DAVY": "Davy Jones' Locker",
     "ORG_OTRENCH": "Ocean Trench",
-    "ORG_ICECAVE": "Ice Cave",
+    "ORG_ICECAVE": "Ice Citadel",
     "ORG_CEM": "Haunted Cemetery",
     "ORG_ABYSS": "Abyss of Demons",
     "ORG_SEWER": "Toxic Sewers",
@@ -84,7 +94,106 @@ ORG_LABEL_TO_DUNGEON: dict[str, str] = {
     "ORG_SETPIECE": "Realm of the Mad God",
 }
 
-# Exact enemy DisplayName / IdName matching GameDataService.ResolveEnemyByName for sprite lookup
+# Portals to skip from RealmEye (retired / temporary / heroic / advanced duplicates)
+EXCLUDED_PORTAL_SUBSTRINGS = (
+    "(original)",
+    "(old)",
+    "legacy ",
+    "heroic ",
+    "halloween ",
+    "infernal ",
+    "advanced kogbold",
+    "plagued nest",
+    "stromwell's rift",
+    "trials of cronus",
+    "white snake invasion",
+    "oryxmania",
+    "diagram dungeon",
+    "tutorial",
+    "candy miner",
+    "admin arena",
+    "stoneborn memory",
+    "memory of the infected",
+    "time chamber",
+    "oryx's kitchen",
+    "santa's workshop",
+    "rainbow road",
+    "queen bunny chamber",
+    "neo forax",
+    "neo katalund",
+    "neo malogia",
+    "neo untaris",
+)
+
+# Normalize RealmEye portal names to match GameDataService PortalMetadata.DungeonName
+PORTAL_ALIASES: dict[str, str] = {
+    "Ice Cave": "Ice Citadel",
+    "Oryx's Chamber": "Oryx's Castle",
+    "Wine Cellar": "Oryx's Castle",
+}
+
+# Normalize RealmEye enemy display names to exact GameDataService.ResolveEnemyByName names for sprites
+BOSS_NAME_ALIASES: dict[str, str] = {
+    "oryx-the-mad-god-3": "Oryx the Mad God 3",
+    "oryx-the-mad-god-2": "Oryx the Mad God 2",
+    "oryx-the-mad-god": "Oryx the Mad God",
+    "lord-of-the-lost-lands": "Lord of the Lost Lands",
+    "hermit-god": "Hermit God",
+    "grand-sphinx": "Grand Sphinx",
+    "cube-god": "Cube God",
+    "skull-shrine": "Skull Shrine",
+    "pentaract": "Pentaract Tower",
+    "ghost-ship": "Ghost Ship",
+    "rock-dragon": "Rock Dragon",
+    "crystal-prisoner": "Crystal Prisoner",
+    "avatar-of-the-forgotten-king": "Avatar of the Forgotten King",
+    "the-bridge-sentinel": "The Bridge Sentinel",
+    "twilight-archmage": "Twilight Archmage",
+    "the-forgotten-king": "The Forgotten King",
+    "archbishop-leucoryx": "Archbishop Leucoryx",
+    "chancellor-dammah": "Chancellor Dammah",
+    "chief-beisa": "Chief Beisa",
+    "treasurer-gemsbok": "Treasurer Gemsbok",
+    "marble-colossus": "Marble Colossus",
+    "void-entity": "Void Entity",
+    "malus": "Malus",
+    "soulwarden-murcian": "Soulwarden Murcian",
+    "doctor-lobotomik": "Doctor Lobotomik",
+    "overseer-oculon": "Overseer Oculon",
+    "groundskeeper-gretch": "Groundskeeper Gretch",
+    "griefkeeper-zole": "Griefkeeper Zole",
+    "factory-control-core": "Factory Control Core",
+    "dancer-miko": "Dancer Miko",
+    "sage-genji": "Sage Genji",
+    "drummer-kaguya": "Drummer Kaguya",
+    "kitsune-umi": "Kitsune Umi",
+    "Pentaract": "Pentaract Tower",
+    "Archdemon Malphas": "Malphas, Gilded Forgemaster",
+    "Septavius the Ghost God": "Septavius, Master of the Undead",
+    "Esben the Unwilling": "Esben the Neurotic",
+    "Oryx the Mad God#Oryx the Mad God 3": "Oryx the Mad God 3",
+    "Oryx the Mad God#Oryx the Mad God 2": "Oryx the Mad God 2",
+}
+
+# Moonlight Village boss fallback (Makakoyumi/Kagenohikari/Tezutsu Hanabi pages lack dropped_by in enrichment)
+MOONLIGHT_BOSS_OVERRIDES: dict[str, str] = {
+    "Taiko Drums": "Dancer Miko",
+    "Flowering Kimono": "Dancer Miko",
+    "Mischief": "Dancer Miko",
+    "Makakoyumi": "Sage Genji",
+    "+Makakoyumi": "Sage Genji",
+    "Sage's Wakibiki": "Sage Genji",
+    "Vigor": "Sage Genji",
+    "Tezutsu Hanabi": "Drummer Kaguya",
+    "+Tezutsu Hanabi": "Drummer Kaguya",
+    "Ethereal Happi": "Drummer Kaguya",
+    "Fortitude": "Drummer Kaguya",
+    "Kagenohikari": "Kitsune Umi",
+    "+Kagenohikari": "Kitsune Umi",
+    "Elegant Parasol": "Kitsune Umi",
+    "Rain Maker": "Kitsune Umi",
+}
+
 DEFAULT_DUNGEON_BOSS: dict[str, str] = {
     "Abyss of Demons": "Malphas, Gilded Forgemaster",
     "Ancient Ruins": "Sandstone Titan",
@@ -99,8 +208,9 @@ DEFAULT_DUNGEON_BOSS: dict[str, str] = {
     "Forest Maze": "Mama Megamoth",
     "Fungal Cavern": "Crystal Worm Mother",
     "Haunted Cemetery": "Ghost of Skuld",
+    "Hidden Interregnum": "The Syndicate",
     "High Tech Terror": "F.E.R.A.L.",
-    "Ice Cave": "Esben the Neurotic",
+    "Ice Citadel": "Esben the Neurotic",
     "Kogbold Steamworks": "Factory Control Core",
     "Lair of Draconis": "Ivory Wyvern",
     "Lair of Shaitan": "Shaitan the Advisor",
@@ -137,7 +247,6 @@ DEFAULT_DUNGEON_BOSS: dict[str, str] = {
     "Woodland Labyrinth": "Murderous Megamoth",
 }
 
-# Canonical boss ordering per multi-boss dungeon
 BOSS_ORDER: dict[str, list[str]] = {
     "Oryx's Sanctuary": [
         "Archbishop Leucoryx",
@@ -150,6 +259,7 @@ BOSS_ORDER: dict[str, list[str]] = {
         "The Bridge Sentinel",
         "Twilight Archmage",
         "The Forgotten King",
+        "Dungeon Minions",
     ],
     "Moonlight Village": [
         "Dancer Miko",
@@ -173,221 +283,33 @@ BOSS_ORDER: dict[str, list[str]] = {
     ],
     "Tomb of the Ancients": ["Bes", "Nut", "Geb"],
     "Mad Lab": ["Dr Terrible", "Horrific Creation"],
-    "Oryx's Castle": ["Stone Guardian", "Janus the Doorwarden", "Oryx the Mad God"],
+    "Oryx's Castle": ["Stone Guardian", "Janus the Doorwarden", "Oryx the Mad God", "Oryx the Mad God 2"],
     "Deadwater Docks": ["Calamity Crab", "Jon Bilgewater the Pirate King"],
-    "Realm of the Mad God": [
-        "Lord of the Lost Lands",
-        "Hermit God",
-        "Grand Sphinx",
-        "Cube God",
-        "Skull Shrine",
-        "Pentaract Tower",
-        "Avatar of the Forgotten King",
-        "Rock Dragon",
-        "Ghost Ship",
-        "Crystal Prisoner",
-        "Realm Encounters & Biomes",
-    ],
+    "The Nest": ["The Beekeeper", "Killer Bee Queen"],
+    "Kogbold Steamworks": ["Kogbold Flying Machine", "Factory Control Core", "Dungeon Minions"],
 }
 
-# Exact (Dungeon, ItemBaseName) -> BossName overrides for multi-boss dungeons & Realm event bosses
-ITEM_TO_BOSS: dict[tuple[str, str], str] = {
-    # Oryx's Sanctuary
-    ("Oryx's Sanctuary", "Lumiaire"): "Archbishop Leucoryx",
-    ("Oryx's Sanctuary", "Chaotic Scripture"): "Archbishop Leucoryx",
-    ("Oryx's Sanctuary", "Vesture of Duality"): "Archbishop Leucoryx",
-    ("Oryx's Sanctuary", "Divine Coronation"): "Archbishop Leucoryx",
-    ("Oryx's Sanctuary", "Superior"): "Chancellor Dammah",
-    ("Oryx's Sanctuary", "Genesis Spell"): "Chancellor Dammah",
-    ("Oryx's Sanctuary", "Diplomatic Robe"): "Chancellor Dammah",
-    ("Oryx's Sanctuary", "Chancellor's Cranium"): "Chancellor Dammah",
-    ("Oryx's Sanctuary", "Enforcer"): "Chief Beisa",
-    ("Oryx's Sanctuary", "Battalion Banner"): "Chief Beisa",
-    ("Oryx's Sanctuary", "Centaur's Shielding"): "Chief Beisa",
-    ("Oryx's Sanctuary", "Excubicur"): "Chief Beisa",
-    ("Oryx's Sanctuary", "Avarice"): "Treasurer Gemsbok",
-    ("Oryx's Sanctuary", "Gambler's Fate"): "Treasurer Gemsbok",
-    ("Oryx's Sanctuary", "Turncoat Cape"): "Treasurer Gemsbok",
-    ("Oryx's Sanctuary", "Collector's Monocle"): "Treasurer Gemsbok",
-    ("Oryx's Sanctuary", "Divinity"): "Oryx the Mad God 3",
-    ("Oryx's Sanctuary", "Oryx's Escutcheon"): "Oryx the Mad God 3",
-    ("Oryx's Sanctuary", "Gladiator Guard"): "Oryx the Mad God 3",
-    ("Oryx's Sanctuary", "Exalted God's Horn"): "Oryx the Mad God 3",
-    ("Oryx's Sanctuary", "Ballistic Star"): "Oryx the Mad God 3",
-    ("Oryx's Sanctuary", "Eternal Echo"): "Oryx the Mad God 3",
-    # The Shatters
-    ("The Shatters", "Sentinel's Sidearm"): "The Bridge Sentinel",
-    ("The Shatters", "Vanguard's Visage"): "The Bridge Sentinel",
-    ("The Shatters", "Royal Guard's Cuirass"): "The Bridge Sentinel",
-    ("The Shatters", "Bracer of the Guardian"): "The Bridge Sentinel",
-    ("The Shatters", "Mantle of the Monarchy"): "The Bridge Sentinel",
-    ("The Shatters", "Valor"): "Twilight Archmage",
-    ("The Shatters", "Primal Arcana"): "Twilight Archmage",
-    ("The Shatters", "Vest of Abandoned Shadows"): "Twilight Archmage",
-    ("The Shatters", "The Twilight Gemstone"): "Twilight Archmage",
-    ("The Shatters", "Polarity Poison"): "Twilight Archmage",
-    ("The Shatters", "Dusky Catalyst"): "Twilight Archmage",
-    ("The Shatters", "Warmonger"): "The Forgotten King",
-    ("The Shatters", "Peacekeeper"): "The Forgotten King",
-    ("The Shatters", "Noble Mandolin"): "The Forgotten King",
-    ("The Shatters", "Crest of the Rising Sun"): "The Forgotten King",
-    ("The Shatters", "Sovereign Cinder-Blade"): "The Forgotten King",
-    ("The Shatters", "The Forgotten Crown"): "The Forgotten King",
-    ("The Shatters", "The Golden Forgotten Crown"): "The Forgotten King",
-    ("The Shatters", "Ice Crown"): "The Forgotten King",
-    # Moonlight Village
-    ("Moonlight Village", "Taiko Drums"): "Dancer Miko",
-    ("Moonlight Village", "Flowering Kimono"): "Dancer Miko",
-    ("Moonlight Village", "Mischief"): "Dancer Miko",
-    ("Moonlight Village", "Makakoyumi"): "Sage Genji",
-    ("Moonlight Village", "+Makakoyumi"): "Sage Genji",
-    ("Moonlight Village", "Sage's Wakibiki"): "Sage Genji",
-    ("Moonlight Village", "Vigor"): "Sage Genji",
-    ("Moonlight Village", "Tezutsu Hanabi"): "Drummer Kaguya",
-    ("Moonlight Village", "+Tezutsu Hanabi"): "Drummer Kaguya",
-    ("Moonlight Village", "Ethereal Happi"): "Drummer Kaguya",
-    ("Moonlight Village", "Fortitude"): "Drummer Kaguya",
-    ("Moonlight Village", "Kagenohikari"): "Kitsune Umi",
-    ("Moonlight Village", "Elegant Parasol"): "Kitsune Umi",
-    ("Moonlight Village", "Rain Maker"): "Kitsune Umi",
-    # Spectral Penitentiary
-    ("Spectral Penitentiary", "Sinister Syringes"): "Doctor Lobotomik",
-    ("Spectral Penitentiary", "Cackling Straitjacket"): "Doctor Lobotomik",
-    ("Spectral Penitentiary", "Blood Ritual Tools"): "Doctor Lobotomik",
-    ("Spectral Penitentiary", "Command Cornea"): "Overseer Oculon",
-    ("Spectral Penitentiary", "Ocular Entrapment"): "Overseer Oculon",
-    ("Spectral Penitentiary", "Overwhelming Axehead"): "Groundskeeper Gretch",
-    ("Spectral Penitentiary", "Wretched Rags"): "Groundskeeper Gretch",
-    ("Spectral Penitentiary", "Tools of the Tarnished"): "Groundskeeper Gretch",
-    ("Spectral Penitentiary", "Motivational Megaphone"): "Griefkeeper Zole",
-    ("Spectral Penitentiary", "Pandemic Poison"): "Griefkeeper Zole",
-    ("Spectral Penitentiary", "Damnation"): "Soulwarden Murcian",
-    ("Spectral Penitentiary", "Deliverance"): "Soulwarden Murcian",
-    ("Spectral Penitentiary", "Boundless Vessel"): "Soulwarden Murcian",
-    ("Spectral Penitentiary", "Amulet of Restoration"): "Soulwarden Murcian",
-    # Lair of Draconis
-    ("Lair of Draconis", "Fire Dragon Battle Armor"): "Pyyr the Crimson Dragon",
-    ("Lair of Draconis", "Water Dragon Silk Robe"): "Nikao the Azure Dragon",
-    ("Lair of Draconis", "Leaf Dragon Hide Armor"): "Limoz the Viridian Dragon",
-    ("Lair of Draconis", "Midnight Star"): "Feargus the Obsidian Dragon",
-    ("Lair of Draconis", "Arashi"): "Feargus the Obsidian Dragon",
-    ("Lair of Draconis", "Celestial Blade"): "Ivory Wyvern",
-    ("Lair of Draconis", "Snowflake Blade"): "Ivory Wyvern",
-    ("Lair of Draconis", "Draconic Insignia"): "Ivory Wyvern",
-    ("Lair of Draconis", "Forbidden Artifact"): "Ivory Wyvern",
-    ("Lair of Draconis", "Vision of Draconis"): "Ivory Wyvern",
-    # Tomb of the Ancients
-    ("Tomb of the Ancients", "Ring of the Pyramid"): "Bes",
-    ("Tomb of the Ancients", "Tome of Holy Protection"): "Bes",
-    ("Tomb of the Ancients", "Tome of Frigid Protection"): "Bes",
-    ("Tomb of the Ancients", "Ring of the Nile"): "Nut",
-    ("Tomb of the Ancients", "Frimarra"): "Nut",
-    ("Tomb of the Ancients", "Ring of the Sphinx"): "Geb",
-    ("Tomb of the Ancients", "Pharaoh's Requiem"): "Geb",
-    ("Tomb of the Ancients", "Ring of the Northern Light"): "Geb",
-    # Mad Lab
-    ("Mad Lab", "Conducting Wand"): "Dr Terrible",
-    ("Mad Lab", "Eggstatic Conductor"): "Dr Terrible",
-    ("Mad Lab", "Robe of the Mad Scientist"): "Dr Terrible",
-    ("Mad Lab", "Experimental Ring"): "Dr Terrible",
-    ("Mad Lab", "Scepter of Fulmination"): "Horrific Creation",
-    ("Mad Lab", "Storm Caller"): "Horrific Creation",
-    # Oryx's Castle
-    ("Oryx's Castle", "Ancient Stone Sword"): "Stone Guardian",
-    ("Oryx's Castle", "Spiteful Scutum"): "Janus the Doorwarden",
-    ("Oryx's Castle", "Esoteric Buckler"): "Janus the Doorwarden",
-    ("Oryx's Castle", "Cloak of the Mad God"): "Oryx the Mad God",
-    ("Oryx's Castle", "Tome of Holy Furor"): "Oryx the Mad God",
-    ("Oryx's Castle", "Tome of the Dragon"): "Oryx the Mad God",
-    # Deadwater Docks
-    ("Deadwater Docks", "Wavecrest Concertina"): "Calamity Crab",
-    ("Deadwater Docks", "Ghost Ship's Bell"): "Calamity Crab",
-    # Realm of the Mad God classic Event Bosses
-    ("Realm of the Mad God", "Shield of Ogmur"): "Lord of the Lost Lands",
-    ("Realm of the Mad God", "Shield of Jawgmur"): "Lord of the Lost Lands",
-    ("Realm of the Mad God", "Helm of the Juggernaut"): "Hermit God",
-    ("Realm of the Mad God", "Helm of the Juggernaut - Chaos"): "Hermit God",
-    ("Realm of the Mad God", "Helm of the Juggernaut - Jade"): "Hermit God",
-    ("Realm of the Mad God", "Helm of the Juggernaut - Midas"): "Hermit God",
-    ("Realm of the Mad God", "Helm of the Jack-o'-naut"): "Hermit God",
-    ("Realm of the Mad God", "Dirk of Cronus"): "Cube God",
-    ("Realm of the Mad God", "Phantasm Dirk"): "Cube God",
-    ("Realm of the Mad God", "Orb of Conflict"): "Skull Shrine",
-    ("Realm of the Mad God", "Orb of Conflict - Chaos"): "Skull Shrine",
-    ("Realm of the Mad God", "Orb of Terror"): "Skull Shrine",
-    ("Realm of the Mad God", "Seal of Blasphemous Prayer"): "Pentaract Tower",
-    ("Realm of the Mad God", "Tablet of the King's Avatar"): "Avatar of the Forgotten King",
-    ("Realm of the Mad God", "Ray Katana"): "Rock Dragon",
-    ("Realm of the Mad God", "Trap of the Vile Spirit"): "Ghost Ship",
-    ("Realm of the Mad God", "Trap of the Blood Spirit"): "Ghost Ship",
-    ("Realm of the Mad God", "Crystal Sword"): "Crystal Prisoner",
-    ("Realm of the Mad God", "Crystal Wand"): "Crystal Prisoner",
-}
-
-# Official ST Set name (XML setName attribute) -> DungeonName where the set drops
-ST_SET_TO_DUNGEON: dict[str, str] = {
-    "Magmatic Mystic Set": "Abyss of Demons",
-    "Earthen Bulwark Summoner Set": "Ancient Ruins",
-    "Swoll Paladin Set": "Candyland Hunting Grounds",
-    "Legacy Swoll Paladin Set": "Candyland Hunting Grounds",
-    "Slurp Scion Wizard Set": "Cnidarian Reef",
-    "Crystal Kunoichi Set": "Crystal Cavern",
-    "Hollow King Necromancer Set": "Cultist Hideout",
-    "Archexorcist Priest Set": "Cursed Library",
-    "Spectral Sentry Rogue Set": "Davy Jones' Locker",
-    "Pirate King Warrior Set": "Deadwater Docks",
-    "Shaman Necromancer Set": "Forbidden Jungle",
-    "Skuld 2 The ReGhostening Set": "Haunted Cemetery",
-    "Legacy Skuld 2 The ReGhostening Set": "Haunted Cemetery",
-    "Mechanical Raptor Druid Set": "High Tech Terror",
-    "Nordic Knight Set": "Ice Cave",
-    "Kogbold Pyrotechnician Wizard Set": "Kogbold Steamworks",
-    "Kogbold Turretsmith Archer Set": "Kogbold Steamworks",
-    "Dragon Tamer Set": "Lair of Draconis",
-    "Fiery Kensei Set": "Lair of Shaitan",
-    "Lost Golem Set": "Lost Halls",
-    "Corrupted Paladin": "Lost Halls",
-    "Horrific Sorcerer Set": "Mad Lab",
-    "Scientific Summoner Set": "Mad Lab",
-    "Horticultural Huntress Set": "Magic Woods",
-    "Vampire Rogue Set": "Manor of the Immortals",
-    "Raijin Disciple Set": "Moonlight Village",
-    "Akuma Slayer Set": "Mountain Temple",
-    "Onmyoji Ninja Set": "Mountain Temple",
-    "Tidal Wave Kensei Set": "Ocean Trench",
-    "Oryx Awesome Set": "Oryx's Castle",
-    "Oryx's Battle Attires": "Oryx's Sanctuary",
-    "Flesh Collector Set": "Parasite Chambers",
-    "Court Magician Sorcerer Set": "Puppet Master's Theatre",
-    "Storm Shaman Set": "Secluded Thicket",
-    "Spellbound Soulthief Set": "Spectral Penitentiary",
-    "Extra Dimensional Druid Set": "Sprite World",
-    "Swamp Hermit Druid Set": "Sulfurous Wetlands",
-    "Swarming Huntress Set": "The Nest",
-    "Twilight Archmage Set": "The Shatters",
-    "Legacy Twilight Archmage Set": "The Shatters",
-    "Cuboid Necromancer Set": "The Third Dimension",
-    "Void Doctor Priest Set": "The Void",
-    "Priest of Geb Set": "Tomb of the Ancients",
-    "Acidified Assassin Set": "Toxic Sewers",
-    "Alchemist Assassin Set": "Toxic Sewers",
-    "Phantom Archer Set": "Undead Lair",
-    "Phytomancer Summoner Set": "Woodland Labyrinth",
-    # Realm / World ST Sets
-    "Phylactery Mystic Set": "Realm of the Mad God",
-    "Mad God's Messenger Set": "Realm of the Mad God",
-    "Plague Doctor Priest Set": "Realm of the Mad God",
-    "Storm Caller Bard Set": "Realm of the Mad God",
-    "Angelic Bard Set": "Realm of the Mad God",
-    "Daring Discoverer Samurai Set": "Realm of the Mad God",
-    "Treasure Hunter Archer Set": "Realm of the Mad God",
-    "Timekeeper Mystic": "Realm of the Mad God",
-    "Ancestral Shaman Set": "Realm of the Mad God",
-    "Astral Arcanist Set": "Realm of the Mad God",
-    "Golden Archer Set": "Realm of the Mad God",
-    "Daeva Trickster": "Realm of the Mad God",
-    "2-Bit Mystic Set": "Realm of the Mad God",
-}
+# Ignore global/temporary chests & universal event bosses so they don't hijack dungeon items
+IGNORED_DROP_SOURCES = (
+    "quest-chest",
+    "quest chest",
+    "mystery",
+    "reward-ticket",
+    "event-chest",
+    "event chest",
+    "the-crucible",
+    "the-tinkerer",
+    "the-keyper",
+    "the keyper",
+    "biff",
+    "leprechaun",
+    "oryxmas",
+    "santa",
+    "interregnum-treasure-chest",
+    "heroic ",
+    "retro ",
+    "voided ",
+)
 
 
 def find_resources_assets() -> Path | None:
@@ -420,29 +342,47 @@ def strip_shiny(name: str) -> str:
     return s
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate item_sources.json v3 (Dungeon -> Boss -> Items + ST Sets) from resources.assets.")
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
-    args = parser.parse_args()
+def to_slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
-    assets_path = find_resources_assets()
-    cat_path = find_item_catalog()
-    if not assets_path or not cat_path:
-        print("ERROR: Could not locate resources.assets or item_catalog_v*.json", file=sys.stderr)
-        return 1
 
-    cat_items = json.loads(cat_path.read_text(encoding="utf-8"))
-    # Collectible items only: non-tiered (Tier < 0), exclude Blueprints (Quality == 5)
-    cat_by_id = {it["ItemId"]: it for it in cat_items if it.get("Tier", -1) < 0 and it.get("Quality") != 5}
+def normalize_portal(raw_name: str) -> str | None:
+    clean = raw_name.split("#")[0].strip()
+    low = clean.lower()
+    if any(sub in low for sub in EXCLUDED_PORTAL_SUBSTRINGS):
+        return None
+    return PORTAL_ALIASES.get(clean, clean)
 
+
+def normalize_boss_name(raw: str) -> str:
+    if raw in BOSS_NAME_ALIASES:
+        return BOSS_NAME_ALIASES[raw]
+    no_prefix = raw[6:] if raw.startswith("enemy:") else raw
+    if no_prefix in BOSS_NAME_ALIASES:
+        return BOSS_NAME_ALIASES[no_prefix]
+    clean = no_prefix.split("#")[0].strip()
+    if clean in BOSS_NAME_ALIASES:
+        return BOSS_NAME_ALIASES[clean]
+    if clean.lower() in BOSS_NAME_ALIASES:
+        return BOSS_NAME_ALIASES[clean.lower()]
+    return clean
+
+
+def is_ignored_source(raw: str) -> bool:
+    low = raw.lower()
+    return any(tok in low for tok in IGNORED_DROP_SOURCES)
+
+
+def ensure_cached(path: Path, url: str, force: bool) -> Path:
+    if force or not path.is_file():
+        print(f"Downloading {url} -> {path} ...")
+        urllib.request.urlretrieve(url, path)
+    return path
+
+
+def load_org_fallbacks(assets_path: Path, cat_by_id: dict[int, dict]) -> dict[str, set[str]]:
     raw = assets_path.read_bytes()
-    # dungeon -> set of base UT/White item names
-    ut_by_dungeon: dict[str, set[str]] = defaultdict(set)
-    # dungeon -> set of base ST item names
-    st_by_dungeon: dict[str, set[str]] = defaultdict(set)
-    mapped_by_obj: set[str] = set()
-    fp_candidates: dict[str, set[str]] = defaultdict(set)
-
+    org_by_base: dict[str, set[str]] = defaultdict(set)
     pos = 0
     while True:
         s = raw.find(b"<Objects>", pos)
@@ -460,7 +400,6 @@ def main() -> int:
             root = ET.fromstring(chunk)
         except Exception:
             continue
-
         for obj in root.findall("Object"):
             t = obj.attrib.get("type")
             if not t:
@@ -469,97 +408,343 @@ def main() -> int:
             it = cat_by_id.get(tid)
             if not it:
                 continue
-
             base_name = strip_shiny(it["Name"])
             labels = [x.strip().upper() for x in (obj.findtext("Labels") or "").split(",") if x.strip()]
-            set_name = (obj.attrib.get("setName") or "").strip()
-            is_st = it.get("Quality") == 3 or "ST" in labels or "TAB_ST" in labels or bool(set_name)
-
-            # 1. ST Set -> Dungeon mapping
-            if set_name and set_name in ST_SET_TO_DUNGEON:
-                st_by_dungeon[ST_SET_TO_DUNGEON[set_name]].add(base_name)
-                mapped_by_obj.add(base_name.lower())
-                continue
-
-            # 2. Exact per-object <Labels> (ORG_* / REALMWHITE)
             for lbl in labels:
-                dungeon = ORG_LABEL_TO_DUNGEON.get(lbl)
-                if dungeon:
-                    if is_st:
-                        st_by_dungeon[dungeon].add(base_name)
-                    else:
-                        ut_by_dungeon[dungeon].add(base_name)
-                    mapped_by_obj.add(base_name.lower())
+                d = ORG_LABEL_TO_DUNGEON.get(lbl)
+                if d:
+                    org_by_base[base_name.lower()].add(d)
+    return org_by_base
 
-        # 3. Single-dungeon ForgeProperties fallback
-        for fp in root.findall("ForgeProperties"):
-            t = fp.attrib.get("type")
-            if not t:
-                continue
-            tid = int(t, 0)
-            it = cat_by_id.get(tid)
-            if not it:
-                continue
-            base_name = strip_shiny(it["Name"])
-            for r in fp.findall("RequireDismantleWithLabel"):
-                lbl = (r.text or "").strip().upper()
-                if "," in lbl:
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate item_sources.json v4 from TrollOutt/rotmg-tools RealmEye archive + resources.assets.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--enrichment", type=Path, default=DEFAULT_ENRICHMENT_CACHE)
+    parser.add_argument("--realmeye-data", type=Path, default=DEFAULT_REALMEYE_DATA_CACHE)
+    parser.add_argument("--fetch", action="store_true", help="Re-download latest rotmg-tools JSONs from GitHub")
+    args = parser.parse_args()
+
+    enr_path = ensure_cached(args.enrichment, ENRICHMENT_URL, args.fetch)
+    rd_path = ensure_cached(args.realmeye_data, REALMEYE_DATA_URL, args.fetch)
+    cat_path = find_item_catalog()
+    assets_path = find_resources_assets()
+    if not cat_path:
+        print("ERROR: Could not locate item_catalog_v9.json / v8.json", file=sys.stderr)
+        return 1
+
+    enr = json.loads(enr_path.read_text(encoding="utf-8"))["records"]
+    rd = json.loads(rd_path.read_text(encoding="utf-8"))
+    cat_items = json.loads(cat_path.read_text(encoding="utf-8"))
+
+    # Collectible non-tiered non-BP items (we include Legacy/Reskin base names too so if toggled on, they map properly!)
+    cat_by_id = {it["ItemId"]: it for it in cat_items if it.get("Tier", -1) < 0 and it.get("Quality") != 5}
+    base_items: dict[str, tuple[str, bool, str]] = {}  # lower -> (displayBaseName, isSt, setName)
+    for it in cat_by_id.values():
+        bname = strip_shiny(it["Name"])
+        low = bname.lower()
+        is_st = it.get("Quality") == 3
+        sname = (it.get("SetName") or "").strip()
+        if low not in base_items:
+            base_items[low] = (bname, is_st, sname)
+
+    org_fallbacks = load_org_fallbacks(assets_path, cat_by_id) if assets_path else {}
+
+    # 1. Index canonical dungeons -> bosses, minibosses/troom, minions, and dungeon_drop_interest
+    boss_to_dungeons: dict[str, set[str]] = defaultdict(set)      # boss_name_low -> {dungeon}
+    minion_to_dungeons: dict[str, set[str]] = defaultdict(set)    # enemy_name_low -> {dungeon}
+    portal_drop_interest: dict[str, set[str]] = defaultdict(set)  # item_low or slug -> {dungeon}
+
+    for k, v in enr.items():
+        if not k.startswith("portal:"):
+            continue
+        raw_p = k[7:]
+        if raw_p.endswith((" Enemies", " Guide")):
+            continue
+        dungeon = normalize_portal(raw_p)
+        if not dungeon:
+            continue
+
+        for r in v.get("relations", []):
+            rt = r.get("type")
+            to = r.get("to", "")
+            slug = r.get("toRealmEye", "")
+            if rt in ("dungeon_boss", "dungeon_miniboss", "dungeon_treasure_boss"):
+                if to.startswith("enemy:"):
+                    bname = normalize_boss_name(to)
+                    boss_to_dungeons[bname.lower()].add(dungeon)
+                if slug:
+                    boss_to_dungeons[normalize_boss_name(slug).lower()].add(dungeon)
+                    boss_to_dungeons[slug.lower()].add(dungeon)
+            elif rt in ("dungeon_enemy", "dungeon_minion", "dungeon_boss_minion"):
+                if to.startswith("enemy:"):
+                    ename = normalize_boss_name(to)
+                    minion_to_dungeons[ename.lower()].add(dungeon)
+                if slug:
+                    minion_to_dungeons[slug.lower()].add(dungeon)
+            elif rt == "dungeon_drop_interest":
+                if to.startswith("item:"):
+                    portal_drop_interest[to[5:].split("#")[0].strip().lower()].add(dungeon)
+                if slug:
+                    portal_drop_interest["slug:" + slug.lower()].add(dungeon)
+
+    # Ensure well-known multi-boss dungeon bosses are explicitly bound to their dungeon
+    for d, blist in BOSS_ORDER.items():
+        for b in blist:
+            if b != "Dungeon Minions":
+                boss_to_dungeons[b.lower()].add(d)
+    for d, b in DEFAULT_DUNGEON_BOSS.items():
+        if d != "Realm of the Mad God":
+            boss_to_dungeons[b.lower()].add(d)
+
+    # 2. Index Realm biomes & creatures from realmeye-data.json
+    biome_names: dict[str, str] = {}
+    for b in (rd["biomes"].values() if isinstance(rd["biomes"], dict) else rd["biomes"]):
+        bid = b.get("id", "")
+        btitle = b.get("name") or b.get("slug", bid).replace("-", " ").title()
+        biome_names[bid] = btitle
+
+    realm_creature_role: dict[str, tuple[str, str]] = {}  # creature_low -> (displayName, role_or_biome)
+    realm_drop_sources: dict[str, list[tuple[str, str]]] = defaultdict(list)  # item_low -> [(creatureName, role_or_biome)]
+    creatures_iter = rd["creatures"].values() if isinstance(rd["creatures"], dict) else rd["creatures"]
+    for c in creatures_iter:
+        cname = normalize_boss_name(c.get("name", "").replace("’", "'"))
+        groups = c.get("groups") or []
+        role = groups[0].get("role", "regular") if groups else "regular"
+        biome_id = groups[0].get("biome", "") if groups else ""
+        biome_label = biome_names.get(biome_id, biome_id.replace("-", " ").title())
+        realm_creature_role[cname.lower()] = (cname, role if role != "regular" else f"Biome: {biome_label}")
+        for dr in (c.get("detail") or {}).get("drops") or []:
+            dname = (dr.get("name") or "").strip().replace("’", "'")
+            if dname:
+                realm_drop_sources[dname.lower()].append((cname, role, biome_label))
+
+    # 3. Index item enrichment records by lowercase base item name
+    enr_items_by_low: dict[str, list[dict]] = defaultdict(list)
+    for k, v in enr.items():
+        if k.startswith("item:"):
+            low = k[5:].split("#")[0].strip().lower()
+            enr_items_by_low[low].append(v)
+
+    # Output accumulators:
+    # dungeon -> boss -> set of UT items
+    ut_map: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    # dungeon -> item_base_name -> boss_name (for ST items)
+    st_map: dict[str, dict[str, str]] = defaultdict(dict)
+
+    # Also build ST Set -> resolved dungeon from items that HAVE RealmEye sources,
+    # so any missing piece of the same 4-piece ST set inherits its set's dungeon!
+    resolved_st_set_dungeon: dict[str, tuple[str, str]] = {}
+    unresolved_st_items: list[tuple[str, str]] = []  # (bname, setName)
+
+    def resolve_item(low: str, bname: str, is_st: bool, set_name: str) -> bool:
+        slug = to_slug(bname)
+        enr_recs = enr_items_by_low.get(low, [])
+
+        # Collect clean dropped_by enemies/portals from RealmEye item page
+        re_enemies: list[str] = []
+        re_portals: list[str] = []
+        for rv in enr_recs:
+            for r in rv.get("relations", []):
+                if r.get("type") != "dropped_by":
                     continue
-                dungeon = ORG_LABEL_TO_DUNGEON.get(lbl)
-                if dungeon:
-                    fp_candidates[base_name].add(dungeon)
+                to = r.get("to", "")
+                rslug = r.get("toRealmEye", "")
+                if is_ignored_source(to) or is_ignored_source(rslug):
+                    continue
+                if to.startswith("enemy:"):
+                    re_enemies.append(normalize_boss_name(to))
+                elif to.startswith("portal:"):
+                    np = normalize_portal(to[7:])
+                    if np:
+                        re_portals.append(np)
+                elif rslug:
+                    re_enemies.append(normalize_boss_name(rslug))
 
-    for base_name, dungeons in fp_candidates.items():
-        if base_name.lower() not in mapped_by_obj:
-            for d in dungeons:
-                ut_by_dungeon[d].add(base_name)
+        # Deduplicate preserving order
+        re_enemies = list(dict.fromkeys(re_enemies))
+        interest_dungeons = portal_drop_interest.get(low, set()) | portal_drop_interest.get("slug:" + slug, set())
 
-    all_dungeons = sorted(set(ut_by_dungeon.keys()) | set(st_by_dungeon.keys()), key=str.lower)
+        # Special handling for Eternal Phoenix drops (Realm encounter, NOT dungeon bosses!)
+        if any(e.lower() == "eternal phoenix" for e in re_enemies):
+            if is_st:
+                st_map["Realm of the Mad God"][bname] = "Eternal Phoenix"
+            else:
+                ut_map["Realm of the Mad God"]["Eternal Phoenix"].add(bname)
+            return True
+
+        # Step 1: Match dropped_by enemy -> known dungeon boss/miniboss/troom
+        boss_matches: list[tuple[str, str]] = []
+        for enemy in re_enemies:
+            dset = boss_to_dungeons.get(enemy.lower(), set())
+            if not dset:
+                continue
+            # Prefer dungeon also listed in portal_drop_interest if multiple
+            preferred = dset & interest_dungeons if (dset & interest_dungeons) else dset
+            for d in sorted(preferred):
+                boss_matches.append((d, enemy))
+
+        if boss_matches:
+            # Prefer a single primary dungeon if all enemies are in the same dungeon, or add per dungeon
+            seen_d = set()
+            for d, boss in boss_matches:
+                if is_st:
+                    if bname not in st_map[d]:
+                        st_map[d][bname] = boss
+                    if set_name and set_name not in resolved_st_set_dungeon:
+                        resolved_st_set_dungeon[set_name] = (d, boss)
+                else:
+                    ut_map[d][boss].add(bname)
+                seen_d.add(d)
+            return True
+
+        # Step 2: Match dropped_by enemy -> dungeon minions (clear drops like Fungal Breastplate / Shatters armors / Molten Mantle)
+        minion_matches: list[tuple[str, str]] = []
+        for enemy in re_enemies:
+            dset = minion_to_dungeons.get(enemy.lower(), set())
+            if not dset:
+                continue
+            preferred = dset & interest_dungeons if (dset & interest_dungeons) else dset
+            for d in sorted(preferred):
+                minion_matches.append((d, enemy))
+
+        if minion_matches:
+            for d, enemy in minion_matches:
+                if is_st:
+                    if bname not in st_map[d]:
+                        st_map[d][bname] = enemy
+                    if set_name and set_name not in resolved_st_set_dungeon:
+                        resolved_st_set_dungeon[set_name] = (d, enemy)
+                else:
+                    ut_map[d]["Dungeon Minions"].add(bname)
+            return True
+
+        # Step 3: Realm Event Bosses & Biomes from realmeye-data.json + dropped_by Realm encounters
+        rd_srcs = realm_drop_sources.get(low, [])
+        if rd_srcs:
+            # Prefer encounter/hero/beacon boss over regular biome mobs
+            encounters = [c for c, role, _ in rd_srcs if role != "regular"]
+            if encounters:
+                boss = encounters[0]
+            else:
+                biomes = [bl for _, _, bl in rd_srcs if bl]
+                boss = f"{biomes[0]} (Biome)" if biomes else rd_srcs[0][0]
+            if is_st:
+                st_map["Realm of the Mad God"][bname] = boss
+                if set_name and set_name not in resolved_st_set_dungeon:
+                    resolved_st_set_dungeon[set_name] = ("Realm of the Mad God", boss)
+            else:
+                ut_map["Realm of the Mad God"][boss].add(bname)
+            return True
+
+        # Check if dropped_by enemy is a Realm creature (even if not in rd_srcs)
+        for enemy in re_enemies:
+            if enemy.lower() in realm_creature_role:
+                cname, role_or_biome = realm_creature_role[enemy.lower()]
+                target_boss = cname if not role_or_biome.startswith("Biome:") else f"{role_or_biome[7:].strip()} (Biome)"
+                if is_st:
+                    st_map["Realm of the Mad God"][bname] = target_boss
+                else:
+                    ut_map["Realm of the Mad God"][target_boss].add(bname)
+                return True
+
+        # Step 4: Portal drop_interest or dropped_by portal
+        cand_dungeons = set(re_portals) | set(interest_dungeons)
+        if cand_dungeons:
+            for d in sorted(cand_dungeons):
+                boss = MOONLIGHT_BOSS_OVERRIDES.get(bname) if d == "Moonlight Village" else None
+                boss = boss or DEFAULT_DUNGEON_BOSS.get(d, d)
+                if is_st:
+                    st_map[d][bname] = boss
+                    if set_name and set_name not in resolved_st_set_dungeon:
+                        resolved_st_set_dungeon[set_name] = (d, boss)
+                else:
+                    ut_map[d][boss].add(bname)
+            return True
+
+        # Step 5: Fallback to official DECA ORG_* / REALMWHITE labels from resources.assets
+        org_d = org_fallbacks.get(low, set())
+        if org_d:
+            for d in sorted(org_d):
+                boss = MOONLIGHT_BOSS_OVERRIDES.get(bname) if d == "Moonlight Village" else None
+                boss = boss or DEFAULT_DUNGEON_BOSS.get(d, d)
+                if is_st:
+                    st_map[d][bname] = boss
+                    if set_name and set_name not in resolved_st_set_dungeon:
+                        resolved_st_set_dungeon[set_name] = (d, boss)
+                else:
+                    ut_map[d][boss].add(bname)
+            return True
+
+        return False
+
+    # First pass: resolve all items
+    for low, (bname, is_st, set_name) in sorted(base_items.items()):
+        ok = resolve_item(low, bname, is_st, set_name)
+        if not ok and is_st and set_name:
+            unresolved_st_items.append((bname, set_name))
+
+    # Second pass: any ST piece whose sibling pieces in the same ST set resolved to a dungeon inherits it
+    for bname, set_name in unresolved_st_items:
+        if set_name in resolved_st_set_dungeon:
+            d, boss = resolved_st_set_dungeon[set_name]
+            st_map[d][bname] = boss
+
+    # Build final sorted JSON output (v4)
+    all_dungeons = sorted(set(ut_map.keys()) | set(st_map.keys()), key=str.lower)
     dungeons_out: dict[str, dict] = {}
     unique_items: set[str] = set()
     total_boss_groups = 0
     total_st = 0
 
     for d in all_dungeons:
-        boss_buckets: dict[str, list[str]] = defaultdict(list)
-        default_boss = DEFAULT_DUNGEON_BOSS.get(d, d)
-
-        for item_name in sorted(ut_by_dungeon.get(d, set()), key=str.lower):
-            boss = ITEM_TO_BOSS.get((d, item_name), default_boss)
-            boss_buckets[boss].append(item_name)
-            unique_items.add(item_name.lower())
-
-        # Sort boss buckets by canonical BOSS_ORDER, then alphabetically
+        bdict = ut_map.get(d, {})
         order = BOSS_ORDER.get(d, [])
-        order_idx = {b: idx for idx, b in enumerate(order)}
+        order_idx = {b.lower(): idx for idx, b in enumerate(order)}
+
         sorted_bosses = sorted(
-            boss_buckets.items(),
-            key=lambda kv: (order_idx.get(kv[0], 999), kv[0].lower()),
+            bdict.items(),
+            key=lambda kv: (
+                1 if kv[0] == "Dungeon Minions" else 0,
+                1 if "(Biome)" in kv[0] else 0,
+                order_idx.get(kv[0].lower(), 500),
+                kv[0].lower(),
+            ),
         )
 
-        boss_entries = [{"boss": b, "items": items} for b, items in sorted_bosses if items]
+        boss_entries = []
+        for boss_name, items in sorted_bosses:
+            sorted_items = sorted(items, key=str.lower)
+            if sorted_items:
+                boss_entries.append({"boss": boss_name, "items": sorted_items})
+                for it in sorted_items:
+                    unique_items.add(it.lower())
         total_boss_groups += len(boss_entries)
 
-        st_items = sorted(st_by_dungeon.get(d, set()), key=str.lower)
-        for s_it in st_items:
-            unique_items.add(s_it.lower())
-        total_st += len(st_items)
+        st_entries = [
+            {"item": item_name, "boss": boss_name}
+            for item_name, boss_name in sorted(st_map.get(d, {}).items(), key=lambda kv: kv[0].lower())
+        ]
+        for se in st_entries:
+            unique_items.add(se["item"].lower())
+        total_st += len(st_entries)
 
-        dungeons_out[d] = {
-            "bosses": boss_entries,
-            "st": st_items,
-        }
+        if boss_entries or st_entries:
+            dungeons_out[d] = {
+                "bosses": boss_entries,
+                "st": st_entries,
+            }
 
     payload = {
-        "_info": "Generated from official DECA ORG_*, REALMWHITE, and ST setName XML metadata in resources.assets. Grouped by Dungeon -> Boss -> Items + ST Sets.",
-        "version": 3,
+        "_info": "Generated from TrollOutt/rotmg-tools RealmEye archive (realmeye-enrichment.json + realmeye-data.json) with DECA resources.assets ORG_* fallback.",
+        "version": 4,
         "dungeons": dungeons_out,
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"Wrote {args.output}: {len(dungeons_out)} dungeons, {total_boss_groups} boss groups, {total_st} ST mappings, {len(unique_items)} unique base items")
-    for check_d in ("Oryx's Sanctuary", "The Shatters", "Moonlight Village", "Spectral Penitentiary", "Lost Halls", "The Void"):
+    for check_d in ("Oryx's Sanctuary", "The Shatters", "Moonlight Village", "Spectral Penitentiary", "Lost Halls", "The Void", "The Nest", "Hidden Interregnum", "Kogbold Steamworks", "Abyss of Demons"):
         entry = dungeons_out.get(check_d, {})
         b_summary = [(b["boss"], len(b["items"])) for b in entry.get("bosses", [])]
         print(f"  [{check_d}] bosses={b_summary}, st={len(entry.get('st', []))}")

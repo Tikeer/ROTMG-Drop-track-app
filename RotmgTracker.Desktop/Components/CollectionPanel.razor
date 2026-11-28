@@ -718,7 +718,10 @@ else
                 foreach (var e in r.StItems)
                 {
                     distinctShownIds.Add(e.Meta.ItemId);
-                    stTiles.Add(BuildTile(e.Meta, e.OwnedCount, e.BestRarity, e.BestScore, e.RarityCounts, e.BossName, r.DungeonName, portalSmallStyle, 30, _stBagSpriteStyle));
+                    string stBossStyle = Sprites.TryGetBossSprite(0, e.BossName, out var sbRect)
+                        ? Sprites.BuildSpriteCss(sbRect, 22)
+                        : _stBagSpriteStyle;
+                    stTiles.Add(BuildTile(e.Meta, e.OwnedCount, e.BestRarity, e.BestScore, e.RarityCounts, e.BossName, r.DungeonName, portalSmallStyle, 30, stBossStyle));
                 }
 
                 double pct = r.CompletionPercent;

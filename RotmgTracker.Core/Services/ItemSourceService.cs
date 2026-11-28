@@ -209,9 +209,19 @@ public sealed class ItemSourceService
                     {
                         foreach (var stItemEl in stEl.EnumerateArray())
                         {
-                            string? rawName = stItemEl.GetString();
-                            if (!string.IsNullOrWhiteSpace(rawName))
-                                AddMapping(rawName, dungeon, "ST Sets", isSt: true);
+                            if (stItemEl.ValueKind == JsonValueKind.String)
+                            {
+                                string? rawName = stItemEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(rawName))
+                                    AddMapping(rawName, dungeon, "ST Sets", isSt: true);
+                            }
+                            else if (stItemEl.ValueKind == JsonValueKind.Object)
+                            {
+                                string? rawName = stItemEl.TryGetProperty("item", out var iProp) ? iProp.GetString() : null;
+                                string? rawBoss = stItemEl.TryGetProperty("boss", out var bProp) ? bProp.GetString() : null;
+                                if (!string.IsNullOrWhiteSpace(rawName))
+                                    AddMapping(rawName, dungeon, string.IsNullOrWhiteSpace(rawBoss) ? "ST Sets" : rawBoss.Trim(), isSt: true);
+                            }
                         }
                     }
                 }
@@ -337,9 +347,9 @@ public sealed class ItemSourceService
 
             var counts = agg != null ? (int[])agg.RarityCounts.Clone() : new int[5];
             bool putInSt = isSt || meta.Quality == DropType.ST;
-            string displayBoss = putInSt
-                ? (string.IsNullOrWhiteSpace(meta.SetName) ? "ST Item" : meta.SetName)
-                : boss;
+            string displayBoss = !string.IsNullOrWhiteSpace(boss) && !boss.Equals("ST Sets", StringComparison.OrdinalIgnoreCase)
+                ? boss
+                : (string.IsNullOrWhiteSpace(meta.SetName) ? "ST Item" : meta.SetName);
 
             var entry = new TrophyHallItem(
                 Meta: meta,
