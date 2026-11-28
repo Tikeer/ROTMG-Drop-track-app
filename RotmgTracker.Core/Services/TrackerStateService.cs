@@ -348,6 +348,21 @@ public partial class TrackerStateService
         }
     }
 
+    // Bezpieczna kopia ukończeń dungeonów pod _stateLock (np. kolumna Comp w Trophy Hall)
+    public List<DungeonRunRecord> GetDungeonRunsSnapshot(DataScope scope = DataScope.AllCharacters)
+    {
+        lock (_stateLock)
+        {
+            if (scope == DataScope.ActiveCharacter)
+            {
+                Guid activeId = ActiveCharacter.Id;
+                return Data.DungeonRuns.Where(r => r.CharacterId == activeId).ToList();
+            }
+
+            return Data.DungeonRuns.ToList();
+        }
+    }
+
     public void RemoveLootRecord(Guid lootId)
     {
         using var guard = LockState();

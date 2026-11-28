@@ -11,7 +11,7 @@ public readonly record struct SpriteRect(int X, int Y, int W, int H);
 /// </summary>
 public sealed class SpriteAtlasService
 {
-    private const int ManifestVersion = 2;
+    private const int ManifestVersion = 3;
     private const int Padding = 1;
     private const string GuiAtlasSourceKey = "__GUI_ATLAS__";
 
@@ -409,7 +409,7 @@ public sealed class SpriteAtlasService
         if (!string.IsNullOrWhiteSpace(dungeonName) &&
             dungeonName.Contains("Realm of the Mad God", StringComparison.OrdinalIgnoreCase))
         {
-            return TryGetSprite("lofiEnvironment2", 0x36, out rect);
+            return TryGetSprite("lofiEnvironment", 0x7b, out rect);
         }
 
         PortalMetadata? portal = portalObjectType > 0

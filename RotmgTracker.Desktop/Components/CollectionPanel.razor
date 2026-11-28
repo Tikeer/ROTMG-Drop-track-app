@@ -1,137 +1,354 @@
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 @inherits StateAwareComponent
 @inject GameDataService GameData
+@inject ItemSourceService ItemSources
 
 <div class="section-header">
-    <h2>Item Collection &amp; Checklist (@GameData.GetAllKnownItems().Count XML Items)</h2>
+    <h2>Item Collection — Trophy Hall</h2>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <button type="button"
+                class="btn btn-sm @(ViewMode == "TROPHY" ? "btn-primary" : "")"
+                @onclick='() => ViewMode = "TROPHY"'>Trophy Hall</button>
+        <button type="button"
+                class="btn btn-sm @(ViewMode == "GRID" ? "btn-primary" : "")"
+                @onclick='() => ViewMode = "GRID"'>Flat Grid</button>
+    </div>
 </div>
 
-<div class="quest-add-bar" style="flex-wrap: wrap; gap: 14px;">
-    <input class="input" style="max-width: 240px;" placeholder="Search item name..." @bind="CollectionSearch" @bind:event="oninput" />
-    
-    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Whose drops count as owned">
+<div class="quest-add-bar" style="flex-wrap: wrap; gap: 10px;">
+    <input class="input" style="min-width: 210px; max-width: 260px;" placeholder="Search item or dungeon..." @bind="CollectionSearch" @bind:event="oninput" />
+
+    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Whose drops & completions count">
         <option value="ALL">All characters</option>
         <option value="ACTIVE">Active: @State.ActiveCharacter.FormattedTitle</option>
     </select>
 
     <select class="select" @bind="CollectionCategoryFilter">
         <option value="ALL">All Categories</option>
-        <option value="LEGENDARY_WHITE">Legendary Whites (Forge Tier S)</option>
+        <option value="LEGENDARY_WHITE">Legendary Whites</option>
         <option value="EVENT_WHITE">Realm Whites</option>
-        <option value="REGULAR_WHITE">Regular Whites (Tier A–D)</option>
+        <option value="REGULAR_WHITE">Regular Whites</option>
         <option value="ST">ST Sets</option>
         <option value="SHINY">Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
-        <option value="BP">Blueprints</option>
+        <option value="BP">Gold Bag / BPs</option>
     </select>
 
     <select class="select" @bind="CollectionOwnershipFilter">
-        <option value="ALL">Show All (Owned & Missing)</option>
+        <option value="ALL">Owned &amp; Missing</option>
         <option value="OWNED">Owned Only</option>
         <option value="MISSING">Missing Only</option>
     </select>
 
-    <label class="checkbox-label" style="background: var(--bg-input); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+    @if (ViewMode == "TROPHY")
+    {
+        <select class="select" @bind="SortMode" title="Sort dungeons">
+            <option value="GRAVES">Sort: Graves ↓</option>
+            <option value="PERCENT">Sort: Progress % ↓</option>
+            <option value="COMP">Sort: Completions ↓</option>
+            <option value="NAME">Sort: Name A–Z</option>
+        </select>
+    }
+
+    <label class="checkbox-label" style="background: var(--bg-input); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
         <input type="checkbox" @bind="CollectionIncludeTiered" />
-        Include Tiered Items
+        Tiered
     </label>
 
     @if (CollectionIncludeTiered)
     {
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
-            <span>Min Tier:</span>
-            <select class="select" style="padding: 4px 8px;" @bind="CollectionMinTier">
-                @for (int t = 1; t <= 14; t++)
-                {
-                    <option value="@t">T@(t)+</option>
-                }
-            </select>
-        </div>
+        <select class="select" style="padding: 5px 8px;" @bind="CollectionMinTier">
+            @for (int t = 1; t <= 14; t++)
+            {
+                <option value="@t">T@(t)+</option>
+            }
+        </select>
     }
 </div>
 
 @{
     _loot = State.GetLootSnapshot(_scope);
-    var filteredCollection = GetFilteredCollectionItems().ToList();
-    var ownedCountsById = _loot
-        .Where(l => l.ItemId > 0)
-        .GroupBy(l => l.ItemId)
-        .ToDictionary(g => g.Key, g => g.Count());
+    _runs = State.GetDungeonRunsSnapshot(_scope);
 
-    int ownedInView = filteredCollection.Count(i => ownedCountsById.ContainsKey(i.ItemId));
+    var baseFilteredItems = GetFilteredCollectionItems(applySearch: ViewMode != "TROPHY").ToList();
+    var ownedStatsById = BuildOwnedStatsById(_loot);
+
+    List<TrophyHallDungeonRow> trophyRows = new();
+    TrophyHallDungeonRow? uncategorizedRow = null;
+    int shownItemCount;
+    int ownedInView;
+
+    if (ViewMode == "TROPHY")
+    {
+        var rawRows = ItemSources.BuildTrophyHall(baseFilteredItems, _loot, _runs, GameData);
+        string q = CollectionSearch.Trim();
+
+        if (!string.IsNullOrEmpty(q))
+        {
+            var matched = new List<TrophyHallDungeonRow>();
+            foreach (var r in rawRows)
+            {
+                if (r.DungeonName.Contains(q, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched.Add(r);
+                }
+                else
+                {
+                    var matchingItems = r.Items.Where(it => it.Meta.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (matchingItems.Count > 0)
+                        matched.Add(r with { Items = matchingItems });
+                }
+            }
+            rawRows = matched;
+        }
+
+        uncategorizedRow = rawRows.FirstOrDefault(r => r.DungeonName.Equals("Other / Uncategorized", StringComparison.OrdinalIgnoreCase));
+        trophyRows = rawRows
+            .Where(r => !r.DungeonName.Equals("Other / Uncategorized", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        trophyRows = SortMode switch
+        {
+            "PERCENT" => trophyRows.OrderByDescending(r => r.CompletionPercent).ThenByDescending(r => r.OwnedCount).ThenByDescending(r => r.Graves).ToList(),
+            "COMP" => trophyRows.OrderByDescending(r => r.Completions).ThenByDescending(r => r.Graves).ThenBy(r => r.DungeonName).ToList(),
+            "NAME" => trophyRows.OrderBy(r => r.DungeonName, StringComparer.OrdinalIgnoreCase).ToList(),
+            _ => trophyRows.OrderByDescending(r => r.Graves).ThenByDescending(r => r.OwnedCount).ThenBy(r => r.DungeonName).ToList()
+        };
+
+        var distinctShownIds = trophyRows.Concat(uncategorizedRow != null ? [uncategorizedRow] : [])
+            .SelectMany(r => r.Items)
+            .Select(i => i.Meta.ItemId)
+            .ToHashSet();
+        shownItemCount = distinctShownIds.Count;
+        ownedInView = distinctShownIds.Count(id => ownedStatsById.ContainsKey(id));
+    }
+    else
+    {
+        shownItemCount = baseFilteredItems.Count;
+        ownedInView = baseFilteredItems.Count(i => ownedStatsById.ContainsKey(i.ItemId));
+    }
+
+    double viewPct = shownItemCount > 0 ? Math.Round((double)ownedInView / shownItemCount * 100.0, 1) : 0.0;
     var overallProgress = UiHelpers.ComputeCollectionProgress(
         GameData.GetAllKnownItems(), _loot, CollectionIncludeTiered, CollectionMinTier);
 }
 
-<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
-    Showing <strong>@filteredCollection.Count</strong> items • Collected in this view:
-    <strong style="color: var(--accent-green);">@ownedInView / @filteredCollection.Count</strong>
-    (@(filteredCollection.Count > 0 ? Math.Round((double)ownedInView / filteredCollection.Count * 100.0, 1) : 0)%)
-    • Overall: <strong>@overallProgress.Owned / @overallProgress.Total</strong> (@overallProgress.Percent%)
+<div class="collection-summary-bar">
+    <div>
+        Showing <strong>@shownItemCount</strong> items • In this view:
+        <strong style="color: var(--accent-green);">@ownedInView / @shownItemCount</strong> (@viewPct%)
+        • Overall: <strong style="color: var(--accent-gold);">@overallProgress.Owned / @overallProgress.Total</strong> (@overallProgress.Percent%)
+    </div>
+    <div style="font-size: 0.78rem; color: var(--text-muted);">
+        Dungeons: <strong>@trophyRows.Count</strong> • Completions in scope: <strong>@_runs.Count</strong>
+    </div>
 </div>
 
-<div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
-    @foreach (var item in filteredCollection.Take(120))
+@if (ViewMode == "TROPHY")
+{
+    if (trophyRows.Count == 0 && uncategorizedRow == null)
     {
-        int count = ownedCountsById.GetValueOrDefault(item.ItemId, 0);
-        bool isOwned = count > 0;
+        <div class="empty-state">No collection items match the current filters.</div>
+    }
+    else
+    {
+        <div class="trophy-table-header">
+            <div class="th-col-dungeon">Dungeon</div>
+            <div class="th-col-graves">Graves</div>
+            <div class="th-col-comp">Comp</div>
+            <div class="th-col-pct">Progress</div>
+            <div class="th-col-items">Collectibles (hover for details)</div>
+        </div>
 
-        <div class="drop-card" style="opacity: @(isOwned ? "1.0" : "0.55"); border-color: @(isOwned ? "var(--accent-green)" : "var(--border-color)");">
-            <div class="drop-card-header">
-                <span class="drop-title">
-                    @UiHelpers.FormatDropType(item.Quality)
-                    @if (!string.IsNullOrEmpty(item.ForgeTier))
-                    {
-                        <span>• Forge @item.ForgeTier</span>
-                    }
-                </span>
-                @if (isOwned)
-                {
-                    <span class="badge-ssnl">[Owned x@(count)]</span>
-                }
-                else
-                {
-                    <span class="badge-nossnl">Missing</span>
-                }
-            </div>
+        <div class="trophy-list">
+            <Virtualize Items="@trophyRows" Context="row" ItemSize="68" OverscanCount="8">
+                <div class="trophy-row @(row.OwnedCount == row.TotalCount && row.TotalCount > 0 ? "trophy-row-complete" : "")">
+                    <div class="th-col-dungeon inline-meta-item" style="gap: 10px;">
+                        <GameSprite PortalObjectType="row.PortalObjectType" DungeonName="@row.DungeonName" Size="28" Title="@row.DungeonName" />
+                        <span class="trophy-dungeon-name" title="@row.DungeonName">@row.DungeonName</span>
+                    </div>
 
-            <div class="collection-item-row">
-                <ItemSprite TextureFile="@item.TextureFile"
-                            TextureIndex="item.TextureIndex"
-                            IsShiny="item.IsShiny"
-                            Size="38"
-                            ShowTooltip="false" />
-                <div style="min-width: 0; flex: 1;">
-                    <div style="font-weight: 700; font-size: 0.92rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                        <span>@item.Name</span>
-                        @if (item.IsShiny)
+                    <div class="th-col-graves">
+                        @if (row.Graves > 0)
                         {
-                            <span class="shiny-pill">SHINY</span>
+                            <span class="graves-pill @GetGravesTierClass(row.Graves)">
+                                @row.Graves.ToString("0.#")
+                                <UiIcon Name="skull" Size="11" />
+                            </span>
+                        }
+                        else
+                        {
+                            <span style="color: var(--text-muted); font-size: 0.78rem;">—</span>
                         }
                     </div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">
-                        ID: 0x@(item.ItemId.ToString("X4"))
+
+                    <div class="th-col-comp">
+                        <span class="trophy-comp-val @(row.Completions > 0 ? "has-comp" : "")">@row.Completions</span>
+                    </div>
+
+                    <div class="th-col-pct">
+                        <div class="trophy-pct-text">
+                            <strong>@row.OwnedCount/@row.TotalCount</strong>
+                            <span>@row.CompletionPercent.ToString("0.#")%</span>
+                        </div>
+                        <div class="trophy-mini-bar">
+                            <div class="trophy-mini-fill" style="width: @(row.CompletionPercent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                    </div>
+
+                    <div class="th-col-items">
+                        @foreach (var entry in row.Items)
+                        {
+                            bool owned = entry.OwnedCount > 0;
+                            string extra = owned
+                                ? $"Owned x{entry.OwnedCount} • Best: {entry.BestRarity}"
+                                : "Not yet dropped";
+
+                            <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
+                                <ItemSprite TextureFile="@entry.Meta.TextureFile"
+                                            TextureIndex="entry.Meta.TextureIndex"
+                                            ItemName="@entry.Meta.Name"
+                                            Rarity="@(owned ? entry.BestRarity : ItemRarity.Common)"
+                                            IsShiny="entry.Meta.IsShiny"
+                                            DropQuality="entry.Meta.Quality"
+                                            RarityScore="@(owned ? entry.BestScore : 0)"
+                                            ExtraMeta="@extra"
+                                            Size="38" />
+                                @if (entry.OwnedCount > 1)
+                                {
+                                    <span class="trophy-count-tag">x@(entry.OwnedCount)</span>
+                                }
+                            </div>
+                        }
                     </div>
                 </div>
+            </Virtualize>
+        </div>
+
+        @if (uncategorizedRow != null)
+        {
+            <div class="uncategorized-section">
+                <button type="button" class="uncategorized-toggle" @onclick="() => ShowUncategorized = !ShowUncategorized">
+                    <span>@(ShowUncategorized ? "▼" : "▶")</span>
+                    <span>Other / Uncategorized Items</span>
+                    <span class="badge-nossnl badge-readonly">
+                        @uncategorizedRow.OwnedCount / @uncategorizedRow.TotalCount (@uncategorizedRow.CompletionPercent.ToString("0.#")%)
+                    </span>
+                </button>
+
+                @if (ShowUncategorized)
+                {
+                    var uncatChunks = ChunkList(uncategorizedRow.Items, 16);
+                    <div class="trophy-uncat-grid">
+                        <Virtualize Items="@uncatChunks" Context="chunk" ItemSize="48" OverscanCount="6">
+                            <div class="trophy-flat-row">
+                                @foreach (var entry in chunk)
+                                {
+                                    bool owned = entry.OwnedCount > 0;
+                                    string extra = owned ? $"Owned x{entry.OwnedCount} • Best: {entry.BestRarity}" : "Not yet dropped";
+                                    <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
+                                        <ItemSprite TextureFile="@entry.Meta.TextureFile"
+                                                    TextureIndex="entry.Meta.TextureIndex"
+                                                    ItemName="@entry.Meta.Name"
+                                                    Rarity="@(owned ? entry.BestRarity : ItemRarity.Common)"
+                                                    IsShiny="entry.Meta.IsShiny"
+                                                    DropQuality="entry.Meta.Quality"
+                                                    RarityScore="@(owned ? entry.BestScore : 0)"
+                                                    ExtraMeta="@extra"
+                                                    Size="38" />
+                                        @if (entry.OwnedCount > 1)
+                                        {
+                                            <span class="trophy-count-tag">x@(entry.OwnedCount)</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </Virtualize>
+                    </div>
+                }
             </div>
+        }
+    }
+}
+else
+{
+    var flatRows = ChunkList(baseFilteredItems, 14);
+    if (flatRows.Count == 0)
+    {
+        <div class="empty-state">No collection items match the current filters.</div>
+    }
+    else
+    {
+        <div class="trophy-uncat-grid">
+            <Virtualize Items="@flatRows" Context="chunk" ItemSize="52" OverscanCount="8">
+                <div class="trophy-flat-row">
+                    @foreach (var item in chunk)
+                    {
+                        bool owned = ownedStatsById.TryGetValue(item.ItemId, out var st);
+                        string extra = owned ? $"Owned x{st.Count} • Best: {st.BestRarity}" : "Not yet dropped";
+                        <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
+                            <ItemSprite TextureFile="@item.TextureFile"
+                                        TextureIndex="item.TextureIndex"
+                                        ItemName="@item.Name"
+                                        Rarity="@(owned ? st.BestRarity : ItemRarity.Common)"
+                                        IsShiny="item.IsShiny"
+                                        DropQuality="item.Quality"
+                                        RarityScore="@(owned ? st.BestScore : 0)"
+                                        ExtraMeta="@extra"
+                                        Size="42" />
+                            @if (owned && st.Count > 1)
+                            {
+                                <span class="trophy-count-tag">x@(st.Count)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </Virtualize>
         </div>
     }
-</div>
+}
 
 @code {
+    private string ViewMode { get; set; } = "TROPHY";
+    private string SortMode { get; set; } = "GRAVES";
+    private bool ShowUncategorized { get; set; }
+
     private string CollectionSearch { get; set; } = "";
     private string CollectionCategoryFilter { get; set; } = "ALL";
     private string CollectionOwnershipFilter { get; set; } = "ALL";
-    private bool CollectionIncludeTiered { get; set; } = false;
+    private bool CollectionIncludeTiered { get; set; }
     private int CollectionMinTier { get; set; } = 12;
-    
+
     private DataScope _scope = DataScope.AllCharacters;
     private List<LootDropRecord> _loot = new();
+    private List<DungeonRunRecord> _runs = new();
 
     private void OnScopeChanged(ChangeEventArgs e)
     {
         _scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
     }
 
-    private IEnumerable<ItemMetadata> GetFilteredCollectionItems()
+    private static Dictionary<int, (int Count, ItemRarity BestRarity, double BestScore)> BuildOwnedStatsById(IReadOnlyList<LootDropRecord> loot)
+    {
+        var dict = new Dictionary<int, (int Count, ItemRarity BestRarity, double BestScore)>();
+        foreach (var l in loot)
+        {
+            if (l.ItemId <= 0) continue;
+            if (dict.TryGetValue(l.ItemId, out var prev))
+            {
+                dict[l.ItemId] = (
+                    prev.Count + 1,
+                    l.Rarity > prev.BestRarity ? l.Rarity : prev.BestRarity,
+                    Math.Max(prev.BestScore, l.RarityScore));
+            }
+            else
+            {
+                dict[l.ItemId] = (1, l.Rarity, l.RarityScore);
+            }
+        }
+        return dict;
+    }
+
+    private IEnumerable<ItemMetadata> GetFilteredCollectionItems(bool applySearch = true)
     {
         var items = GameData.GetAllKnownItems().AsEnumerable();
 
@@ -151,8 +368,11 @@
             _ => items
         };
 
-        if (!string.IsNullOrWhiteSpace(CollectionSearch))
-            items = items.Where(i => i.Name.Contains(CollectionSearch, StringComparison.OrdinalIgnoreCase));
+        if (applySearch && !string.IsNullOrWhiteSpace(CollectionSearch))
+        {
+            string q = CollectionSearch.Trim();
+            items = items.Where(i => i.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
 
         if (CollectionOwnershipFilter != "ALL")
         {
@@ -169,4 +389,26 @@
 
         return items.OrderByDescending(i => i.IsShiny).ThenBy(i => i.Name);
     }
+
+    private static List<List<T>> ChunkList<T>(IReadOnlyList<T> source, int size)
+    {
+        var result = new List<List<T>>((source.Count + size - 1) / size);
+        for (int i = 0; i < source.Count; i += size)
+        {
+            int take = Math.Min(size, source.Count - i);
+            var chunk = new List<T>(take);
+            for (int j = 0; j < take; j++)
+                chunk.Add(source[i + j]);
+            result.Add(chunk);
+        }
+        return result;
+    }
+
+    private static string GetGravesTierClass(double graves) => graves switch
+    {
+        >= 9.0 => "graves-exalt",
+        >= 7.0 => "graves-high",
+        >= 5.0 => "graves-mid",
+        _ => "graves-low"
+    };
 }

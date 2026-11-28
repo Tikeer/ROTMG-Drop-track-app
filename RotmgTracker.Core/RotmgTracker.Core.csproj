@@ -15,4 +15,8 @@
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Content Include="Data\item_sources.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
 </Project>

@@ -20,6 +20,7 @@ public class Program
 
         appBuilder.Services.AddSingleton<TrackerStateService>();
         appBuilder.Services.AddSingleton<GameDataService>();
+        appBuilder.Services.AddSingleton<ItemSourceService>();
         appBuilder.Services.AddSingleton<SpriteAtlasService>();
         appBuilder.Services.AddSingleton<RotmgSnifferService>();
         appBuilder.Services.AddSingleton<UiSettings>();

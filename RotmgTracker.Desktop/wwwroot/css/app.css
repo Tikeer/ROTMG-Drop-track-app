@@ -1607,3 +1607,222 @@ input, select { user-select: text; }
     align-items: center;
     gap: 8px;
 }
+
+/* ===== Item Collection Trophy Hall (UI v2.5 Step 10) ===== */
+.collection-summary-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    padding: 0 2px;
+}
+
+.trophy-table-header {
+    display: grid;
+    grid-template-columns: 210px 76px 64px 116px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 14px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.trophy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.trophy-row {
+    display: grid;
+    grid-template-columns: 210px 76px 64px 116px 1fr;
+    gap: 12px;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px 14px;
+    transition: border-color 0.14s, background 0.14s;
+}
+
+.trophy-row:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-card-hover);
+}
+
+.trophy-row-complete {
+    border-color: rgba(34, 197, 94, 0.45);
+    background: rgba(34, 197, 94, 0.04);
+}
+
+.trophy-dungeon-name {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.th-col-graves,
+.th-col-comp {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.graves-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-main);
+    color: var(--text-muted);
+}
+
+.graves-pill.graves-exalt {
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.graves-pill.graves-high {
+    color: #c084fc;
+    border-color: rgba(168, 85, 247, 0.4);
+    background: rgba(168, 85, 247, 0.1);
+}
+
+.graves-pill.graves-mid {
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.08);
+}
+
+.trophy-comp-val {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.trophy-comp-val.has-comp {
+    color: var(--accent-green);
+}
+
+.th-col-pct {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.trophy-pct-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.trophy-pct-text strong {
+    color: var(--text-primary);
+}
+
+.trophy-mini-bar {
+    height: 5px;
+    background: #1f1f26;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.trophy-mini-fill {
+    height: 100%;
+    background: var(--accent-green);
+    border-radius: 999px;
+    transition: width 0.25s var(--ease-smooth);
+}
+
+.th-col-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.trophy-item-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.trophy-item-wrap.is-missing > .item-slot {
+    opacity: 0.32;
+    filter: saturate(0.35);
+}
+
+.trophy-item-wrap.is-missing:hover > .item-slot {
+    opacity: 0.92;
+    filter: none;
+}
+
+.trophy-count-tag {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #181a24;
+    border: 1px solid var(--accent-gold);
+    color: var(--accent-gold);
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 0 4px;
+    border-radius: 999px;
+    line-height: 1.35;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.uncategorized-section {
+    margin-top: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px 14px;
+}
+
+.uncategorized-toggle {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+}
+
+.trophy-uncat-grid {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.trophy-flat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
