@@ -1,80 +1,29 @@
 @inherits StateAwareComponent
 
-<div class="section-header">
+<div class="section-header" style="margin-bottom: 10px;">
     <h2>Loot History</h2>
 </div>
 
 @{
-    _loot = State.GetLootSnapshot(_scope);
-    var allGroups = UiHelpers.GroupByBagInstance(GetFilteredLootHistory());
-    var visibleGroups = allGroups.Take(VisibleBags).ToList();
+    var scopedLoot = State.GetLootSnapshot(_filter.Scope);
+    var allGroups = UiHelpers.GroupByBagInstance(_filter.Apply(scopedLoot));
+    var visibleGroups = allGroups.Take(_visibleBags).ToList();
     int totalDrops = allGroups.Sum(g => g.Count);
-    var dungeonOptions = GetDungeonOptions();
-    var bossOptions = GetBossOptions();
-    var itemSuggestions = GetItemSuggestions();
 }
 
-<div class="quest-add-bar" style="flex-wrap: wrap; overflow: visible;">
-    <input class="input" list="loot-item-suggestions" style="min-width: 240px;" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
-    @if (itemSuggestions.Count > 0)
-    {
-        <datalist id="loot-item-suggestions">
-            @foreach (var name in itemSuggestions)
-            {
-                <option value="@name"></option>
-            }
-        </datalist>
-    }
-    
-    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Which characters' drops to show">
-        <option value="ALL">All characters</option>
-        <option value="ACTIVE">Active: @State.ActiveCharacter.FormattedTitle</option>
-    </select>
+<LootFilterBar Filter="_filter"
+               SourceLoot="scopedLoot"
+               ActiveCharacterTitle="@State.ActiveCharacter.FormattedTitle"
+               ShowPageSize="true"
+               PageSize="_pageSize"
+               PageSizeChanged="OnPageSizeChanged"
+               OnChanged="OnFiltersChanged" />
 
-    <select class="select" value="@LootFilterDungeon" @onchange="OnDungeonChanged">
-        <option value="">All Dungeons</option>
-        @foreach (var d in dungeonOptions)
-        {
-            <option value="@d">@d</option>
-        }
-    </select>
-
-    @if (!string.IsNullOrEmpty(LootFilterDungeon))
-    {
-        <select class="select" @bind="LootFilterBoss">
-            <option value="">All Bosses</option>
-            @foreach (var b in bossOptions)
-            {
-                <option value="@b">@b</option>
-            }
-        </select>
-    }
-
-    <select class="select" @bind="LootFilterType">
-        <option value="">All Qualities</option>
-        @foreach (var dt in Enum.GetValues<DropType>())
-        {
-            <option value="@dt">@UiHelpers.FormatDropType(dt)</option>
-        }
-    </select>
-    <RaritySelect AllowAll="true"
-                  AllLabel="All Rarities"
-                  Value="LootFilterRarityValue"
-                  ValueChanged="OnRarityFilterChanged"
-                  Title="Filter by item rarity" />
-    <label class="checkbox-label">
-        <input type="checkbox" @bind="LootShowOther" /> Show potions / eggs / junk
-    </label>
-    <select class="select" @bind="PageSize" title="Bags per page">
-        <option value="50">50 per page</option>
-        <option value="100">100 per page</option>
-        <option value="250">250 per page</option>
-        <option value="500">500 per page</option>
-    </select>
-</div>
-
-<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
-    Showing <strong>@visibleGroups.Count</strong> of <strong>@allGroups.Count</strong> bags (@totalDrops items match)
+<div class="feed-meta-row">
+    <span>
+        Showing <strong>@visibleGroups.Count</strong> of <strong>@allGroups.Count</strong> bags
+        (<strong>@totalDrops</strong> items match)
+    </span>
 </div>
 
 @if (allGroups.Count == 0)
@@ -86,83 +35,19 @@ else
     <div class="quest-list">
         @foreach (var bagGroup in visibleGroups)
         {
-            var first = bagGroup[0];
-            var bestItem = bagGroup.OrderByDescending(i => i.RarityScore).First();
-            <div class="drop-log-row" style="border-left: 4px solid @UiHelpers.GetRarityBorderColor(bestItem.Rarity, bestItem.IsShiny);">
-                <div class="drop-log-time">
-                    <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
-                        <UiIcon Name="clock" Size="12" />
-                        <span>@first.DroppedAt.ToString("HH:mm:ss")</span>
-                    </div>
-                    <div>@first.DroppedAt.ToString("yyyy-MM-dd") • @first.ServerName</div>
-                </div>
-
-                <div class="drop-context-strip">
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="32" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.PhysicalBag</div>
-                            <div class="rotmg-tooltip-sub">Container 0x@(first.BagObjectType.ToString("X4"))</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="30" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.CharacterName</div>
-                            <div class="rotmg-tooltip-sub">Fame: @first.BaseFameAtDrop.ToString("N0")</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="30" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.DungeonName</div>
-                            <div class="rotmg-tooltip-sub">@first.GraveDifficulty.ToString("0.#")/10 Graves</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="32" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.BossName</div>
-                            <div class="rotmg-tooltip-sub">@first.DungeonName</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="drop-items-strip">
-                    @foreach (var item in bagGroup)
-                    {
-                        var capturedId = item.Id;
-                        <ItemSprite ItemId="item.ItemId"
-                                    ItemName="@item.ItemName"
-                                    Rarity="item.Rarity"
-                                    IsShiny="item.IsShiny"
-                                    DropQuality="item.BagType"
-                                    RarityScore="item.RarityScore"
-                                    Size="42"
-                                    OnRemove="() => State.RemoveLootRecord(capturedId)" />
-                    }
-                </div>
-
-                @if (first.CombatSessionId.HasValue)
-                {
-                    <button class="btn btn-sm inline-meta-item" style="border-color: var(--accent-gold); color: var(--accent-gold);"
-                            title="View Fight DPS"
-                            @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
-                        <UiIcon Name="sword" Size="14" />
-                        <span>DPS</span>
-                    </button>
-                }
-            </div>
+            <BagDropRow BagGroup="bagGroup"
+                        AllowRemove="true"
+                        OnRemoveItem="HandleRemoveItem"
+                        OnOpenFight="OnOpenFight" />
         }
     </div>
 
     @if (visibleGroups.Count < allGroups.Count)
     {
         <div style="display: flex; justify-content: center; margin: 14px 0;">
-            <button class="btn" @onclick="LoadMore">Load @PageSize more (@(allGroups.Count - visibleGroups.Count) left)</button>
+            <button type="button" class="btn" @onclick="LoadMore">
+                Load @_pageSize more (@(allGroups.Count - visibleGroups.Count) left)
+            </button>
         </div>
     }
 }
@@ -171,144 +56,28 @@ else
     [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
 
     private const int DefaultPageSize = 100;
-
     private int _pageSize = DefaultPageSize;
-    private string _searchQuery = "";
-    private string _filterDungeon = "";
-    private string _filterBoss = "";
-    private string _filterType = "";
-    private ItemRarity? _filterRarity;
-    private bool _showOther = true;
-    
-    private DataScope _scope = DataScope.AllCharacters;
-    private List<LootDropRecord> _loot = new();
+    private int _visibleBags = DefaultPageSize;
 
-    private int VisibleBags { get; set; } = DefaultPageSize;
-
-    private int PageSize
+    // D7: Loot History defaults to All Characters and shows full history including potions/junk
+    private readonly LootFilterState _filter = new()
     {
-        get => _pageSize;
-        set { _pageSize = value; VisibleBags = value; }
+        Scope = DataScope.AllCharacters,
+        ShowOther = true
+    };
+
+    private void OnFiltersChanged()
+    {
+        _visibleBags = _pageSize;
     }
 
-    private string LootSearchQuery
+    private void OnPageSizeChanged(int newSize)
     {
-        get => _searchQuery;
-        set { _searchQuery = value ?? ""; VisibleBags = PageSize; }
+        _pageSize = newSize;
+        _visibleBags = newSize;
     }
 
-    private string LootFilterDungeon => _filterDungeon;
+    private void LoadMore() => _visibleBags += _pageSize;
 
-    private string LootFilterBoss
-    {
-        get => _filterBoss;
-        set { _filterBoss = value ?? ""; VisibleBags = PageSize; }
-    }
-
-    private string LootFilterType
-    {
-        get => _filterType;
-        set { _filterType = value ?? ""; VisibleBags = PageSize; }
-    }
-
-    private ItemRarity? LootFilterRarityValue => _filterRarity;
-
-    private void OnRarityFilterChanged(ItemRarity? value)
-    {
-        _filterRarity = value;
-        VisibleBags = PageSize;
-    }
-
-    private bool LootShowOther
-    {
-        get => _showOther;
-        set { _showOther = value; VisibleBags = PageSize; }
-    }
-
-    private void LoadMore() => VisibleBags += PageSize;
-
-    private void OnDungeonChanged(ChangeEventArgs e)
-    {
-        _filterDungeon = e.Value?.ToString() ?? "";
-        _filterBoss = "";
-        VisibleBags = PageSize;
-    }
-    
-    private void OnScopeChanged(ChangeEventArgs e)
-    {
-        _scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
-        _filterDungeon = "";
-        _filterBoss = "";
-        VisibleBags = PageSize;
-    }
-
-    private List<string> GetDungeonOptions()
-    {
-        return _loot
-            .Select(l => l.DungeonName)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private List<string> GetBossOptions()
-    {
-        if (string.IsNullOrEmpty(_filterDungeon))
-            return new List<string>();
-
-        return _loot
-            .Where(l => string.Equals(l.DungeonName, _filterDungeon, StringComparison.OrdinalIgnoreCase))
-            .Select(l => l.BossName)
-            .Where(n => !string.IsNullOrWhiteSpace(n))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
-    private List<string> GetItemSuggestions()
-    {
-        string q = _searchQuery.Trim();
-        if (q.Length < 2)
-            return new List<string>();
-
-        return _loot
-            .Select(l => l.ItemName)
-            .Where(n => n.Contains(q, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .Take(12)
-            .ToList();
-    }
-
-    private IEnumerable<LootDropRecord> GetFilteredLootHistory()
-    {
-        var query = _loot.AsEnumerable();
-
-        if (!_showOther)
-            query = query.Where(l => l.BagType != DropType.Other);
-
-        if (!string.IsNullOrEmpty(_filterDungeon))
-            query = query.Where(l => string.Equals(l.DungeonName, _filterDungeon, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrEmpty(_filterBoss))
-            query = query.Where(l => string.Equals(l.BossName, _filterBoss, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(_searchQuery))
-        {
-            query = query.Where(l =>
-                l.ItemName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.DungeonName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.BossName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                l.CharacterName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (!string.IsNullOrWhiteSpace(_filterType) && Enum.TryParse<DropType>(_filterType, out var dt))
-            query = query.Where(l => l.BagType == dt);
-
-        if (_filterRarity.HasValue)
-            query = query.Where(l => l.Rarity == _filterRarity.Value);
-
-        return query;
-    }
+    private void HandleRemoveItem(Guid id) => State.RemoveLootRecord(id);
 }

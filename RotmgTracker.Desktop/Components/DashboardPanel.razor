@@ -1,30 +1,46 @@
 @inherits StateAwareComponent
+@inject RotmgSnifferService Sniffer
 
-<div class="section-header">
-    <h2>@State.ActiveCharacter.FormattedTitle — Drop Counters</h2>
-    <div style="display: flex; gap: 10px; align-items: center;">
+<div class="section-header" style="margin-bottom: 10px;">
+    <div class="inline-meta-item" style="gap: 10px;">
+        <h2>Live Feed</h2>
+        @if (Sniffer.IsListening)
+        {
+            <span class="live-badge">
+                <span class="live-dot"></span>
+                LIVE
+            </span>
+        }
         <span class="badge-nossnl badge-readonly inline-meta-item">
-            <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="18" />
+            <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="17" />
             <span>@State.CurrentDungeonName</span>
             @if (State.CurrentDungeonGraves > 0)
             {
-                <span class="graves-inline">(@State.CurrentDungeonGraves.ToString("0.#")/10 <UiIcon Name="skull" Size="12" />)</span>
+                <span class="graves-inline">(@State.CurrentDungeonGraves.ToString("0.#")/10 <UiIcon Name="skull" Size="11" />)</span>
             }
         </span>
-        <span style="color: var(--text-muted); font-size: 0.9rem;">
-            Total Drops: <strong style="color: var(--accent-gold);">@State.ActiveCharacter.TotalDrops</strong>
+    </div>
+
+    <div style="display: flex; gap: 12px; align-items: center;">
+        <span style="color: var(--text-muted); font-size: 0.86rem;">
+            @State.ActiveCharacter.Class #@State.ActiveCharacter.ClassSlotNumber Total:
+            <strong style="color: var(--accent-gold);">@State.ActiveCharacter.TotalDrops</strong>
         </span>
+        <button type="button" class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("loot")'>Full History →</button>
     </div>
 </div>
 
-<!-- COMPACT SPRITE + COUNT CARDS (tooltip on hover, no dots, no UT) -->
+<!-- COMPACT INTERACTIVE SPRITE + COUNT CARDS (click any card to filter Live Feed below) -->
 <div class="counter-grid-compact">
     @foreach (var dropType in DisplayDropTypes)
     {
         int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
         string label = UiHelpers.FormatDropType(dropType);
+        bool isActiveFilter = _filter.Quality == dropType;
 
-        <div class="counter-card-compact sprite-tip-host">
+        <button type="button"
+                class="counter-card-compact sprite-tip-host @(isActiveFilter ? "is-filter-active" : "")"
+                @onclick="() => ToggleQualityFilter(dropType)">
             <div class="counter-icon-box">
                 @switch (dropType)
                 {
@@ -78,105 +94,80 @@
 
             <div class="rotmg-tooltip rotmg-tooltip-sm">
                 <div class="rotmg-tooltip-title">@label</div>
-                <div class="rotmg-tooltip-sub">@val recorded on @State.ActiveCharacter.Class #@State.ActiveCharacter.ClassSlotNumber</div>
+                <div class="rotmg-tooltip-sub">@val on @State.ActiveCharacter.Class #@State.ActiveCharacter.ClassSlotNumber • Click to @(isActiveFilter ? "clear filter" : "filter feed")</div>
             </div>
-        </div>
+        </button>
     }
 </div>
 
-<div class="section-header" style="margin-top: 8px;">
-    <h2>Recent Bag Drops</h2>
-    <button class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("loot")'>View Full Loot History →</button>
-</div>
-
 @{
-    var recentBagGroups = UiHelpers.GroupByBagInstance(State.GetLootSnapshot(DataScope.AllCharacters).Where(l => l.BagType != DropType.Other).Take(16));
+    var scopedLoot = State.GetLootSnapshot(_filter.Scope);
+    var allGroups = UiHelpers.GroupByBagInstance(_filter.Apply(scopedLoot));
+    var visibleGroups = allGroups.Take(_visibleBags).ToList();
+    int matchedItems = allGroups.Sum(g => g.Count);
 }
 
-@if (recentBagGroups.Count == 0)
+<LootFilterBar Filter="_filter"
+               SourceLoot="scopedLoot"
+               ActiveCharacterTitle="@State.ActiveCharacter.FormattedTitle"
+               OnChanged="OnFiltersChanged" />
+
+<div class="feed-meta-row">
+    <span>
+        Showing <strong>@visibleGroups.Count</strong> of <strong>@allGroups.Count</strong> bags
+        (<strong>@matchedItems</strong> items)
+    </span>
+    @if (_filter.Quality.HasValue)
+    {
+        <span class="feed-active-chip">
+            Filter: @UiHelpers.FormatDropType(_filter.Quality.Value)
+            <button type="button" @onclick="() => ToggleQualityFilter(_filter.Quality.Value)">✕</button>
+        </span>
+    }
+</div>
+
+@if (allGroups.Count == 0)
 {
-    <div class="empty-state">No bag drops recorded yet.</div>
+    <div class="empty-state">
+        @(_filter.HasActiveFilters ? "No drops match the active Live Feed filters." : "No bag drops recorded yet.")
+    </div>
 }
 else
 {
-    <div class="quest-list">
-        @foreach (var bagGroup in recentBagGroups)
+    <div class="quest-list feed-list-compact">
+        @foreach (var bagGroup in visibleGroups)
         {
-            var first = bagGroup[0];
-            var bestItem = bagGroup.OrderByDescending(i => i.RarityScore).First();
-            <div class="drop-log-row" style="border-left: 4px solid @UiHelpers.GetRarityBorderColor(bestItem.Rarity, bestItem.IsShiny);">
-                <div class="drop-log-time">
-                    <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
-                        <UiIcon Name="clock" Size="12" />
-                        <span>@first.DroppedAt.ToString("HH:mm:ss")</span>
-                    </div>
-                    <div>@first.DroppedAt.ToString("yyyy-MM-dd") • @first.ServerName</div>
-                </div>
-
-                <div class="drop-context-strip">
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="32" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.PhysicalBag</div>
-                            <div class="rotmg-tooltip-sub">Container 0x@(first.BagObjectType.ToString("X4"))</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="30" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.CharacterName</div>
-                            <div class="rotmg-tooltip-sub">Fame: @first.BaseFameAtDrop.ToString("N0")</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="30" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.DungeonName</div>
-                            <div class="rotmg-tooltip-sub">@first.GraveDifficulty.ToString("0.#")/10 Graves</div>
-                        </div>
-                    </div>
-
-                    <div class="context-sprite-box sprite-tip-host">
-                        <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="32" />
-                        <div class="rotmg-tooltip rotmg-tooltip-sm">
-                            <div class="rotmg-tooltip-title">@first.BossName</div>
-                            <div class="rotmg-tooltip-sub">@first.DungeonName</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="drop-items-strip">
-                    @foreach (var item in bagGroup)
-                    {
-                        <ItemSprite ItemId="item.ItemId"
-                                    ItemName="@item.ItemName"
-                                    Rarity="item.Rarity"
-                                    IsShiny="item.IsShiny"
-                                    DropQuality="item.BagType"
-                                    RarityScore="item.RarityScore"
-                                    Size="42" />
-                    }
-                </div>
-
-                @if (first.CombatSessionId.HasValue)
-                {
-                    <button class="btn btn-sm inline-meta-item" style="border-color: var(--accent-gold); color: var(--accent-gold);"
-                            title="View Fight DPS"
-                            @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
-                        <UiIcon Name="sword" Size="14" />
-                        <span>DPS</span>
-                    </button>
-                }
-            </div>
+            <BagDropRow BagGroup="bagGroup"
+                        Compact="true"
+                        OnOpenFight="OnOpenFight" />
         }
     </div>
+
+    @if (visibleGroups.Count < allGroups.Count)
+    {
+        <div style="display: flex; justify-content: center; gap: 10px; margin: 10px 0;">
+            <button type="button" class="btn btn-sm" @onclick="LoadMore">
+                Load @FeedStep more (@(allGroups.Count - visibleGroups.Count) left)
+            </button>
+            <button type="button" class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("loot")'>
+                Open Full Loot History →
+            </button>
+        </div>
+    }
 }
 
 @code {
     [Parameter] public EventCallback<string> OnSetTab { get; set; }
     [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
+
+    private const int FeedStep = 25;
+    private int _visibleBags = FeedStep;
+
+    private readonly LootFilterState _filter = new()
+    {
+        Scope = DataScope.AllCharacters,
+        ShowOther = false
+    };
 
     private static readonly DropType[] DisplayDropTypes =
     [
@@ -190,4 +181,17 @@ else
         DropType.Shiny,
         DropType.Shivine
     ];
+
+    private void ToggleQualityFilter(DropType quality)
+    {
+        _filter.Quality = _filter.Quality == quality ? null : quality;
+        _visibleBags = FeedStep;
+    }
+
+    private void OnFiltersChanged()
+    {
+        _visibleBags = FeedStep;
+    }
+
+    private void LoadMore() => _visibleBags += FeedStep;
 }

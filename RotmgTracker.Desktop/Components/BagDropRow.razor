@@ -1,0 +1,94 @@
+@* Compact sprite-only bag drop row shared by Live Feed (DashboardPanel) and Loot History (LootPanel). *@
+
+@{
+    var first = BagGroup[0];
+    var bestItem = BagGroup.OrderByDescending(i => i.RarityScore).First();
+    double bagScore = BagGroup.Sum(i => i.RarityScore);
+}
+
+<div class="drop-log-row @(Compact ? "drop-log-row-compact" : "")"
+     style="border-left: 4px solid @UiHelpers.GetRarityBorderColor(bestItem.Rarity, bestItem.IsShiny);">
+    <div class="drop-log-time">
+        <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
+            <UiIcon Name="clock" Size="12" />
+            <span>@first.DroppedAt.ToString("HH:mm:ss")</span>
+        </div>
+        <div>@first.DroppedAt.ToString("yyyy-MM-dd") • @first.ServerName</div>
+    </div>
+
+    <div class="drop-context-strip">
+        <div class="context-sprite-box sprite-tip-host">
+            <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="@(Compact ? 28 : 32)" />
+            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                <div class="rotmg-tooltip-title">@first.PhysicalBag</div>
+                <div class="rotmg-tooltip-sub">Container 0x@(first.BagObjectType.ToString("X4"))</div>
+            </div>
+        </div>
+
+        <div class="context-sprite-box sprite-tip-host">
+            <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="@(Compact ? 26 : 30)" />
+            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                <div class="rotmg-tooltip-title">@first.CharacterName</div>
+                <div class="rotmg-tooltip-sub">Fame: @first.BaseFameAtDrop.ToString("N0")</div>
+            </div>
+        </div>
+
+        <div class="context-sprite-box sprite-tip-host">
+            <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="@(Compact ? 26 : 30)" />
+            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                <div class="rotmg-tooltip-title">@first.DungeonName</div>
+                <div class="rotmg-tooltip-sub">@first.GraveDifficulty.ToString("0.#")/10 Graves</div>
+            </div>
+        </div>
+
+        <div class="context-sprite-box sprite-tip-host">
+            <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="@(Compact ? 28 : 32)" />
+            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                <div class="rotmg-tooltip-title">@first.BossName</div>
+                <div class="rotmg-tooltip-sub">@first.DungeonName</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="drop-items-strip">
+        @foreach (var item in BagGroup)
+        {
+            var capturedId = item.Id;
+            <ItemSprite ItemId="item.ItemId"
+                        ItemName="@item.ItemName"
+                        Rarity="item.Rarity"
+                        IsShiny="item.IsShiny"
+                        DropQuality="item.BagType"
+                        RarityScore="item.RarityScore"
+                        Size="@(Compact ? 38 : 42)"
+                        OnRemove="AllowRemove ? EventCallback.Factory.Create(this, () => OnRemoveItem.InvokeAsync(capturedId)) : default" />
+        }
+    </div>
+
+    <div class="drop-row-actions">
+        @if (bagScore > 0)
+        {
+            <span class="drop-bag-score" title="Total Rarity Score in this bag">@Math.Round(bagScore) pts</span>
+        }
+
+        @if (first.CombatSessionId.HasValue)
+        {
+            <button type="button"
+                    class="btn btn-sm inline-meta-item"
+                    style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                    title="View Fight DPS"
+                    @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
+                <UiIcon Name="sword" Size="13" />
+                <span>DPS</span>
+            </button>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<LootDropRecord> BagGroup { get; set; } = new();
+    [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
+    [Parameter] public bool AllowRemove { get; set; }
+    [Parameter] public EventCallback<Guid> OnRemoveItem { get; set; }
+    [Parameter] public bool Compact { get; set; }
+}

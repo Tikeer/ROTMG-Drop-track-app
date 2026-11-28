@@ -1,0 +1,173 @@
+@* Shared filter bar used by both Live Feed (DashboardPanel) and Loot History (LootPanel). *@
+
+@{
+    var dungeonOptions = GetDungeonOptions();
+    var bossOptions = GetBossOptions();
+}
+
+<div class="quest-add-bar shared-filter-bar" style="flex-wrap: wrap; overflow: visible;">
+    <input class="input"
+           style="min-width: 215px; flex: 1; max-width: 280px;"
+           placeholder="Search item, boss, dungeon, character..."
+           value="@Filter.SearchQuery"
+           @oninput="OnSearchInput" />
+
+    <select class="select"
+            value="@(Filter.Scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")"
+            @onchange="OnScopeChanged"
+            title="Which characters' drops to show">
+        <option value="ALL">All characters</option>
+        <option value="ACTIVE">Active: @ActiveCharacterTitle</option>
+    </select>
+
+    <select class="select" value="@Filter.Dungeon" @onchange="OnDungeonChanged" title="Filter by dungeon">
+        <option value="">All Dungeons</option>
+        @foreach (var d in dungeonOptions)
+        {
+            <option value="@d">@d</option>
+        }
+    </select>
+
+    @if (!string.IsNullOrEmpty(Filter.Dungeon) && bossOptions.Count > 0)
+    {
+        <select class="select" value="@Filter.Boss" @onchange="OnBossChanged" title="Filter by boss">
+            <option value="">All Bosses</option>
+            @foreach (var b in bossOptions)
+            {
+                <option value="@b">@b</option>
+            }
+        </select>
+    }
+
+    <select class="select" value="@(Filter.Quality?.ToString() ?? "")" @onchange="OnQualityChanged" title="Filter by drop quality">
+        <option value="">All Qualities</option>
+        @foreach (var dt in LootFilterState.FilterableQualities)
+        {
+            <option value="@dt">@UiHelpers.FormatDropType(dt)</option>
+        }
+    </select>
+
+    <RaritySelect AllowAll="true"
+                  AllLabel="All Rarities"
+                  Value="Filter.Rarity"
+                  ValueChanged="OnRarityChanged"
+                  Title="Filter by item rarity" />
+
+    <label class="checkbox-label filter-check-pill" title="Include potions, eggs, and uncategorized drops">
+        <input type="checkbox" checked="@Filter.ShowOther" @onchange="OnShowOtherChanged" />
+        <span>Junk / Potions</span>
+    </label>
+
+    @if (ShowPageSize)
+    {
+        <select class="select" value="@PageSize" @onchange="OnPageSizeChanged" title="Bags per page">
+            <option value="50">50 / page</option>
+            <option value="100">100 / page</option>
+            <option value="250">250 / page</option>
+            <option value="500">500 / page</option>
+        </select>
+    }
+
+    @if (Filter.HasActiveFilters)
+    {
+        <button type="button" class="btn btn-sm filter-clear-btn" @onclick="ClearAllAsync" title="Reset active filters">
+            Clear
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public LootFilterState Filter { get; set; } = default!;
+    [Parameter, EditorRequired] public IReadOnlyList<LootDropRecord> SourceLoot { get; set; } = Array.Empty<LootDropRecord>();
+    [Parameter] public string ActiveCharacterTitle { get; set; } = "";
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    [Parameter] public bool ShowPageSize { get; set; }
+    [Parameter] public int PageSize { get; set; } = 100;
+    [Parameter] public EventCallback<int> PageSizeChanged { get; set; }
+
+    private Task NotifyAsync() => OnChanged.InvokeAsync();
+
+    private Task OnSearchInput(ChangeEventArgs e)
+    {
+        Filter.SearchQuery = e.Value?.ToString() ?? string.Empty;
+        return NotifyAsync();
+    }
+
+    private Task OnScopeChanged(ChangeEventArgs e)
+    {
+        Filter.Scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
+        Filter.Dungeon = string.Empty;
+        Filter.Boss = string.Empty;
+        return NotifyAsync();
+    }
+
+    private Task OnDungeonChanged(ChangeEventArgs e)
+    {
+        Filter.Dungeon = e.Value?.ToString() ?? string.Empty;
+        Filter.Boss = string.Empty;
+        return NotifyAsync();
+    }
+
+    private Task OnBossChanged(ChangeEventArgs e)
+    {
+        Filter.Boss = e.Value?.ToString() ?? string.Empty;
+        return NotifyAsync();
+    }
+
+    private Task OnQualityChanged(ChangeEventArgs e)
+    {
+        string raw = e.Value?.ToString() ?? string.Empty;
+        Filter.Quality = !string.IsNullOrWhiteSpace(raw) && Enum.TryParse<DropType>(raw, out var dt) ? dt : null;
+        return NotifyAsync();
+    }
+
+    private Task OnRarityChanged(ItemRarity? rarity)
+    {
+        Filter.Rarity = rarity;
+        return NotifyAsync();
+    }
+
+    private Task OnShowOtherChanged(ChangeEventArgs e)
+    {
+        Filter.ShowOther = e.Value is bool b && b;
+        return NotifyAsync();
+    }
+
+    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int size) && size > 0)
+        {
+            PageSize = size;
+            await PageSizeChanged.InvokeAsync(size);
+        }
+    }
+
+    private Task ClearAllAsync()
+    {
+        Filter.ClearFilters();
+        return NotifyAsync();
+    }
+
+    private List<string> GetDungeonOptions() =>
+        SourceLoot
+            .Select(l => l.DungeonName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private List<string> GetBossOptions()
+    {
+        if (string.IsNullOrWhiteSpace(Filter.Dungeon))
+            return new List<string>();
+
+        return SourceLoot
+            .Where(l => string.Equals(l.DungeonName, Filter.Dungeon, StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.BossName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+}
