@@ -1,6 +1,8 @@
 @inherits StateAwareComponent
+@implements IDisposable
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
+@inject SpriteAtlasService Sprites
 @inject UiSettings UiSettings
 
 <div class="section-header">
@@ -107,6 +109,31 @@
                 @(IsScanning ? "Rescanning..." : "Rescan Game Files")
             </button>
         </div>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Sprite Atlas</div>
+                <div class="settings-row-desc">
+                    @Sprites.StatusMessage<br />
+                    Cache folder: <code>@Sprites.SpritesFolder</code>
+                </div>
+                @if (Sprites.IsReady)
+                {
+                    <div class="sprite-preview-strip">
+                        <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="28" Title="White Bag" />
+                        <GameSprite BagObjectType="0x050F" FallbackBagType="BagType.OrangeBag" Size="28" Title="Orange Bag" />
+                        <GameSprite BagObjectType="0x06AC" FallbackBagType="BagType.RedBag" Size="28" Title="Red Bag" />
+                        <GameSprite Class="RotmgClass.Knight" Size="28" Title="Knight" />
+                        <GameSprite Class="RotmgClass.Wizard" Size="28" Title="Wizard" />
+                        <GameSprite ItemId="0x0254" Size="28" Title="Sword of the Colossus" />
+                        <GameSprite ItemId="0x0255" Size="28" Title="Breastplate of New Life" />
+                    </div>
+                }
+            </div>
+            <button class="btn btn-sm" disabled="@(Sprites.IsBuilding || IsScanning)" @onclick="RebuildSpritesAsync">
+                @(Sprites.IsBuilding ? "Building..." : "Rebuild Sprite Atlas")
+            </button>
+        </div>
     </div>
 
     <!-- DEVELOPER / DEBUG -->
@@ -164,6 +191,20 @@
     private bool _rescanInProgress;
     private string RescanMessage { get; set; } = string.Empty;
 
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Sprites.Changed += HandleSpritesChanged;
+    }
+
+    private void HandleSpritesChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public new void Dispose()
+    {
+        Sprites.Changed -= HandleSpritesChanged;
+        base.Dispose();
+    }
+
     private void OnSeasonChanged(ChangeEventArgs e)
     {
         if (e.Value is string s)
@@ -205,9 +246,17 @@
         try
         {
             int count = await GameData.RescanGameFilesAsync();
-            RescanMessage = count > 0
-                ? $"Rescan completed: {count} items loaded."
-                : GameData.ExtractionStatus;
+            if (count > 0)
+            {
+                RescanMessage = $"Rescan completed: {count} items loaded. Rebuilding sprite atlas...";
+                StateHasChanged();
+                await Sprites.RebuildAsync();
+                RescanMessage = $"Rescan completed: {count} items loaded ({Sprites.SpriteCount} sprites packed).";
+            }
+            else
+            {
+                RescanMessage = GameData.ExtractionStatus;
+            }
         }
         catch (Exception ex)
         {
@@ -218,6 +267,13 @@
             _rescanInProgress = false;
             StateHasChanged();
         }
+    }
+
+    private async Task RebuildSpritesAsync()
+    {
+        if (Sprites.IsBuilding) return;
+        await Sprites.RebuildAsync();
+        StateHasChanged();
     }
 
     private void OnDebugModeChanged(ChangeEventArgs e)

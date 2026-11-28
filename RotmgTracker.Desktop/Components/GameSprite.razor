@@ -1,0 +1,78 @@
+@using System.Globalization
+@inject SpriteAtlasService Sprites
+
+@{
+    bool found = TryResolve(out var rect);
+}
+
+@if (found && Sprites.IsReady && Sprites.AtlasWidth > 0 && Sprites.AtlasHeight > 0)
+{
+    double scale = (double)Size / Math.Max(rect.W, rect.H);
+    string wStr = (rect.W * scale).ToString("0.##", CultureInfo.InvariantCulture);
+    string hStr = (rect.H * scale).ToString("0.##", CultureInfo.InvariantCulture);
+    string bgW = (Sprites.AtlasWidth * scale).ToString("0.##", CultureInfo.InvariantCulture);
+    string bgH = (Sprites.AtlasHeight * scale).ToString("0.##", CultureInfo.InvariantCulture);
+    string bgX = (-rect.X * scale).ToString("0.##", CultureInfo.InvariantCulture);
+    string bgY = (-rect.Y * scale).ToString("0.##", CultureInfo.InvariantCulture);
+
+    <span class="game-sprite-wrap @CssClass"
+          style="width: @(Size)px; height: @(Size)px;"
+          title="@Title">
+        <span class="game-sprite"
+              style="width: @(wStr)px; height: @(hStr)px; background-size: @(bgW)px @(bgH)px; background-position: @(bgX)px @(bgY)px;"></span>
+    </span>
+}
+else if (!string.IsNullOrEmpty(FallbackText))
+{
+    <span class="game-sprite-fallback @CssClass"
+          style="min-width: @(Size)px; height: @(Size)px;"
+          title="@Title">@FallbackText</span>
+}
+
+@code {
+    [Parameter] public int Size { get; set; } = 24;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string? FallbackText { get; set; }
+
+    [Parameter] public string? TextureFile { get; set; }
+    [Parameter] public int TextureIndex { get; set; }
+
+    [Parameter] public int? ItemId { get; set; }
+    [Parameter] public int? MarkItemId { get; set; }
+    [Parameter] public int? BagObjectType { get; set; }
+    [Parameter] public BagType FallbackBagType { get; set; } = BagType.WhiteBag;
+    [Parameter] public int? PortalObjectType { get; set; }
+    [Parameter] public string? DungeonName { get; set; }
+    [Parameter] public int? BossObjectType { get; set; }
+    [Parameter] public string? BossName { get; set; }
+    [Parameter] public RotmgClass? Class { get; set; }
+    [Parameter] public int SkinId { get; set; }
+
+    private bool TryResolve(out SpriteRect rect)
+    {
+        if (!string.IsNullOrWhiteSpace(TextureFile))
+            return Sprites.TryGetSprite(TextureFile, TextureIndex, out rect);
+
+        if (ItemId.HasValue)
+            return Sprites.TryGetItemSprite(ItemId.Value, out rect);
+
+        if (MarkItemId.HasValue)
+            return Sprites.TryGetMarkSprite(MarkItemId.Value, out rect);
+
+        if (BagObjectType.HasValue)
+            return Sprites.TryGetBagSprite(BagObjectType.Value, FallbackBagType, out rect);
+
+        if (PortalObjectType.HasValue || !string.IsNullOrWhiteSpace(DungeonName))
+            return Sprites.TryGetPortalSprite(DungeonName, PortalObjectType ?? 0, out rect);
+
+        if (BossObjectType.HasValue || !string.IsNullOrWhiteSpace(BossName))
+            return Sprites.TryGetBossSprite(BossObjectType ?? 0, BossName, out rect);
+
+        if (Class.HasValue)
+            return Sprites.TryGetClassOrSkinSprite(Class.Value, SkinId, out rect);
+
+        rect = default;
+        return false;
+    }
+}

@@ -43,6 +43,9 @@ rotmg_data.json
 *.csv
 SPECIFICATION.md
 *.patch
+GEMINI.md
+/sprites/
+wwwroot/sprites/
 
 ## OS Generated
 .DS_Store

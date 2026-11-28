@@ -2,8 +2,14 @@
 @inject TrackerStateService State
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
+@inject SpriteAtlasService Sprites
 @inject AppStartup Startup
 @inject UiSettings UiSettings
+
+@if (Sprites.IsReady && !string.IsNullOrEmpty(Sprites.AtlasDataUrl))
+{
+    <style>:root { --sprite-atlas: url("@Sprites.AtlasDataUrl"); }</style>
+}
 
 @if (Startup.Error != null)
 {
@@ -176,6 +182,7 @@ else
         State.OnStateChanged += HandleExternalStateChanged;
         Startup.Changed += HandleExternalStateChanged;
         UiSettings.Changed += HandleExternalStateChanged;
+        Sprites.Changed += HandleExternalStateChanged;
 
         await Startup.StartAsync();
     }
@@ -201,5 +208,6 @@ else
         State.OnStateChanged -= HandleExternalStateChanged;
         Startup.Changed -= HandleExternalStateChanged;
         UiSettings.Changed -= HandleExternalStateChanged;
+        Sprites.Changed -= HandleExternalStateChanged;
     }
 }

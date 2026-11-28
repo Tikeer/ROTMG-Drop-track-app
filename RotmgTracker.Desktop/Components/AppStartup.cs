@@ -1,26 +1,33 @@
 using RotmgTrackerV1.Core.Services;
+using RotmgTrackerV1.Core.Services.Sprites;
 using RotmgTrackerV1.Sniffer.Services;
 
 namespace RotmgTrackerV1.Desktop.Components;
 
 /// <summary>
 /// Asynchroniczny start aplikacji: dane gry i baza ładują się w tle (równolegle),
-/// UI pokazuje ekran ładowania, a sniffer startuje dopiero po gotowości UI.
+/// UI pokazuje ekran ładowania, a sniffer oraz atlas sprite'ów startują w tle po gotowości UI.
 /// </summary>
 public sealed class AppStartup
 {
     private readonly GameDataService _gameData;
     private readonly TrackerStateService _state;
     private readonly RotmgSnifferService _sniffer;
+    private readonly SpriteAtlasService _sprites;
     private readonly object _gate = new();
     private Task? _startTask;
     private volatile bool _isReady;
 
-    public AppStartup(GameDataService gameData, TrackerStateService state, RotmgSnifferService sniffer)
+    public AppStartup(
+        GameDataService gameData,
+        TrackerStateService state,
+        RotmgSnifferService sniffer,
+        SpriteAtlasService sprites)
     {
         _gameData = gameData;
         _state = state;
         _sniffer = sniffer;
+        _sprites = sprites;
     }
 
     public bool IsReady => _isReady;
@@ -68,7 +75,9 @@ public sealed class AppStartup
             return;
         }
 
-        // Sniffer (otwieranie interfejsów pcap) w tle, bez blokowania UI
+        // Sniffer (otwieranie interfejsów pcap) oraz atlas sprite'ów w tle, bez blokowania UI
+        _ = _sprites.EnsureBuiltAsync();
+
         _ = Task.Run(() =>
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();

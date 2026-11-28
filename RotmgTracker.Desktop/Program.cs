@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Photino.Blazor;
 using RotmgTrackerV1.Core.Services;
+using RotmgTrackerV1.Core.Services.Sprites;
 using RotmgTrackerV1.Desktop.Components;
 using RotmgTrackerV1.Sniffer.Services;
 
@@ -19,6 +20,7 @@ public class Program
 
         appBuilder.Services.AddSingleton<TrackerStateService>();
         appBuilder.Services.AddSingleton<GameDataService>();
+        appBuilder.Services.AddSingleton<SpriteAtlasService>();
         appBuilder.Services.AddSingleton<RotmgSnifferService>();
         appBuilder.Services.AddSingleton<UiSettings>();
         appBuilder.Services.AddSingleton<AppStartup>();
