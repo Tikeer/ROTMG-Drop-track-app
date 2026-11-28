@@ -111,6 +111,12 @@ html, body {
     transition: opacity 0.2s var(--ease-smooth);
 }
 
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 10px 0;
+}
+
 .sidebar.collapsed .sidebar-brand,
 .sidebar.collapsed .nav-label,
 .sidebar.collapsed .nav-badge,
@@ -118,6 +124,7 @@ html, body {
     opacity: 0;
     pointer-events: none;
     width: 0;
+    flex: 0 0 0;
     overflow: hidden;
 }
 
@@ -3526,4 +3533,135 @@ input, select { user-select: text; }
     min-width: 195px;
     max-width: 215px;
     border-color: rgba(56, 189, 248, 0.28);
+}
+
+.tiered-cat-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.tiered-cat-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.tiered-cat-block:first-child {
+    padding-top: 0;
+    border-top: none;
+}
+
+.tiered-cat-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2px;
+}
+
+.tiered-cat-title {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-white);
+}
+
+.tiered-cat-count {
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-main);
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 1px 8px;
+}
+
+.tiered-tier-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tiered-tier-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 9px;
+    background: rgba(9, 9, 11, 0.45);
+    border: 1px solid rgba(39, 39, 42, 0.75);
+    border-radius: 8px;
+}
+
+.tiered-tier-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 78px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--bg-input);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    flex-shrink: 0;
+}
+
+.tiered-tier-tag {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+/* ===== Est. Death Fame Breakdown ===== */
+.fame-popover {
+    min-width: 245px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.fame-breakdown-box {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.fame-bd-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.fame-bd-row strong {
+    color: var(--text-primary);
+}
+
+.fame-bd-total {
+    margin-top: 3px;
+    padding-top: 5px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+
+.fame-bd-collections {
+    font-size: 0.7rem;
+    color: #4ade80;
+    line-height: 1.3;
+    margin-top: 2px;
+}
+
+.fame-bd-note {
+    font-size: 0.67rem;
+    color: #71717a;
+    line-height: 1.3;
+    margin-top: 2px;
 }

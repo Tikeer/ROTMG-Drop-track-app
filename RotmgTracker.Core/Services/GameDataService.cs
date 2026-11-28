@@ -24,8 +24,12 @@ public record ItemMetadata(
     bool IsLegacy = false,
     string SetName = "")
 {
-    public bool IsWeaponOrArmor => SlotType is 1 or 2 or 3 or 6 or 7 or 8 or 14 or 17 or 24;
-    public bool IsAbilityOrRing => SlotType > 0 && !IsWeaponOrArmor;
+    public bool IsWeapon => SlotType is 1 or 2 or 3 or 8 or 17 or 24;
+    public bool IsArmor => SlotType is 6 or 7 or 14;
+    public bool IsRing => SlotType == 9;
+    public bool IsAbility => SlotType > 0 && !IsWeapon && !IsArmor && !IsRing;
+    public bool IsWeaponOrArmor => IsWeapon || IsArmor;
+    public bool IsAbilityOrRing => IsAbility || IsRing;
 }
 
 public record EnemyMetadata(
@@ -186,8 +190,8 @@ public class GameDataService
             "RotmgTracker");
         Directory.CreateDirectory(_appDataDir);
 
-        // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
-        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v9.json");
+        // Podbicie wersji katalogu itemów (v10: przywrócone klasyczne bronie BASETYPE, usunięte nieosiągalne T8 abilities i T0 starter gear)
+        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v10.json");
         _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v9.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
@@ -943,9 +947,9 @@ public class GameDataService
         slotType = 0;
         xmlBagType = 0;
 
-        // Odrzucamy przedmioty testowe / dev DECA (Testiken*, Testing *, *1Rarity..4Rarity, Trick *, BASETYPE)
-        if (labelTokens.Contains("BASETYPE") ||
-            idName.StartsWith("Testiken", StringComparison.OrdinalIgnoreCase) ||
+        // Odrzucamy przedmioty testowe / dev DECA (Testiken*, Testing *, *1Rarity..4Rarity, Trick *)
+        // UWAGA: etykieta BASETYPE oznacza klasyczne bronie (Sword/Dagger/Bow/Wand/Staff/Katana, w tym Sword of Majesty) — NIE wolno jej odrzucać!
+        if (idName.StartsWith("Testiken", StringComparison.OrdinalIgnoreCase) ||
             idName.StartsWith("Testing ", StringComparison.OrdinalIgnoreCase) ||
             displayName.StartsWith("Testing ", StringComparison.OrdinalIgnoreCase) ||
             idName.StartsWith("Trick ", StringComparison.OrdinalIgnoreCase) ||
@@ -1012,6 +1016,19 @@ public class GameDataService
 
         if (!isBlueprintOrSchematic && !ValidEquipmentSlotTypes.Contains(slotType))
             return false;
+
+        // Odrzucamy T0 starter gear oraz nieosiągalne w grze itemy T8+ (abilities/rings) i T15+ (weapons/armors)
+        if (int.TryParse(obj.Element("Tier")?.Value, out int parsedTier))
+        {
+            if (parsedTier == 0)
+                return false;
+
+            bool isWeaponOrArmor = slotType is 1 or 2 or 3 or 6 or 7 or 8 or 14 or 17 or 24;
+            if (!isWeaponOrArmor && parsedTier >= 8)
+                return false;
+            if (isWeaponOrArmor && parsedTier >= 15)
+                return false;
+        }
 
         return true;
     }

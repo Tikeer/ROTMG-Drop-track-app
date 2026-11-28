@@ -82,10 +82,10 @@ public static class UiHelpers
             return false;
 
         if (item.IsWeaponOrArmor)
-            return minWeaponArmorTier > 0 && item.Tier >= minWeaponArmorTier;
+            return minWeaponArmorTier > 0 && item.Tier >= minWeaponArmorTier && item.Tier <= 14;
 
         if (item.IsAbilityOrRing)
-            return minAbilityRingTier > 0 && item.Tier >= minAbilityRingTier;
+            return minAbilityRingTier > 0 && item.Tier >= minAbilityRingTier && item.Tier <= 7;
 
         return false;
     }

@@ -145,32 +145,43 @@
                     </div>
                 </div>
 
-                <div class="trophy-boss-stack">
-                    @foreach (var grp in _tieredSection.Groups)
+                <div class="tiered-cat-stack">
+                    @foreach (var cat in _tieredSection.Categories)
                     {
-                        <div class="trophy-boss-line">
-                            <div class="trophy-boss-badge tiered-group-badge">
-                                <span class="trophy-boss-name">@grp.Label</span>
-                                <span class="rarity-opt-slots">@grp.OwnedCount/@grp.Tiles.Count</span>
+                        <div class="tiered-cat-block">
+                            <div class="tiered-cat-head">
+                                <span class="tiered-cat-title">@cat.Title</span>
+                                <span class="tiered-cat-count">@cat.OwnedCount / @cat.TotalCount</span>
                             </div>
-                            <div class="trophy-boss-items">
-                                @foreach (var tile in grp.Tiles)
+                            <div class="tiered-tier-stack">
+                                @foreach (var tierRow in cat.Tiers)
                                 {
-                                    <div class="@tile.CssClass"
-                                         @onmouseenter="e => ShowRichTooltip(tile, e)"
-                                         @onmouseleave="HideRichTooltip">
-                                        @if (!string.IsNullOrEmpty(tile.SpriteStyle))
-                                        {
-                                            <span class="game-sprite" style="@tile.SpriteStyle"></span>
-                                        }
-                                        @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
-                                        {
-                                            <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
-                                        }
-                                        @if (tile.CountTag != null)
-                                        {
-                                            <span class="trophy-count-tag">@tile.CountTag</span>
-                                        }
+                                    <div class="tiered-tier-line">
+                                        <div class="tiered-tier-badge">
+                                            <span class="tiered-tier-tag">@tierRow.TierLabel</span>
+                                            <span class="rarity-opt-slots">@tierRow.OwnedCount/@tierRow.Tiles.Count</span>
+                                        </div>
+                                        <div class="trophy-boss-items">
+                                            @foreach (var tile in tierRow.Tiles)
+                                            {
+                                                <div class="@tile.CssClass"
+                                                     @onmouseenter="e => ShowRichTooltip(tile, e)"
+                                                     @onmouseleave="HideRichTooltip">
+                                                    @if (!string.IsNullOrEmpty(tile.SpriteStyle))
+                                                    {
+                                                        <span class="game-sprite" style="@tile.SpriteStyle"></span>
+                                                    }
+                                                    @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
+                                                    {
+                                                        <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
+                                                    }
+                                                    @if (tile.CountTag != null)
+                                                    {
+                                                        <span class="trophy-count-tag">@tile.CountTag</span>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
                                     </div>
                                 }
                             </div>
@@ -624,8 +635,9 @@ else
             .Concat(Enumerable.Range(1, 7).Select(t => new DarkSelectOption(t.ToString(), $"T{t}+")))
             .ToList();
 
-    private sealed record TieredGroupView(string Label, int OwnedCount, List<RenderedTile> Tiles);
-    private sealed record TieredSectionView(int OwnedCount, int TotalCount, string PercentText, string BarWidth, List<TieredGroupView> Groups);
+    private sealed record TieredTierRowView(int Tier, string TierLabel, int OwnedCount, List<RenderedTile> Tiles);
+    private sealed record TieredCategoryView(string Title, int OwnedCount, int TotalCount, List<TieredTierRowView> Tiers);
+    private sealed record TieredSectionView(int OwnedCount, int TotalCount, string PercentText, string BarWidth, List<TieredCategoryView> Categories);
 
     private TieredSectionView? _tieredSection;
 
@@ -856,9 +868,10 @@ else
 
             if (_tieredSection != null)
             {
-                foreach (var grp in _tieredSection.Groups)
-                    foreach (var t in grp.Tiles)
-                        distinctShownIds.Add(t.Meta.ItemId);
+                foreach (var cat in _tieredSection.Categories)
+                    foreach (var tr in cat.Tiers)
+                        foreach (var t in tr.Tiles)
+                            distinctShownIds.Add(t.Meta.ItemId);
             }
 
             _shownItemCount = distinctShownIds.Count;
@@ -923,52 +936,52 @@ else
         if (list.Count == 0)
             return null;
 
-        var groups = new List<TieredGroupView>();
+        var categories = new List<TieredCategoryView>();
 
-        // Weapons & Armors grouped by Tier descending (T14 -> T1)
-        foreach (var g in list.Where(i => i.IsWeaponOrArmor).GroupBy(i => i.Tier).OrderByDescending(g => g.Key))
+        void AddCategory(string title, IEnumerable<ItemMetadata> source)
         {
-            var tiles = g.OrderByDescending(i => ownedStatsById.ContainsKey(i.ItemId))
-                .ThenBy(i => i.SlotType)
-                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(i =>
-                {
-                    ownedStatsById.TryGetValue(i.ItemId, out var st);
-                    return BuildTile(i, st?.Count ?? 0, st?.BestRarity ?? ItemRarity.Common, st?.BestScore ?? 0,
-                        st?.RarityCounts ?? new int[5], $"Tier {g.Key} Drop", "Tiered Equipment", "", 30, "");
-                })
-                .ToList();
-            groups.Add(new TieredGroupView($"T{g.Key} Weapons & Armors", tiles.Count(t => t.OwnedCount > 0), tiles));
+            var tiers = new List<TieredTierRowView>();
+            foreach (var g in source.GroupBy(i => i.Tier).OrderByDescending(g => g.Key))
+            {
+                var tiles = g.OrderBy(i => i.SlotType)
+                    .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(i =>
+                    {
+                        ownedStatsById.TryGetValue(i.ItemId, out var st);
+                        return BuildTile(i, st?.Count ?? 0, st?.BestRarity ?? ItemRarity.Common, st?.BestScore ?? 0,
+                            st?.RarityCounts ?? new int[5], $"{title} • Tier {g.Key}", "Tiered Equipment", "", 30, "");
+                    })
+                    .ToList();
+                if (tiles.Count > 0)
+                    tiers.Add(new TieredTierRowView(g.Key, $"T{g.Key}", tiles.Count(t => t.OwnedCount > 0), tiles));
+            }
+
+            if (tiers.Count > 0)
+            {
+                int catOwned = tiers.Sum(t => t.OwnedCount);
+                int catTotal = tiers.Sum(t => t.Tiles.Count);
+                categories.Add(new TieredCategoryView(title, catOwned, catTotal, tiers));
+            }
         }
 
-        // Abilities & Rings grouped by Tier descending (T7 -> T1)
-        foreach (var g in list.Where(i => i.IsAbilityOrRing).GroupBy(i => i.Tier).OrderByDescending(g => g.Key))
-        {
-            var tiles = g.OrderByDescending(i => ownedStatsById.ContainsKey(i.ItemId))
-                .ThenBy(i => i.SlotType)
-                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(i =>
-                {
-                    ownedStatsById.TryGetValue(i.ItemId, out var st);
-                    return BuildTile(i, st?.Count ?? 0, st?.BestRarity ?? ItemRarity.Common, st?.BestScore ?? 0,
-                        st?.RarityCounts ?? new int[5], $"Tier {g.Key} Drop", "Tiered Equipment", "", 30, "");
-                })
-                .ToList();
-            groups.Add(new TieredGroupView($"T{g.Key} Abilities & Rings", tiles.Count(t => t.OwnedCount > 0), tiles));
-        }
+        // Strict requested order: Weapons -> Abilities -> Armors -> Rings
+        AddCategory("Weapons", list.Where(i => i.IsWeapon));
+        AddCategory("Abilities", list.Where(i => i.IsAbility));
+        AddCategory("Armors", list.Where(i => i.IsArmor));
+        AddCategory("Rings", list.Where(i => i.IsRing));
 
-        if (groups.Count == 0)
+        if (categories.Count == 0)
             return null;
 
-        int total = groups.Sum(g => g.Tiles.Count);
-        int owned = groups.Sum(g => g.OwnedCount);
+        int total = categories.Sum(c => c.TotalCount);
+        int owned = categories.Sum(c => c.OwnedCount);
         double pct = total > 0 ? Math.Round((double)owned / total * 100.0, 1) : 0.0;
         return new TieredSectionView(
             owned,
             total,
             $"{pct:0.#}%",
             $"{pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}%",
-            groups);
+            categories);
     }
 
     private RenderedTile BuildTile(

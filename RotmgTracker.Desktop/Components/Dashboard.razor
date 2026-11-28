@@ -40,29 +40,30 @@ else
 
         @foreach (var nav in NavItems)
         {
-            <button class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
+            <button @key="nav.Key"
+                    class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
                     title="@nav.Label"
                     @onclick="() => SetTab(nav.Key)">
                 <span class="nav-icon">
                     @switch (nav.Key)
                     {
                         case "dashboard":
-                            <GameSprite ItemId="0x0CE4" Size="20" />
+                            <GameSprite ItemId="@(0x0CE4)" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         case "loot":
-                            <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="20" />
+                            <GameSprite BagObjectType="@(0x050C)" FallbackBagType="BagType.WhiteBag" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         case "dps":
-                            <GameSprite BossName="Oryx the Mad God 3" Size="20" />
+                            <GameSprite BossName="Oryx the Mad God 3" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         case "collection":
-                            <GameSprite ItemId="0x0913" Size="20" />
+                            <GameSprite ItemId="@(0x0913)" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         case "profile":
-                            <GameSprite Class="State.ActiveCharacter.Class" SkinId="State.ActiveCharacter.SkinId" Size="20" />
+                            <GameSprite Class="State.ActiveCharacter.Class" SkinId="State.ActiveCharacter.SkinId" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         case "graveyard":
-                            <GameSprite TextureFile="lofiChar216x16" TextureIndex="0x16" Size="20" />
+                            <GameSprite TextureFile="lofiChar216x16" TextureIndex="@(0x16)" Size="20" FallbackIcon="@nav.Icon" />
                             break;
                         default:
                             <UiIcon Name="@nav.Icon" Size="17" />

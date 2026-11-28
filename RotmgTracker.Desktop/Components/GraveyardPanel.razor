@@ -3,7 +3,11 @@
 
 @{
     var graves = State.Data.Graveyard;
-    int highestDeathFame = graves.Count > 0 ? graves.Max(g => Math.Max(g.TotalFame, g.BaseFame)) : 0;
+    var allRuns = State.GetDungeonRunsSnapshot(DataScope.AllCharacters);
+    var estByChar = graves.ToDictionary(g => g.Id, g => DeathFameCalculator.Estimate(g, allRuns));
+    int highestDeathFame = graves.Count > 0
+        ? graves.Max(g => g.TotalFame > 0 ? g.TotalFame : estByChar[g.Id].EstimatedDeathFame)
+        : 0;
     long totalBaseFame = graves.Sum(g => (long)g.BaseFame);
     int totalDropsOnFallen = graves.Sum(g => g.TotalDrops);
     var slotNames = new[] { "Weapon", "Ability", "Armor", "Ring" };
@@ -118,8 +122,18 @@ else
                         <strong>@dead.BaseFame.ToString("N0")</strong>
                     </div>
                     <div class="grave-stat-col">
-                        <span class="grave-stat-lbl">Total Fame</span>
-                        <strong style="color: var(--accent-gold);">@(dead.TotalFame > 0 ? dead.TotalFame.ToString("N0") : "—")</strong>
+                        <span class="grave-stat-lbl">@(dead.TotalFame > 0 ? "Total Fame" : "Est. Death Fame")</span>
+                        @if (dead.TotalFame > 0)
+                        {
+                            <strong style="color: var(--accent-gold);">@dead.TotalFame.ToString("N0")</strong>
+                        }
+                        else
+                        {
+                            var est = estByChar[dead.Id];
+                            <strong style="color: var(--accent-gold);" title="Estimated from Base Fame + @dead.MaxedStats/8 maxing + @est.CompletedUniqueDungeons tracked dungeon types">
+                                ~@est.EstimatedDeathFame.ToString("N0")
+                            </strong>
+                        }
                     </div>
                     <div class="grave-stat-col">
                         <span class="grave-stat-lbl">Drops</span>

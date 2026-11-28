@@ -8,6 +8,7 @@
     var exalts = active.ExaltBonuses is { Length: 8 } ? active.ExaltBonuses : new int[8];
     var pillOrder = UiSettings.CharacterBarOrder;
     string starColor = GetRankStarColor(State.AccountStars);
+    var deathFame = DeathFameCalculator.Estimate(active, State.GetDungeonRunsSnapshot(DataScope.AllCharacters));
 }
 
 <div class="char-bar-v2">
@@ -83,17 +84,37 @@
             @switch (key)
             {
                 case "fame":
-                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
+                    <div class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
                          draggable="true"
                          @ondragstart="() => OnDragStart(key)"
                          @ondragover:preventDefault="true"
                          @ondragenter="() => OnDragEnter(key)"
                          @ondrop="() => OnDrop(key)"
                          @ondragend="OnDragEnd"
-                         title="Base fame (read-only, synced passively from sniffer • Drag to reorder)">
+                         title="Base fame &amp; Est. Death Fame • Drag to reorder">
                         <GameSprite UiSpriteName="fame_icon" Size="15" />
                         <span class="stat-pill-label">Fame</span>
                         <span class="stat-pill-value">@active.BaseFame.ToString("N0")</span>
+                        <div class="exalt-popover fame-popover">
+                            <div class="exalt-popover-title">Fame &amp; Est. Death Fame</div>
+                            <div class="fame-bd-row">
+                                <span>Base Fame</span>
+                                <strong>@deathFame.BaseFame.ToString("N0")</strong>
+                            </div>
+                            <div class="fame-bd-row">
+                                <span>Maxing (@active.MaxedStats/8)</span>
+                                <span>+@deathFame.MaxingFlatBonus.ToString("N0") / +@deathFame.MaxingPercentBonus.ToString("0.#")%</span>
+                            </div>
+                            <div class="fame-bd-row">
+                                <span>Tracked Dungeons</span>
+                                <span>+@deathFame.DungeonFlatBonus.ToString("N0")@(deathFame.DungeonPercentBonus > 0 ? $" / +{deathFame.DungeonPercentBonus:0.#}%" : "")</span>
+                            </div>
+                            <div class="fame-bd-row fame-bd-total">
+                                <span>Est. Death Fame</span>
+                                <strong style="color: var(--accent-gold);">~@deathFame.EstimatedDeathFame.ToString("N0")</strong>
+                            </div>
+                            <div class="fame-bd-note">Lower bound (enemy/stat bonuses not tracked passively).</div>
+                        </div>
                     </div>
                     break;
 

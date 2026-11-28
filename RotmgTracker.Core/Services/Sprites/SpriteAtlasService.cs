@@ -11,7 +11,7 @@ public readonly record struct SpriteRect(int X, int Y, int W, int H);
 /// </summary>
 public sealed class SpriteAtlasService
 {
-    private const int ManifestVersion = 4;
+    private const int ManifestVersion = 5;
     private const int Padding = 1;
     private const string GuiAtlasSourceKey = "__GUI_ATLAS__";
 
