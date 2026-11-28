@@ -40,8 +40,60 @@ public sealed class ItemSourceService
     // Normalized base item name -> list of source dungeon names
     private readonly Dictionary<string, HashSet<string>> _baseSourcesByItem = new(StringComparer.OrdinalIgnoreCase);
 
+    // Prewarmed / cached default Trophy Hall snapshot (AllCharacters, no search/category filters, non-tiered, non-BP)
+    private readonly object _cacheLock = new();
+    private int _cachedLootCount = -1;
+    private int _cachedRunsCount = -1;
+    private List<TrophyHallDungeonRow>? _cachedDefaultRows;
+
     public int MappedBaseItemCount => _baseSourcesByItem.Count;
     public int MappedDungeonCount { get; private set; }
+
+    /// <summary>
+    /// Pre-computes the default Trophy Hall view during AppStartup so opening Item Collection is instant.
+    /// </summary>
+    public void PrewarmDefaultTrophyHall(GameDataService gameData, TrackerStateService state)
+    {
+        var loot = state.GetLootSnapshot(DataScope.AllCharacters);
+        var runs = state.GetDungeonRunsSnapshot(DataScope.AllCharacters);
+        var defaultItems = gameData.GetAllKnownItems()
+            .Where(i => i.Quality != DropType.BPs && i.Tier <= 0)
+            .OrderByDescending(i => i.IsShiny)
+            .ThenBy(i => i.Name)
+            .ToList();
+
+        var rows = BuildTrophyHall(defaultItems, loot, runs, gameData);
+        lock (_cacheLock)
+        {
+            _cachedLootCount = loot.Count;
+            _cachedRunsCount = runs.Count;
+            _cachedDefaultRows = rows;
+        }
+    }
+
+    public bool TryGetCachedDefaultTrophyHall(int lootCount, int runsCount, out List<TrophyHallDungeonRow> rows)
+    {
+        lock (_cacheLock)
+        {
+            if (_cachedDefaultRows != null && _cachedLootCount == lootCount && _cachedRunsCount == runsCount)
+            {
+                rows = _cachedDefaultRows;
+                return true;
+            }
+        }
+        rows = default!;
+        return false;
+    }
+
+    public void UpdateCachedDefaultTrophyHall(int lootCount, int runsCount, List<TrophyHallDungeonRow> rows)
+    {
+        lock (_cacheLock)
+        {
+            _cachedLootCount = lootCount;
+            _cachedRunsCount = runsCount;
+            _cachedDefaultRows = rows;
+        }
+    }
 
     public ItemSourceService()
     {

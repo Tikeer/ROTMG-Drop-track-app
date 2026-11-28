@@ -14,6 +14,7 @@ public sealed class AppStartup
     private readonly TrackerStateService _state;
     private readonly RotmgSnifferService _sniffer;
     private readonly SpriteAtlasService _sprites;
+    private readonly ItemSourceService _itemSources;
     private readonly object _gate = new();
     private Task? _startTask;
     private volatile bool _isReady;
@@ -22,12 +23,14 @@ public sealed class AppStartup
         GameDataService gameData,
         TrackerStateService state,
         RotmgSnifferService sniffer,
-        SpriteAtlasService sprites)
+        SpriteAtlasService sprites,
+        ItemSourceService itemSources)
     {
         _gameData = gameData;
         _state = state;
         _sniffer = sniffer;
         _sprites = sprites;
+        _itemSources = itemSources;
     }
 
     public bool IsReady => _isReady;
@@ -66,6 +69,9 @@ public sealed class AppStartup
                     _state.Initialize();
                     stateMs = sw.ElapsedMilliseconds;
                 }));
+
+            // Prewarm default Item Collection Trophy Hall while still on splash screen so tab switch is instant
+            _itemSources.PrewarmDefaultTrophyHall(_gameData, _state);
 
             _isReady = true;
             LogTiming($"ready after {total.ElapsedMilliseconds} ms (game data {gameMs} ms, database {stateMs} ms, loot rows {_state.Data.LootHistory.Count})");

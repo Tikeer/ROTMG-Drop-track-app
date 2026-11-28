@@ -8,9 +8,19 @@
 @{
     var itemSuggestions = GetItemSuggestions();
     var dungeonSuggestions = GetDungeonSuggestions();
+    int previewItemId = ResolvePreviewItemId(out bool hasShinyVariant);
 }
 
 <div class="quest-add-bar" style="flex-wrap: wrap; overflow: visible;">
+    @if (previewItemId > 0)
+    {
+        <ItemSprite ItemId="previewItemId"
+                    Rarity="WishMinRarity"
+                    IsShiny="WishRequireShiny"
+                    Size="36"
+                    ShowTooltip="false" />
+    }
+
     <div class="autocomplete-host" style="min-width: 240px;">
         <input class="input"
                style="width: 100%;"
@@ -57,21 +67,26 @@
         }
     </div>
 
-    <select class="select" @bind="WishMinRarity">
-        @foreach (var r in Enum.GetValues<ItemRarity>())
-        {
-            <option value="@r">Min: @r (@((int)r)+ slots)</option>
-        }
-    </select>
+    <RaritySelect AllowAll="false"
+                  Prefix="Min: "
+                  ShowPlusSlots="true"
+                  Value="WishMinRarity"
+                  ValueChanged="OnWishMinRarityChanged"
+                  Title="Minimum required rarity" />
 
-    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;" title="Estimated 1/X chance per run used to calculate cumulative drop probability">
         <span>Drop Rate (1/X):</span>
         <input class="input" type="number" style="width: 80px;" @bind="WishOneInX" min="1" max="10000" />
     </div>
 
-    <label class="checkbox-label">
-        <input type="checkbox" @bind="WishRequireShiny" /> Shiny Only
+    <label class="checkbox-label" title="Switch to the item's Shiny variant sprite and require a Shiny drop">
+        <input type="checkbox" checked="@WishRequireShiny" @onchange="OnRequireShinyChanged" /> Shiny Only
     </label>
+
+    @if (WishRequireShiny && !string.IsNullOrWhiteSpace(WishItemName) && !hasShinyVariant)
+    {
+        <span style="font-size: 0.74rem; color: var(--text-muted);">(no dedicated Shiny sprite in game files)</span>
+    }
 
     <button class="btn btn-primary" @onclick="CreateWishlistTarget">+ Add to Dream Set</button>
 </div>
@@ -92,9 +107,9 @@ else
             int runsDone = State.GetRunsSinceWishlistTargetCreated(wish);
             double cumulativeChance = CalculateWishProbabilityPercent(wish, runsDone);
             double graves = GameData.ResolveDungeonGraveDifficulty(wish.TargetDungeonName);
-            int spriteItemId = wish.ItemId > 0
-                ? wish.ItemId
-                : (itemsByName.TryGetValue(wish.ItemName, out var matched) ? matched.ItemId : 0);
+
+            // When RequireShiny is checked, always prefer the actual "Shiny <Item>" sprite if it exists in GameData
+            int spriteItemId = ResolveWishlistSpriteId(wish, itemsByName);
 
             <div class="quest-row" style="@(wish.IsCompleted ? "border-color: var(--accent-green); background: rgba(34, 197, 94, 0.08);" : "")">
                 <div class="inline-meta-item" style="min-width: 260px; gap: 10px;">
@@ -118,7 +133,8 @@ else
                         </div>
                         <div class="inline-meta-item" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
                             <GameSprite DungeonName="@wish.TargetDungeonName" Size="16" Title="@wish.TargetDungeonName" />
-                            <span>@wish.TargetDungeonName (@graves.ToString("0.#")/10) • Min: @wish.MinimumRarity</span>
+                            <span>@wish.TargetDungeonName (@graves.ToString("0.#")/10) • Min:</span>
+                            <span class="rarity-text-@wish.MinimumRarity.ToString().ToLowerInvariant()">@wish.MinimumRarity</span>
                         </div>
                     </div>
                 </div>
@@ -155,6 +171,11 @@ else
     private bool ShowItemMenu { get; set; }
     private bool ShowDungeonMenu { get; set; }
 
+    private void OnWishMinRarityChanged(ItemRarity? value)
+    {
+        WishMinRarity = value ?? ItemRarity.Common;
+    }
+
     private void OnWishItemInput(ChangeEventArgs e)
     {
         WishItemName = e.Value?.ToString() ?? "";
@@ -170,16 +191,103 @@ else
 
     private void PickWishItem(ItemMetadata item)
     {
-        WishItemName = item.Name;
-        WishItemId = item.ItemId;
-        if (item.IsShiny) WishRequireShiny = true;
+        if (item.IsShiny)
+        {
+            WishRequireShiny = true;
+            WishItemName = item.Name;
+            WishItemId = item.ItemId;
+        }
+        else if (WishRequireShiny)
+        {
+            // User already toggled Shiny Only: auto-upgrade to Shiny variant if it exists
+            var shiny = FindItemByName("Shiny " + item.Name);
+            WishItemName = shiny != null ? shiny.Name : item.Name;
+            WishItemId = shiny != null ? shiny.ItemId : item.ItemId;
+        }
+        else
+        {
+            WishItemName = item.Name;
+            WishItemId = item.ItemId;
+        }
         ShowItemMenu = false;
+    }
+
+    private void OnRequireShinyChanged(ChangeEventArgs e)
+    {
+        bool wantShiny = e.Value is bool b && b;
+        WishRequireShiny = wantShiny;
+
+        if (string.IsNullOrWhiteSpace(WishItemName))
+            return;
+
+        string baseName = ItemSourceService.StripShinyPrefix(WishItemName);
+        if (wantShiny)
+        {
+            var shiny = FindItemByName("Shiny " + baseName);
+            if (shiny != null)
+            {
+                WishItemName = shiny.Name;
+                WishItemId = shiny.ItemId;
+            }
+        }
+        else
+        {
+            var normal = FindItemByName(baseName);
+            if (normal != null)
+            {
+                WishItemName = normal.Name;
+                WishItemId = normal.ItemId;
+            }
+            else if (WishItemName.StartsWith("Shiny ", StringComparison.OrdinalIgnoreCase))
+            {
+                WishItemName = baseName;
+                WishItemId = 0;
+            }
+        }
     }
 
     private void PickWishDungeon(string dungeon)
     {
         WishDungeonName = dungeon;
         ShowDungeonMenu = false;
+    }
+
+    private ItemMetadata? FindItemByName(string name) =>
+        GameData.GetAllKnownItems()
+            .FirstOrDefault(i => string.Equals(i.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private int ResolvePreviewItemId(out bool hasShinyVariant)
+    {
+        hasShinyVariant = false;
+        if (string.IsNullOrWhiteSpace(WishItemName))
+            return 0;
+
+        string baseName = ItemSourceService.StripShinyPrefix(WishItemName);
+        var shiny = FindItemByName("Shiny " + baseName);
+        hasShinyVariant = shiny != null;
+
+        if (WishRequireShiny && shiny != null)
+            return shiny.ItemId;
+
+        if (WishItemId > 0)
+            return WishItemId;
+
+        return FindItemByName(WishItemName)?.ItemId ?? 0;
+    }
+
+    private static int ResolveWishlistSpriteId(WishlistTarget wish, Dictionary<string, ItemMetadata> itemsByName)
+    {
+        string baseName = ItemSourceService.StripShinyPrefix(wish.ItemName);
+        if (wish.RequireShiny && itemsByName.TryGetValue("Shiny " + baseName, out var shinyMeta))
+            return shinyMeta.ItemId;
+
+        if (wish.ItemId > 0)
+            return wish.ItemId;
+
+        if (itemsByName.TryGetValue(wish.ItemName, out var exact))
+            return exact.ItemId;
+
+        return itemsByName.TryGetValue(baseName, out var baseMeta) ? baseMeta.ItemId : 0;
     }
 
     private List<ItemMetadata> GetItemSuggestions()
@@ -221,16 +329,28 @@ else
     {
         if (string.IsNullOrWhiteSpace(WishItemName)) return;
 
+        string finalName = WishItemName.Trim();
         int resolvedId = WishItemId;
+
+        if (WishRequireShiny)
+        {
+            string baseName = ItemSourceService.StripShinyPrefix(finalName);
+            var shiny = FindItemByName("Shiny " + baseName);
+            if (shiny != null)
+            {
+                finalName = shiny.Name;
+                resolvedId = shiny.ItemId;
+            }
+        }
+
         if (resolvedId <= 0)
         {
-            var match = GameData.GetAllKnownItems()
-                .FirstOrDefault(i => string.Equals(i.Name, WishItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+            var match = FindItemByName(finalName);
             if (match != null) resolvedId = match.ItemId;
         }
 
         double rate = 1.0 / Math.Max(1, WishOneInX);
-        State.AddWishlistTarget(WishItemName, WishDungeonName, WishMinRarity, WishRequireShiny, rate, resolvedId);
+        State.AddWishlistTarget(finalName, WishDungeonName, WishMinRarity, WishRequireShiny, rate, resolvedId);
         WishItemName = "";
         WishItemId = 0;
         ShowItemMenu = false;

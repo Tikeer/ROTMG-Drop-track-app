@@ -24,6 +24,7 @@ public sealed class SpriteAtlasService
 
     private Dictionary<string, SpriteRect> _entries = new(StringComparer.OrdinalIgnoreCase);
     private byte[]? _atlasPngBytes;
+    private AtlasManifest? _loadedManifest;
 
     public bool IsReady { get; private set; }
     public bool IsBuilding => Volatile.Read(ref _buildRunning) == 1;
@@ -39,6 +40,22 @@ public sealed class SpriteAtlasService
     public byte[]? GetAtlasPngBytes()
     {
         lock (_lock) return _atlasPngBytes;
+    }
+
+    /// <summary>
+    /// Builds inline CSS for a sprite span at the given pixel box size without allocating a Blazor child component.
+    /// </summary>
+    public string BuildSpriteCss(SpriteRect rect, int size)
+    {
+        int aw = AtlasWidth;
+        int ah = AtlasHeight;
+        if (aw <= 0 || ah <= 0 || rect.W <= 0 || rect.H <= 0)
+            return string.Empty;
+
+        double scale = (double)size / Math.Max(rect.W, rect.H);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return string.Create(inv,
+            $"width:{rect.W * scale:0.##}px;height:{rect.H * scale:0.##}px;background-size:{aw * scale:0.##}px {ah * scale:0.##}px;background-position:{-rect.X * scale:0.##}px {-rect.Y * scale:0.##}px;");
     }
 
     /// <summary>
@@ -59,18 +76,20 @@ public sealed class SpriteAtlasService
     }
 
     /// <summary>
-    /// Fast startup load: loads cached atlas from disk if present, then rebuilds in background only if missing or outdated.
+    /// Fast startup load: reuses already-loaded cached atlas if present, then rebuilds in background only if missing or outdated.
     /// </summary>
     public Task EnsureBuiltAsync(string? customResourcesAssetsPath = null)
     {
-        var cachedManifest = TryLoadCachedAtlas();
+        var cachedManifest = _loadedManifest ?? TryLoadCachedAtlas();
 
         string? assetsPath = customResourcesAssetsPath ?? _gameData.FindResourcesAssetsPath();
         if (string.IsNullOrWhiteSpace(assetsPath) || !File.Exists(assetsPath))
         {
             if (!IsReady)
+            {
                 StatusMessage = "RotMG resources.assets not found — sprite atlas unavailable";
-            Changed?.Invoke();
+                Changed?.Invoke();
+            }
             return Task.CompletedTask;
         }
 
@@ -82,10 +101,7 @@ public sealed class SpriteAtlasService
                         && cachedManifest.Sprites.Count > 0;
 
         if (upToDate)
-        {
-            Changed?.Invoke();
             return Task.CompletedTask;
-        }
 
         return RebuildAsync(assetsPath);
     }
@@ -141,6 +157,7 @@ public sealed class SpriteAtlasService
             {
                 _entries = entries;
                 _atlasPngBytes = pngBytes;
+                _loadedManifest = manifest;
                 AtlasWidth = manifest.AtlasWidth;
                 AtlasHeight = manifest.AtlasHeight;
                 Revision++;

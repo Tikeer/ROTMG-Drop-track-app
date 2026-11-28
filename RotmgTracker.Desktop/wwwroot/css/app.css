@@ -194,7 +194,6 @@ html, body {
     flex: 1;
     height: 100%;
     overflow-y: auto;
-    scroll-behavior: smooth;
     padding: 22px 28px;
     display: flex;
     flex-direction: column;
@@ -1377,7 +1376,6 @@ input, select { user-select: text; }
     right: -3px;
     bottom: -3px;
     pointer-events: none;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
 }
 
 .item-slot-shiny-overlay {
@@ -1385,7 +1383,6 @@ input, select { user-select: text; }
     left: 2px;
     top: 2px;
     pointer-events: none;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85));
 }
 
 .item-slot-remove {
@@ -1481,7 +1478,8 @@ input, select { user-select: text; }
     margin-top: 2px;
 }
 
-.rarity-text-common { color: var(--text-muted); font-weight: 600; }
+.rarity-text-all { color: var(--text-primary); font-weight: 600; }
+.rarity-text-common { color: #d4d4d8; font-weight: 600; }
 .rarity-text-uncommon { color: #4ade80; font-weight: 700; }
 .rarity-text-rare { color: #38bdf8; font-weight: 700; }
 .rarity-text-legendary { color: #c084fc; font-weight: 700; }
@@ -1649,12 +1647,11 @@ input, select { user-select: text; }
     border: 1px solid var(--border-subtle);
     border-radius: 10px;
     padding: 10px 14px;
-    transition: border-color 0.14s, background 0.14s;
+    contain: layout style paint;
 }
 
 .trophy-row:hover {
     border-color: var(--border-hover);
-    background: var(--bg-card-hover);
 }
 
 .trophy-row-complete {
@@ -1759,19 +1756,67 @@ input, select { user-select: text; }
     gap: 6px;
 }
 
-.trophy-item-wrap {
+/* Ultra-lightweight GPU-safe tiles for Item Collection (zero CSS filters, zero transform/transition layer thrashing) */
+.trophy-tile {
     position: relative;
+    width: 38px;
+    height: 38px;
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #141620;
+    border: 1.5px solid var(--border-color);
+    border-radius: 7px;
+    flex-shrink: 0;
 }
 
-.trophy-item-wrap.is-missing > .item-slot {
+.trophy-tile-lg {
+    width: 42px;
+    height: 42px;
+}
+
+.trophy-tile.is-missing {
+    background: #10121a;
+    border-color: #1f2230;
+}
+
+.trophy-tile.is-missing > .game-sprite,
+.trophy-tile.is-missing > .trophy-shiny-mark {
     opacity: 0.32;
-    filter: saturate(0.35);
 }
 
-.trophy-item-wrap.is-missing:hover > .item-slot {
-    opacity: 0.92;
-    filter: none;
+.trophy-tile.is-missing:hover {
+    border-color: var(--border-hover);
+}
+
+.trophy-tile.is-missing:hover > .game-sprite,
+.trophy-tile.is-missing:hover > .trophy-shiny-mark {
+    opacity: 0.95;
+}
+
+.trophy-tile.is-owned:hover {
+    border-color: var(--text-primary);
+}
+
+.trophy-tile.rarity-uncommon { border-color: #22c55e; background: #13221a; }
+.trophy-tile.rarity-rare { border-color: #38bdf8; background: #12202b; }
+.trophy-tile.rarity-legendary { border-color: #a855f7; background: #1e1629; }
+.trophy-tile.rarity-divine { border-color: #f59e0b; background: #261e12; }
+.trophy-tile.is-shiny { border-color: #f472b6; }
+.trophy-tile.is-shiny-dim { border-color: rgba(244, 114, 182, 0.45); }
+
+.trophy-shiny-mark {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    pointer-events: none;
+}
+
+.trophy-rarity-mark {
+    position: absolute;
+    right: -3px;
+    bottom: -3px;
+    pointer-events: none;
 }
 
 .trophy-count-tag {
@@ -1869,4 +1914,97 @@ input, select { user-select: text; }
 .autocomplete-option:hover {
     background: var(--bg-card-hover);
     border-color: var(--border-subtle);
+}
+
+/* ===== Custom Dark Rarity Dropdown (RaritySelect) ===== */
+.rarity-dropdown {
+    display: inline-block;
+}
+
+.rarity-dropdown-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 158px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.86rem;
+    cursor: pointer;
+    transition: border-color 0.14s, background 0.14s;
+}
+
+.rarity-dropdown-trigger:hover {
+    border-color: var(--border-hover);
+    background: #232838;
+}
+
+.rarity-dropdown-menu {
+    min-width: 210px;
+    padding: 5px;
+    gap: 3px;
+}
+
+.rarity-dropdown-option {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rarity-dropdown-option:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}
+
+.rarity-dropdown-option.selected {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.4);
+}
+
+.rarity-icon-slot {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.rarity-common-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid #a1a1aa;
+    background: #27272a;
+}
+
+.rarity-all-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, #4ade80 0%, #38bdf8 35%, #c084fc 70%, #fbbf24 100%);
+}
+
+.rarity-opt-label {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.rarity-opt-slots {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }

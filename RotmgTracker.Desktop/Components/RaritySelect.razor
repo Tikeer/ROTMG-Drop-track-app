@@ -1,0 +1,110 @@
+@* Custom dark Rarity dropdown with in-game RarityIcon_1..4 sprites and rarity-colored labels (zero native macOS <select>). *@
+
+<div class="custom-dropdown rarity-dropdown">
+    <button type="button"
+            class="rarity-dropdown-trigger"
+            @onclick="ToggleMenu"
+            title="@Title">
+        @if (Value.HasValue)
+        {
+            <span class="rarity-icon-slot">
+                @if (Value.Value > ItemRarity.Common)
+                {
+                    <GameSprite RarityIcon="Value.Value" Size="18" />
+                }
+                else
+                {
+                    <span class="rarity-common-dot"></span>
+                }
+            </span>
+            <span class="rarity-opt-label @GetRarityTextClass(Value.Value)">
+                @Prefix@Value.Value
+            </span>
+        }
+        else
+        {
+            <span class="rarity-icon-slot">
+                <span class="rarity-all-dot"></span>
+            </span>
+            <span class="rarity-opt-label rarity-text-all">@AllLabel</span>
+        }
+        <span class="custom-dropdown-caret">▾</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="dropdown-backdrop" @onclick="CloseMenu"></div>
+        <div class="custom-dropdown-menu rarity-dropdown-menu">
+            @if (AllowAll)
+            {
+                <button type="button"
+                        class="rarity-dropdown-option @(!Value.HasValue ? "selected" : "")"
+                        @onclick="() => SelectAsync(null)">
+                    <span class="rarity-icon-slot">
+                        <span class="rarity-all-dot"></span>
+                    </span>
+                    <span class="rarity-opt-label rarity-text-all">@AllLabel</span>
+                </button>
+            }
+
+            @foreach (var r in Enum.GetValues<ItemRarity>())
+            {
+                bool isSelected = Value.HasValue && Value.Value == r;
+                string slotsText = ShowPlusSlots
+                    ? $"{(int)r}+ slots"
+                    : (int)r == 1 ? "1 slot" : $"{(int)r} slots";
+
+                <button type="button"
+                        class="rarity-dropdown-option @(isSelected ? "selected" : "")"
+                        @onclick="() => SelectAsync(r)">
+                    <span class="rarity-icon-slot">
+                        @if (r > ItemRarity.Common)
+                        {
+                            <GameSprite RarityIcon="r" Size="18" />
+                        }
+                        else
+                        {
+                            <span class="rarity-common-dot"></span>
+                        }
+                    </span>
+                    <span class="rarity-opt-label @GetRarityTextClass(r)">@Prefix@r</span>
+                    <span class="rarity-opt-slots">@slotsText</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public ItemRarity? Value { get; set; }
+    [Parameter] public EventCallback<ItemRarity?> ValueChanged { get; set; }
+    [Parameter] public bool AllowAll { get; set; } = true;
+    [Parameter] public string AllLabel { get; set; } = "All Rarities";
+    [Parameter] public string Prefix { get; set; } = "";
+    [Parameter] public bool ShowPlusSlots { get; set; }
+    [Parameter] public string? Title { get; set; }
+
+    private bool _open;
+
+    private void ToggleMenu() => _open = !_open;
+    private void CloseMenu() => _open = false;
+
+    private async Task SelectAsync(ItemRarity? value)
+    {
+        _open = false;
+        if (Value != value)
+        {
+            Value = value;
+            await ValueChanged.InvokeAsync(value);
+        }
+    }
+
+    private static string GetRarityTextClass(ItemRarity rarity) => rarity switch
+    {
+        ItemRarity.Uncommon => "rarity-text-uncommon",
+        ItemRarity.Rare => "rarity-text-rare",
+        ItemRarity.Legendary => "rarity-text-legendary",
+        ItemRarity.Divine => "rarity-text-divine",
+        _ => "rarity-text-common"
+    };
+}

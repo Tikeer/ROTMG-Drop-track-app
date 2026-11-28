@@ -29,7 +29,7 @@
         <option value="EVENT_WHITE">Realm Whites</option>
         <option value="REGULAR_WHITE">Regular Whites</option>
         <option value="ST">ST Sets</option>
-        <option value="SHINY">Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny && i.Quality != DropType.BPs))</option>
+        <option value="SHINY">Shiny Variants Only (@_shinyCatalogCount)</option>
     </select>
 
     <select class="select" @bind="CollectionOwnershipFilter">
@@ -75,13 +75,13 @@
         • Overall: <strong style="color: var(--accent-gold);">@_overallProgress.Owned / @_overallProgress.Total</strong> (@_overallProgress.Percent%)
     </div>
     <div style="font-size: 0.78rem; color: var(--text-muted);">
-        Dungeons: <strong>@_trophyRows.Count</strong> • Completions in scope: <strong>@_runsCount</strong>
+        Dungeons: <strong>@_renderedRows.Count</strong> • Completions in scope: <strong>@_runsCount</strong>
     </div>
 </div>
 
 @if (ViewMode == "TROPHY")
 {
-    if (_trophyRows.Count == 0 && _uncategorizedRow == null)
+    if (_renderedRows.Count == 0 && _uncategorizedRow == null)
     {
         <div class="empty-state">No collection items match the current filters.</div>
     }
@@ -96,19 +96,24 @@
         </div>
 
         <div class="trophy-list">
-            @foreach (var row in _trophyRows)
+            @foreach (var row in _renderedRows)
             {
-                <div class="trophy-row @(row.OwnedCount == row.TotalCount && row.TotalCount > 0 ? "trophy-row-complete" : "")">
+                <div class="trophy-row @(row.IsComplete ? "trophy-row-complete" : "")">
                     <div class="th-col-dungeon inline-meta-item" style="gap: 10px;">
-                        <GameSprite PortalObjectType="row.PortalObjectType" DungeonName="@row.DungeonName" Size="28" Title="@row.DungeonName" />
+                        @if (!string.IsNullOrEmpty(row.PortalStyle))
+                        {
+                            <span class="game-sprite-wrap" style="width:28px;height:28px;" title="@row.DungeonName">
+                                <span class="game-sprite" style="@row.PortalStyle"></span>
+                            </span>
+                        }
                         <span class="trophy-dungeon-name" title="@row.DungeonName">@row.DungeonName</span>
                     </div>
 
                     <div class="th-col-graves">
                         @if (row.Graves > 0)
                         {
-                            <span class="graves-pill @GetGravesTierClass(row.Graves)">
-                                @row.Graves.ToString("0.#")
+                            <span class="graves-pill @row.GravesClass">
+                                @row.GravesText
                                 <UiIcon Name="skull" Size="11" />
                             </span>
                         }
@@ -125,35 +130,32 @@
                     <div class="th-col-pct">
                         <div class="trophy-pct-text">
                             <strong>@row.OwnedCount/@row.TotalCount</strong>
-                            <span>@row.CompletionPercent.ToString("0.#")%</span>
+                            <span>@row.PercentText</span>
                         </div>
                         <div class="trophy-mini-bar">
-                            <div class="trophy-mini-fill" style="width: @(row.CompletionPercent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            <div class="trophy-mini-fill" style="width: @row.BarWidth"></div>
                         </div>
                     </div>
 
                     <div class="th-col-items">
-                        @foreach (var entry in row.Items)
+                        @foreach (var tile in row.Tiles)
                         {
-                            bool owned = entry.OwnedCount > 0;
-                            string extra = owned
-                                ? $"Owned x{entry.OwnedCount}"
-                                : "Missing";
-
-                            <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
-                                <ItemSprite TextureFile="@entry.Meta.TextureFile"
-                                            TextureIndex="entry.Meta.TextureIndex"
-                                            ItemName="@entry.Meta.Name"
-                                            Rarity="@(owned ? entry.BestRarity : ItemRarity.Common)"
-                                            IsShiny="entry.Meta.IsShiny"
-                                            DropQuality="entry.Meta.Quality"
-                                            RarityScore="@(owned ? entry.BestScore : 0)"
-                                            ExtraMeta="@extra"
-                                            LightweightTooltip="true"
-                                            Size="38" />
-                                @if (entry.OwnedCount > 1)
+                            <div class="@tile.CssClass" title="@tile.Tooltip">
+                                @if (!string.IsNullOrEmpty(tile.SpriteStyle))
                                 {
-                                    <span class="trophy-count-tag">x@(entry.OwnedCount)</span>
+                                    <span class="game-sprite" style="@tile.SpriteStyle"></span>
+                                }
+                                @if (tile.IsShiny && !string.IsNullOrEmpty(_shinyOverlayStyle))
+                                {
+                                    <span class="trophy-shiny-mark"><span class="game-sprite" style="@_shinyOverlayStyle"></span></span>
+                                }
+                                @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
+                                {
+                                    <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
+                                }
+                                @if (tile.CountTag != null)
+                                {
+                                    <span class="trophy-count-tag">@tile.CountTag</span>
                                 }
                             </div>
                         }
@@ -178,24 +180,24 @@
                     <div class="trophy-uncat-grid">
                         <Virtualize Items="@_uncatChunks" Context="chunk" ItemSize="44" OverscanCount="6">
                             <div class="trophy-flat-row" style="height: 44px;">
-                                @foreach (var entry in chunk)
+                                @foreach (var tile in chunk)
                                 {
-                                    bool owned = entry.OwnedCount > 0;
-                                    string extra = owned ? $"Owned x{entry.OwnedCount}" : "Missing";
-                                    <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
-                                        <ItemSprite TextureFile="@entry.Meta.TextureFile"
-                                                    TextureIndex="entry.Meta.TextureIndex"
-                                                    ItemName="@entry.Meta.Name"
-                                                    Rarity="@(owned ? entry.BestRarity : ItemRarity.Common)"
-                                                    IsShiny="entry.Meta.IsShiny"
-                                                    DropQuality="entry.Meta.Quality"
-                                                    RarityScore="@(owned ? entry.BestScore : 0)"
-                                                    ExtraMeta="@extra"
-                                                    LightweightTooltip="true"
-                                                    Size="38" />
-                                        @if (entry.OwnedCount > 1)
+                                    <div class="@tile.CssClass" title="@tile.Tooltip">
+                                        @if (!string.IsNullOrEmpty(tile.SpriteStyle))
                                         {
-                                            <span class="trophy-count-tag">x@(entry.OwnedCount)</span>
+                                            <span class="game-sprite" style="@tile.SpriteStyle"></span>
+                                        }
+                                        @if (tile.IsShiny && !string.IsNullOrEmpty(_shinyOverlayStyle))
+                                        {
+                                            <span class="trophy-shiny-mark"><span class="game-sprite" style="@_shinyOverlayStyle"></span></span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
+                                        {
+                                            <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
+                                        }
+                                        @if (tile.CountTag != null)
+                                        {
+                                            <span class="trophy-count-tag">@tile.CountTag</span>
                                         }
                                     </div>
                                 }
@@ -218,24 +220,24 @@ else
         <div class="trophy-uncat-grid">
             <Virtualize Items="@_flatChunks" Context="chunk" ItemSize="48" OverscanCount="8">
                 <div class="trophy-flat-row" style="height: 48px;">
-                    @foreach (var item in chunk)
+                    @foreach (var tile in chunk)
                     {
-                        bool owned = _ownedStatsById.TryGetValue(item.ItemId, out var st);
-                        string extra = owned ? $"Owned x{st.Count}" : "Missing";
-                        <div class="trophy-item-wrap @(owned ? "is-owned" : "is-missing")">
-                            <ItemSprite TextureFile="@item.TextureFile"
-                                        TextureIndex="item.TextureIndex"
-                                        ItemName="@item.Name"
-                                        Rarity="@(owned ? st.BestRarity : ItemRarity.Common)"
-                                        IsShiny="item.IsShiny"
-                                        DropQuality="item.Quality"
-                                        RarityScore="@(owned ? st.BestScore : 0)"
-                                        ExtraMeta="@extra"
-                                        LightweightTooltip="true"
-                                        Size="42" />
-                            @if (owned && st.Count > 1)
+                        <div class="@tile.CssClass trophy-tile-lg" title="@tile.Tooltip">
+                            @if (!string.IsNullOrEmpty(tile.SpriteStyle))
                             {
-                                <span class="trophy-count-tag">x@(st.Count)</span>
+                                <span class="game-sprite" style="@tile.SpriteStyle"></span>
+                            }
+                            @if (tile.IsShiny && !string.IsNullOrEmpty(_shinyOverlayStyle))
+                            {
+                                <span class="trophy-shiny-mark"><span class="game-sprite" style="@_shinyOverlayStyle"></span></span>
+                            }
+                            @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
+                            {
+                                <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
+                            }
+                            @if (tile.CountTag != null)
+                            {
+                                <span class="trophy-count-tag">@tile.CountTag</span>
                             }
                         </div>
                     }
@@ -246,6 +248,28 @@ else
 }
 
 @code {
+    private sealed record RenderedTile(
+        string CssClass,
+        string SpriteStyle,
+        bool IsShiny,
+        string? RarityOverlayStyle,
+        string? CountTag,
+        string Tooltip);
+
+    private sealed record RenderedRow(
+        string DungeonName,
+        string PortalStyle,
+        double Graves,
+        string GravesText,
+        string GravesClass,
+        int Completions,
+        int OwnedCount,
+        int TotalCount,
+        string PercentText,
+        string BarWidth,
+        bool IsComplete,
+        List<RenderedTile> Tiles);
+
     private string ViewMode { get; set; } = "TROPHY";
     private string SortMode { get; set; } = "GRAVES";
     private bool ShowUncategorized { get; set; }
@@ -258,13 +282,15 @@ else
 
     private DataScope _scope = DataScope.AllCharacters;
 
-    // Cached computed view so scrolling/hovering never recomputes LINQ over 2000+ items
     private string _lastCacheKey = "";
-    private List<TrophyHallDungeonRow> _trophyRows = new();
+    private int _shinyCatalogCount;
+    private string _shinyOverlayStyle = "";
+    private readonly Dictionary<ItemRarity, string> _rarityOverlayStyles = new();
+
+    private List<RenderedRow> _renderedRows = new();
     private TrophyHallDungeonRow? _uncategorizedRow;
-    private List<List<TrophyHallItem>> _uncatChunks = new();
-    private List<List<ItemMetadata>> _flatChunks = new();
-    private Dictionary<int, (int Count, ItemRarity BestRarity, double BestScore)> _ownedStatsById = new();
+    private List<List<RenderedTile>> _uncatChunks = new();
+    private List<List<RenderedTile>> _flatChunks = new();
     private int _shownItemCount;
     private int _ownedInView;
     private double _viewPct;
@@ -283,27 +309,58 @@ else
         Guid activeId = State.ActiveCharacter.Id;
         int totalLoot = State.Data.LootHistory.Count;
         int totalRuns = State.Data.DungeonRuns.Count;
-        string key = $"{ViewMode}|{SortMode}|{_scope}|{activeId}|{CollectionSearch}|{CollectionCategoryFilter}|{CollectionOwnershipFilter}|{CollectionIncludeTiered}|{CollectionMinTier}|{totalLoot}|{totalRuns}";
+        int atlasRev = Sprites.Revision;
+        string key = $"{ViewMode}|{SortMode}|{_scope}|{activeId}|{CollectionSearch}|{CollectionCategoryFilter}|{CollectionOwnershipFilter}|{CollectionIncludeTiered}|{CollectionMinTier}|{totalLoot}|{totalRuns}|{atlasRev}";
 
         if (key == _lastCacheKey)
             return;
 
         _lastCacheKey = key;
 
+        // Precompute overlay styles once per atlas revision
+        _shinyOverlayStyle = Sprites.TryGetUiSprite("shiny_item_icon", out var shinyRect)
+            ? Sprites.BuildSpriteCss(shinyRect, 11)
+            : "";
+        _rarityOverlayStyles.Clear();
+        foreach (var r in new[] { ItemRarity.Uncommon, ItemRarity.Rare, ItemRarity.Legendary, ItemRarity.Divine })
+        {
+            if (Sprites.TryGetRarityIconSprite(r, out var rr))
+                _rarityOverlayStyles[r] = Sprites.BuildSpriteCss(rr, 15);
+        }
+
+        var allKnown = GameData.GetAllKnownItems();
+        _shinyCatalogCount = allKnown.Count(i => i.IsShiny && i.Quality != DropType.BPs);
+
         var loot = State.GetLootSnapshot(_scope);
         var runs = State.GetDungeonRunsSnapshot(_scope);
         _runsCount = runs.Count;
-        _ownedStatsById = BuildOwnedStatsById(loot);
+        var ownedStatsById = BuildOwnedStatsById(loot);
 
-        var baseFilteredItems = GetFilteredCollectionItems(loot, applySearch: ViewMode != "TROPHY").ToList();
         _overallProgress = UiHelpers.ComputeCollectionProgress(
-            GameData.GetAllKnownItems(), loot, CollectionIncludeTiered, CollectionMinTier);
+            allKnown, loot, CollectionIncludeTiered, CollectionMinTier);
 
         if (ViewMode == "TROPHY")
         {
-            var rawRows = ItemSources.BuildTrophyHall(baseFilteredItems, loot, runs, GameData);
-            string q = CollectionSearch.Trim();
+            List<TrophyHallDungeonRow> rawRows;
+            bool isDefaultUnfiltered = _scope == DataScope.AllCharacters
+                && string.IsNullOrWhiteSpace(CollectionSearch)
+                && CollectionCategoryFilter == "ALL"
+                && CollectionOwnershipFilter == "ALL"
+                && !CollectionIncludeTiered;
 
+            if (isDefaultUnfiltered && ItemSources.TryGetCachedDefaultTrophyHall(loot.Count, runs.Count, out var cached))
+            {
+                rawRows = cached;
+            }
+            else
+            {
+                var baseFilteredItems = GetFilteredCollectionItems(allKnown, loot, applySearch: false).ToList();
+                rawRows = ItemSources.BuildTrophyHall(baseFilteredItems, loot, runs, GameData);
+                if (isDefaultUnfiltered)
+                    ItemSources.UpdateCachedDefaultTrophyHall(loot.Count, runs.Count, rawRows);
+            }
+
+            string q = CollectionSearch.Trim();
             if (!string.IsNullOrEmpty(q))
             {
                 var matched = new List<TrophyHallDungeonRow>();
@@ -324,13 +381,15 @@ else
             }
 
             _uncategorizedRow = rawRows.FirstOrDefault(r => r.DungeonName.Equals("Other / Uncategorized", StringComparison.OrdinalIgnoreCase));
-            _uncatChunks = _uncategorizedRow != null ? ChunkList(_uncategorizedRow.Items, 16) : new();
+            _uncatChunks = _uncategorizedRow != null
+                ? ChunkList(_uncategorizedRow.Items.Select(e => BuildTile(e.Meta, e.OwnedCount, e.BestRarity, e.BestScore, 30)).ToList(), 16)
+                : new();
 
             var mapped = rawRows
                 .Where(r => !r.DungeonName.Equals("Other / Uncategorized", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            _trophyRows = SortMode switch
+            var sorted = SortMode switch
             {
                 "PERCENT" => mapped.OrderByDescending(r => r.CompletionPercent).ThenByDescending(r => r.OwnedCount).ThenByDescending(r => r.Graves).ToList(),
                 "COMP" => mapped.OrderByDescending(r => r.Completions).ThenByDescending(r => r.Graves).ThenBy(r => r.DungeonName).ToList(),
@@ -338,25 +397,105 @@ else
                 _ => mapped.OrderByDescending(r => r.Graves).ThenByDescending(r => r.OwnedCount).ThenBy(r => r.DungeonName).ToList()
             };
 
-            var distinctShownIds = _trophyRows.Concat(_uncategorizedRow != null ? [_uncategorizedRow] : [])
-                .SelectMany(r => r.Items)
-                .Select(i => i.Meta.ItemId)
-                .ToHashSet();
+            _renderedRows = new List<RenderedRow>(sorted.Count);
+            var distinctShownIds = new HashSet<int>();
+
+            foreach (var r in sorted)
+            {
+                string portalStyle = Sprites.TryGetPortalSprite(r.DungeonName, r.PortalObjectType, out var pRect)
+                    ? Sprites.BuildSpriteCss(pRect, 28)
+                    : "";
+
+                var tiles = new List<RenderedTile>(r.Items.Count);
+                foreach (var e in r.Items)
+                {
+                    distinctShownIds.Add(e.Meta.ItemId);
+                    tiles.Add(BuildTile(e.Meta, e.OwnedCount, e.BestRarity, e.BestScore, 30));
+                }
+
+                double pct = r.CompletionPercent;
+                _renderedRows.Add(new RenderedRow(
+                    DungeonName: r.DungeonName,
+                    PortalStyle: portalStyle,
+                    Graves: r.Graves,
+                    GravesText: r.Graves > 0 ? r.Graves.ToString("0.#") : "—",
+                    GravesClass: GetGravesTierClass(r.Graves),
+                    Completions: r.Completions,
+                    OwnedCount: r.OwnedCount,
+                    TotalCount: r.TotalCount,
+                    PercentText: $"{pct:0.#}%",
+                    BarWidth: $"{pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}%",
+                    IsComplete: r.OwnedCount == r.TotalCount && r.TotalCount > 0,
+                    Tiles: tiles));
+            }
+
+            if (_uncategorizedRow != null)
+            {
+                foreach (var e in _uncategorizedRow.Items)
+                    distinctShownIds.Add(e.Meta.ItemId);
+            }
+
             _shownItemCount = distinctShownIds.Count;
-            _ownedInView = distinctShownIds.Count(id => _ownedStatsById.ContainsKey(id));
+            _ownedInView = distinctShownIds.Count(id => ownedStatsById.ContainsKey(id));
             _flatChunks = new();
         }
         else
         {
-            _trophyRows = new();
+            var baseFilteredItems = GetFilteredCollectionItems(allKnown, loot, applySearch: true).ToList();
+            _renderedRows = new();
             _uncategorizedRow = null;
             _uncatChunks = new();
-            _flatChunks = ChunkList(baseFilteredItems, 14);
+
+            var flatTiles = new List<RenderedTile>(baseFilteredItems.Count);
+            foreach (var item in baseFilteredItems)
+            {
+                bool owned = ownedStatsById.TryGetValue(item.ItemId, out var st);
+                flatTiles.Add(BuildTile(item, owned ? st.Count : 0, owned ? st.BestRarity : ItemRarity.Common, owned ? st.BestScore : 0, 34));
+            }
+
+            _flatChunks = ChunkList(flatTiles, 14);
             _shownItemCount = baseFilteredItems.Count;
-            _ownedInView = baseFilteredItems.Count(i => _ownedStatsById.ContainsKey(i.ItemId));
+            _ownedInView = baseFilteredItems.Count(i => ownedStatsById.ContainsKey(i.ItemId));
         }
 
         _viewPct = _shownItemCount > 0 ? Math.Round((double)_ownedInView / _shownItemCount * 100.0, 1) : 0.0;
+    }
+
+    private RenderedTile BuildTile(ItemMetadata meta, int ownedCount, ItemRarity bestRarity, double bestScore, int spriteSize)
+    {
+        bool owned = ownedCount > 0;
+        ItemRarity displayRarity = owned ? bestRarity : ItemRarity.Common;
+
+        string rarityClass = displayRarity switch
+        {
+            ItemRarity.Uncommon => "rarity-uncommon",
+            ItemRarity.Rare => "rarity-rare",
+            ItemRarity.Legendary => "rarity-legendary",
+            ItemRarity.Divine => "rarity-divine",
+            _ => ""
+        };
+
+        string cssClass = owned
+            ? $"trophy-tile is-owned {rarityClass}{(meta.IsShiny ? " is-shiny" : "")}"
+            : $"trophy-tile is-missing{(meta.IsShiny ? " is-shiny-dim" : "")}";
+
+        string spriteStyle = Sprites.TryGetSprite(meta.TextureFile, meta.TextureIndex, out var rect)
+            ? Sprites.BuildSpriteCss(rect, spriteSize)
+            : "";
+
+        string? rarityOverlay = displayRarity > ItemRarity.Common && _rarityOverlayStyles.TryGetValue(displayRarity, out var rCss)
+            ? rCss
+            : null;
+
+        string? countTag = ownedCount > 1 ? $"x{ownedCount}" : null;
+
+        string tooltip = owned
+            ? (displayRarity > ItemRarity.Common
+                ? $"{meta.Name} • {displayRarity} ({(int)displayRarity} slots) • Score: {Math.Round(bestScore)} pts • Owned x{ownedCount}"
+                : $"{meta.Name} • Score: {Math.Round(bestScore)} pts • Owned x{ownedCount}")
+            : $"{meta.Name} • Missing";
+
+        return new RenderedTile(cssClass, spriteStyle, meta.IsShiny, rarityOverlay, countTag, tooltip);
     }
 
     private static Dictionary<int, (int Count, ItemRarity BestRarity, double BestScore)> BuildOwnedStatsById(IReadOnlyList<LootDropRecord> loot)
@@ -380,10 +519,13 @@ else
         return dict;
     }
 
-    private IEnumerable<ItemMetadata> GetFilteredCollectionItems(IReadOnlyList<LootDropRecord> loot, bool applySearch = true)
+    private IEnumerable<ItemMetadata> GetFilteredCollectionItems(
+        IReadOnlyCollection<ItemMetadata> allKnown,
+        IReadOnlyList<LootDropRecord> loot,
+        bool applySearch = true)
     {
         // Exclude Blueprints & Schematics from Item Collection
-        var items = GameData.GetAllKnownItems().Where(i => i.Quality != DropType.BPs);
+        var items = allKnown.Where(i => i.Quality != DropType.BPs);
 
         if (!CollectionIncludeTiered)
             items = items.Where(i => i.Tier <= 0);

@@ -14,7 +14,7 @@
     var itemSuggestions = GetItemSuggestions();
 }
 
-<div class="quest-add-bar" style="flex-wrap: wrap;">
+<div class="quest-add-bar" style="flex-wrap: wrap; overflow: visible;">
     <input class="input" list="loot-item-suggestions" style="min-width: 240px;" placeholder="Search item, boss, dungeon, or character..." @bind="LootSearchQuery" @bind:event="oninput" />
     @if (itemSuggestions.Count > 0)
     {
@@ -57,13 +57,11 @@
             <option value="@dt">@UiHelpers.FormatDropType(dt)</option>
         }
     </select>
-    <select class="select" @bind="LootFilterRarity">
-        <option value="">All Rarities</option>
-        @foreach (var r in Enum.GetValues<ItemRarity>())
-        {
-            <option value="@r">@r (@((int)r) slots)</option>
-        }
-    </select>
+    <RaritySelect AllowAll="true"
+                  AllLabel="All Rarities"
+                  Value="LootFilterRarityValue"
+                  ValueChanged="OnRarityFilterChanged"
+                  Title="Filter by item rarity" />
     <label class="checkbox-label">
         <input type="checkbox" @bind="LootShowOther" /> Show potions / eggs / junk
     </label>
@@ -179,7 +177,7 @@ else
     private string _filterDungeon = "";
     private string _filterBoss = "";
     private string _filterType = "";
-    private string _filterRarity = "";
+    private ItemRarity? _filterRarity;
     private bool _showOther = true;
     
     private DataScope _scope = DataScope.AllCharacters;
@@ -213,10 +211,12 @@ else
         set { _filterType = value ?? ""; VisibleBags = PageSize; }
     }
 
-    private string LootFilterRarity
+    private ItemRarity? LootFilterRarityValue => _filterRarity;
+
+    private void OnRarityFilterChanged(ItemRarity? value)
     {
-        get => _filterRarity;
-        set { _filterRarity = value ?? ""; VisibleBags = PageSize; }
+        _filterRarity = value;
+        VisibleBags = PageSize;
     }
 
     private bool LootShowOther
@@ -306,8 +306,8 @@ else
         if (!string.IsNullOrWhiteSpace(_filterType) && Enum.TryParse<DropType>(_filterType, out var dt))
             query = query.Where(l => l.BagType == dt);
 
-        if (!string.IsNullOrWhiteSpace(_filterRarity) && Enum.TryParse<ItemRarity>(_filterRarity, out var r))
-            query = query.Where(l => l.Rarity == r);
+        if (_filterRarity.HasValue)
+            query = query.Where(l => l.Rarity == _filterRarity.Value);
 
         return query;
     }
