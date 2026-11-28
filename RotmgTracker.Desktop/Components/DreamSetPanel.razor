@@ -1,129 +1,53 @@
 @inherits StateAwareComponent
 @inject GameDataService GameData
-
-<div class="section-header">
-    <h2>Dream Set</h2>
-</div>
+@inject ItemSourceService ItemSources
 
 @{
-    var itemSuggestions = GetItemSuggestions();
-    var dungeonSuggestions = GetDungeonSuggestions();
-    int previewItemId = ResolvePreviewItemId(out bool hasShinyVariant);
+    var scopedLoot = State.GetLootSnapshot(Scope);
+    var scopedRuns = State.GetDungeonRunsSnapshot(Scope);
+    var itemsByName = GameData.GetAllKnownItems()
+        .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 }
 
-<div class="quest-add-bar" style="flex-wrap: wrap; overflow: visible;">
-    @if (previewItemId > 0)
-    {
-        <ItemSprite ItemId="previewItemId"
-                    Rarity="WishMinRarity"
-                    IsShiny="WishRequireShiny"
-                    Size="36"
-                    ShowTooltip="false" />
-    }
-
-    <div class="autocomplete-host" style="min-width: 240px;">
-        <input class="input"
-               style="width: 100%;"
-               placeholder="Search target item (e.g. Makakoyumi)..."
-               value="@WishItemName"
-               @oninput="OnWishItemInput"
-               @onfocus="() => ShowItemMenu = true" />
-
-        @if (ShowItemMenu && itemSuggestions.Count > 0)
-        {
-            <div class="dropdown-backdrop" @onclick="() => ShowItemMenu = false"></div>
-            <div class="autocomplete-menu">
-                @foreach (var item in itemSuggestions)
-                {
-                    <button type="button" class="autocomplete-option" @onclick="() => PickWishItem(item)">
-                        <GameSprite TextureFile="@item.TextureFile" TextureIndex="item.TextureIndex" Size="20" />
-                        <span style="color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)");">@item.Name</span>
-                    </button>
-                }
-            </div>
-        }
+<div class="profile-col-header">
+    <div>
+        <h3 class="profile-col-title">Dream Set</h3>
+        <span class="profile-col-sub">@State.Data.Wishlist.Count(w => w.IsCompleted)/@State.Data.Wishlist.Count achieved</span>
     </div>
-
-    <div class="autocomplete-host" style="min-width: 190px; max-width: 220px;">
-        <input class="input"
-               style="width: 100%;"
-               placeholder="Target dungeon..."
-               value="@WishDungeonName"
-               @oninput="OnWishDungeonInput"
-               @onfocus="() => ShowDungeonMenu = true" />
-
-        @if (ShowDungeonMenu && dungeonSuggestions.Count > 0)
-        {
-            <div class="dropdown-backdrop" @onclick="() => ShowDungeonMenu = false"></div>
-            <div class="autocomplete-menu">
-                @foreach (var p in dungeonSuggestions)
-                {
-                    <button type="button" class="autocomplete-option" @onclick="() => PickWishDungeon(p.DungeonName)">
-                        <GameSprite PortalObjectType="p.ObjectType" DungeonName="@p.DungeonName" Size="18" />
-                        <span>@p.DungeonName</span>
-                    </button>
-                }
-            </div>
-        }
-    </div>
-
-    <RaritySelect AllowAll="false"
-                  Prefix="Min: "
-                  ShowPlusSlots="true"
-                  Value="WishMinRarity"
-                  ValueChanged="OnWishMinRarityChanged"
-                  Title="Minimum required rarity" />
-
-    <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;" title="Estimated 1/X chance per run used to calculate cumulative drop probability">
-        <span>Drop Rate (1/X):</span>
-        <input class="input" type="number" style="width: 80px;" @bind="WishOneInX" min="1" max="10000" />
-    </div>
-
-    <label class="checkbox-label" title="Switch to the item's Shiny variant sprite and require a Shiny drop">
-        <input type="checkbox" checked="@WishRequireShiny" @onchange="OnRequireShinyChanged" /> Shiny Only
-    </label>
-
-    @if (WishRequireShiny && !string.IsNullOrWhiteSpace(WishItemName) && !hasShinyVariant)
-    {
-        <span style="font-size: 0.74rem; color: var(--text-muted);">(no dedicated Shiny sprite in game files)</span>
-    }
-
-    <button class="btn btn-primary" @onclick="CreateWishlistTarget">+ Add to Dream Set</button>
+    <button type="button" class="btn btn-primary btn-sm" @onclick="OpenModal">+ Add Item</button>
 </div>
 
 @if (State.Data.Wishlist.Count == 0)
 {
-    <div class="empty-state">Your dream set is empty. Add an item above to track dungeon runs and cumulative drop probability!</div>
+    <div class="empty-state" style="padding: 20px 14px; font-size: 0.84rem;">
+        Your dream set is empty. Click <strong>+ Add Item</strong> to track empirical runs and drops.
+    </div>
 }
 else
 {
-    var itemsByName = GameData.GetAllKnownItems()
-        .GroupBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-
-    <div class="quest-list">
+    <div class="profile-col-list">
         @foreach (var wish in State.Data.Wishlist)
         {
-            int runsDone = State.GetRunsSinceWishlistTargetCreated(wish);
-            double cumulativeChance = CalculateWishProbabilityPercent(wish, runsDone);
-            double graves = GameData.ResolveDungeonGraveDifficulty(wish.TargetDungeonName);
-
-            // When RequireShiny is checked, always prefer the actual "Shiny <Item>" sprite if it exists in GameData
+            int runsDone = CountRunsSinceAdded(wish, scopedRuns);
+            int matchedDrops = CountMatchingDrops(wish, scopedLoot);
+            bool achieved = wish.IsCompleted || matchedDrops > 0;
             int spriteItemId = ResolveWishlistSpriteId(wish, itemsByName);
 
-            <div class="quest-row" style="@(wish.IsCompleted ? "border-color: var(--accent-green); background: rgba(34, 197, 94, 0.08);" : "")">
-                <div class="inline-meta-item" style="min-width: 260px; gap: 10px;">
+            <div class="dream-item-card @(achieved ? "is-achieved" : "")">
+                <div class="dream-item-top">
                     @if (spriteItemId > 0)
                     {
                         <ItemSprite ItemId="spriteItemId"
+                                    ItemName="@wish.ItemName"
                                     Rarity="wish.MinimumRarity"
                                     IsShiny="wish.RequireShiny"
-                                    Size="36"
-                                    ShowTooltip="false" />
+                                    Size="38"
+                                    ShowTooltip="true" />
                     }
-                    <div>
-                        <div class="inline-meta-item">
-                            <strong style="font-size: 0.98rem; color: @(wish.RequireShiny ? "#f472b6" : "var(--accent-white)");">
+                    <div class="dream-item-info">
+                        <div class="dream-item-title-row">
+                            <strong class="dream-item-name" style="color: @(wish.RequireShiny ? "#f472b6" : "var(--text-primary)");" title="@wish.ItemName">
                                 @wish.ItemName
                             </strong>
                             @if (wish.RequireShiny)
@@ -131,45 +55,192 @@ else
                                 <span class="shiny-pill">SHINY</span>
                             }
                         </div>
-                        <div class="inline-meta-item" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
-                            <GameSprite DungeonName="@wish.TargetDungeonName" Size="16" Title="@wish.TargetDungeonName" />
-                            <span>@wish.TargetDungeonName (@graves.ToString("0.#")/10) • Min:</span>
-                            <span class="rarity-text-@wish.MinimumRarity.ToString().ToLowerInvariant()">@wish.MinimumRarity</span>
+                        <div class="dream-item-meta">
+                            <GameSprite DungeonName="@wish.TargetDungeonName" Size="15" Title="@wish.TargetDungeonName" />
+                            <span class="dream-dungeon-label" title="@wish.TargetDungeonName">@wish.TargetDungeonName</span>
+                            <span>•</span>
+                            <span class="rarity-text-@wish.MinimumRarity.ToString().ToLowerInvariant()">@wish.MinimumRarity+</span>
                         </div>
                     </div>
+
+                    <button type="button" class="dream-remove-btn" title="Remove from Dream Set" @onclick="() => RemoveWishlistItem(wish.Id)">✕</button>
                 </div>
 
-                <div class="quest-progress-bar">
-                    <div class="quest-progress-fill" style="width: @Math.Min(100, cumulativeChance).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                </div>
-
-                <div style="min-width: 220px; text-align: right; font-size: 0.85rem;">
-                    <div>Runs Since Added: <strong>@runsDone</strong></div>
-                    <div style="color: var(--accent-gold);">Chance so far: <strong>@cumulativeChance.ToString("0.0")%</strong></div>
-                </div>
-
-                <div style="display: flex; gap: 6px; align-items: center;">
-                    @if (wish.IsCompleted)
+                <div class="dream-item-footer">
+                    <span class="dream-stat-chip">
+                        Runs since added: <strong>@runsDone</strong>
+                    </span>
+                    @if (achieved)
                     {
-                        <span class="badge-ssnl badge-readonly">OWNED ✓</span>
+                        <span class="badge-ssnl badge-readonly">
+                            @(matchedDrops > 1 ? $"OWNED x{matchedDrops} ✓" : "OWNED ✓")
+                        </span>
                     }
-                    <button class="btn btn-danger btn-sm" @onclick="() => RemoveWishlistItem(wish.Id)">✕</button>
+                    else
+                    {
+                        <span class="dream-stat-muted">Hunting</span>
+                    }
                 </div>
             </div>
         }
     </div>
 }
 
+@if (_showModal)
+{
+    var itemSuggestions = GetItemSuggestions();
+    var dungeonSuggestions = GetDungeonSuggestions();
+    int previewItemId = ResolvePreviewItemId(out bool hasShinyVariant);
+
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-card dream-modal-card" @onclick:stopPropagation="true">
+            <div class="modal-title">Add Item to Dream Set</div>
+
+            <div class="dream-modal-preview">
+                @if (previewItemId > 0)
+                {
+                    <ItemSprite ItemId="previewItemId"
+                                Rarity="WishMinRarity"
+                                IsShiny="WishRequireShiny"
+                                Size="46"
+                                ShowTooltip="false" />
+                }
+                else
+                {
+                    <div class="dream-preview-placeholder">?</div>
+                }
+                <div class="dream-preview-text">
+                    <strong style="color: @(WishRequireShiny ? "#f472b6" : "var(--text-primary)");">
+                        @(string.IsNullOrWhiteSpace(WishItemName) ? "Select a target item" : WishItemName)
+                    </strong>
+                    <span style="font-size: 0.78rem; color: var(--text-muted);">
+                        @(string.IsNullOrWhiteSpace(WishDungeonName) ? "Any Dungeon" : WishDungeonName)
+                        • Min: <span class="rarity-text-@WishMinRarity.ToString().ToLowerInvariant()">@WishMinRarity</span>
+                    </span>
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label class="modal-label">Target Item</label>
+                <div class="autocomplete-host">
+                    <input class="input"
+                           style="width: 100%;"
+                           placeholder="Search item (e.g. Makakoyumi, Divinity)..."
+                           value="@WishItemName"
+                           @oninput="OnWishItemInput"
+                           @onfocus="() => ShowItemMenu = true" />
+
+                    @if (ShowItemMenu && itemSuggestions.Count > 0)
+                    {
+                        <div class="dropdown-backdrop" @onclick="() => ShowItemMenu = false"></div>
+                        <div class="autocomplete-menu">
+                            @foreach (var item in itemSuggestions)
+                            {
+                                <button type="button" class="autocomplete-option" @onclick="() => PickWishItem(item)">
+                                    <GameSprite TextureFile="@item.TextureFile" TextureIndex="item.TextureIndex" Size="20" />
+                                    <span style="color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)");">@item.Name</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label class="modal-label">Source Dungeon</label>
+                <div class="autocomplete-host">
+                    <input class="input"
+                           style="width: 100%;"
+                           placeholder="Auto-filled or pick dungeon..."
+                           value="@WishDungeonName"
+                           @oninput="OnWishDungeonInput"
+                           @onfocus="() => ShowDungeonMenu = true" />
+
+                    @if (ShowDungeonMenu && dungeonSuggestions.Count > 0)
+                    {
+                        <div class="dropdown-backdrop" @onclick="() => ShowDungeonMenu = false"></div>
+                        <div class="autocomplete-menu">
+                            @foreach (var p in dungeonSuggestions)
+                            {
+                                <button type="button" class="autocomplete-option" @onclick="() => PickWishDungeon(p.DungeonName)">
+                                    <GameSprite PortalObjectType="p.ObjectType" DungeonName="@p.DungeonName" Size="18" />
+                                    <span>@p.DungeonName</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="dream-modal-row">
+                <div class="modal-field" style="flex: 1;">
+                    <label class="modal-label">Minimum Rarity</label>
+                    <RaritySelect AllowAll="false"
+                                  Prefix="Min: "
+                                  ShowPlusSlots="true"
+                                  Value="WishMinRarity"
+                                  ValueChanged="OnWishMinRarityChanged"
+                                  Title="Minimum required rarity" />
+                </div>
+
+                <div class="modal-field" style="justify-content: flex-end; padding-bottom: 6px;">
+                    <label class="checkbox-label" title="Switch to the item's Shiny variant sprite and require a Shiny drop">
+                        <input type="checkbox" checked="@WishRequireShiny" @onchange="OnRequireShinyChanged" /> Shiny Only
+                    </label>
+                </div>
+            </div>
+
+            @if (WishRequireShiny && !string.IsNullOrWhiteSpace(WishItemName) && !hasShinyVariant)
+            {
+                <div style="font-size: 0.76rem; color: var(--text-muted);">
+                    Note: this item has no dedicated Shiny sprite in local game files.
+                </div>
+            }
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CloseModal">Cancel</button>
+                <button type="button"
+                        class="btn btn-primary btn-sm"
+                        disabled="@string.IsNullOrWhiteSpace(WishItemName)"
+                        @onclick="CreateWishlistTarget">
+                    Add to Dream Set
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
+    [Parameter] public DataScope Scope { get; set; } = DataScope.ActiveCharacter;
+
+    private bool _showModal;
     private string WishItemName { get; set; } = "";
     private int WishItemId { get; set; }
     private string WishDungeonName { get; set; } = "";
     private ItemRarity WishMinRarity { get; set; } = ItemRarity.Common;
-    private int WishOneInX { get; set; } = 100;
     private bool WishRequireShiny { get; set; }
 
     private bool ShowItemMenu { get; set; }
     private bool ShowDungeonMenu { get; set; }
+
+    private void OpenModal()
+    {
+        WishItemName = "";
+        WishItemId = 0;
+        WishDungeonName = "";
+        WishMinRarity = ItemRarity.Common;
+        WishRequireShiny = false;
+        ShowItemMenu = false;
+        ShowDungeonMenu = false;
+        _showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        _showModal = false;
+        ShowItemMenu = false;
+        ShowDungeonMenu = false;
+    }
 
     private void OnWishMinRarityChanged(ItemRarity? value)
     {
@@ -199,7 +270,6 @@ else
         }
         else if (WishRequireShiny)
         {
-            // User already toggled Shiny Only: auto-upgrade to Shiny variant if it exists
             var shiny = FindItemByName("Shiny " + item.Name);
             WishItemName = shiny != null ? shiny.Name : item.Name;
             WishItemId = shiny != null ? shiny.ItemId : item.ItemId;
@@ -209,6 +279,12 @@ else
             WishItemName = item.Name;
             WishItemId = item.ItemId;
         }
+
+        // Auto-fill official source dungeon if known
+        string? primaryDungeon = ItemSources.GetPrimaryDungeonForItem(WishItemName);
+        if (!string.IsNullOrWhiteSpace(primaryDungeon))
+            WishDungeonName = primaryDungeon;
+
         ShowItemMenu = false;
     }
 
@@ -290,6 +366,41 @@ else
         return itemsByName.TryGetValue(baseName, out var baseMeta) ? baseMeta.ItemId : 0;
     }
 
+    private static int CountRunsSinceAdded(WishlistTarget wish, IReadOnlyList<DungeonRunRecord> scopedRuns)
+    {
+        if (string.IsNullOrWhiteSpace(wish.TargetDungeonName) ||
+            wish.TargetDungeonName.Equals("Any Dungeon", StringComparison.OrdinalIgnoreCase))
+        {
+            return scopedRuns.Count(r =>
+                r.CompletedAt >= wish.CreatedAt &&
+                (wish.CompletedAt == null || r.CompletedAt <= wish.CompletedAt));
+        }
+
+        return scopedRuns.Count(r =>
+            string.Equals(r.DungeonName, wish.TargetDungeonName, StringComparison.OrdinalIgnoreCase) &&
+            r.CompletedAt >= wish.CreatedAt &&
+            (wish.CompletedAt == null || r.CompletedAt <= wish.CompletedAt));
+    }
+
+    private static int CountMatchingDrops(WishlistTarget wish, IReadOnlyList<LootDropRecord> scopedLoot)
+    {
+        string baseName = ItemSourceService.StripShinyPrefix(wish.ItemName);
+        int count = 0;
+        foreach (var drop in scopedLoot)
+        {
+            if (drop.Rarity < wish.MinimumRarity) continue;
+            if (wish.RequireShiny && !drop.IsShiny) continue;
+
+            bool idMatch = wish.ItemId > 0 && drop.ItemId == wish.ItemId;
+            bool nameMatch = string.Equals(drop.ItemName, wish.ItemName, StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(ItemSourceService.StripShinyPrefix(drop.ItemName), baseName, StringComparison.OrdinalIgnoreCase);
+
+            if (idMatch || nameMatch)
+                count++;
+        }
+        return count;
+    }
+
     private List<ItemMetadata> GetItemSuggestions()
     {
         string q = WishItemName.Trim();
@@ -318,13 +429,6 @@ else
             .ToList();
     }
 
-    private static double CalculateWishProbabilityPercent(WishlistTarget wish, int runs)
-    {
-        if (runs <= 0 || wish.EstimatedDropRate <= 0) return 0.0;
-        double p = Math.Clamp(wish.EstimatedDropRate, 0.00001, 1.0);
-        return Math.Round((1.0 - Math.Pow(1.0 - p, runs)) * 100.0, 2);
-    }
-
     private void CreateWishlistTarget()
     {
         if (string.IsNullOrWhiteSpace(WishItemName)) return;
@@ -349,12 +453,9 @@ else
             if (match != null) resolvedId = match.ItemId;
         }
 
-        double rate = 1.0 / Math.Max(1, WishOneInX);
-        State.AddWishlistTarget(finalName, WishDungeonName, WishMinRarity, WishRequireShiny, rate, resolvedId);
-        WishItemName = "";
-        WishItemId = 0;
-        ShowItemMenu = false;
-        ShowDungeonMenu = false;
+        // Empirical tracking only (D16) — EstimatedDropRate is unused in UI
+        State.AddWishlistTarget(finalName, WishDungeonName, WishMinRarity, WishRequireShiny, 0.01, resolvedId);
+        CloseModal();
     }
 
     private void RemoveWishlistItem(Guid id)

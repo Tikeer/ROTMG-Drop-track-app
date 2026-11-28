@@ -50,6 +50,18 @@ public sealed class ItemSourceService
     public int MappedDungeonCount { get; private set; }
 
     /// <summary>
+    /// Returns the primary known source dungeon for an item (strip "Shiny " prefix automatically), or null if unmapped.
+    /// </summary>
+    public string? GetPrimaryDungeonForItem(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return null;
+        string baseName = StripShinyPrefix(itemName);
+        if (_baseSourcesByItem.TryGetValue(baseName, out var dungeons) && dungeons.Count > 0)
+            return dungeons.First();
+        return null;
+    }
+
+    /// <summary>
     /// Pre-computes the default Trophy Hall view during AppStartup so opening Item Collection is instant.
     /// </summary>
     public void PrewarmDefaultTrophyHall(GameDataService gameData, TrackerStateService state)

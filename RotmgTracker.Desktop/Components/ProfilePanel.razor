@@ -2,41 +2,191 @@
 @inject GameDataService GameData
 
 @{
-    var allLoot = State.GetLootSnapshot(DataScope.AllCharacters);
-    var qualifiedLoot = allLoot.Where(l => l.BagType != DropType.Other).ToList();
-    var collection = UiHelpers.ComputeCollectionProgress(GameData.GetAllKnownItems(), allLoot);
+    var ch = State.ActiveCharacter;
+    var scopedLoot = State.GetLootSnapshot(_scope);
+    var scopedRuns = State.GetDungeonRunsSnapshot(_scope);
+    var qualifiedLoot = scopedLoot.Where(l => l.BagType != DropType.Other).ToList();
+    var collection = UiHelpers.ComputeCollectionProgress(GameData.GetAllKnownItems(), scopedLoot);
     int highestFame = State.Data.ActiveCharacters.MaxBy(c => c.BaseFame)?.BaseFame ?? 0;
+    double bestDropScore = qualifiedLoot.Count > 0 ? qualifiedLoot.Max(l => l.RarityScore) : 0;
+    int shinyCount = qualifiedLoot.Count(l => l.IsShiny);
+
+    var exaltLabels = new[] { "HP", "MP", "ATT", "DEF", "SPD", "DEX", "VIT", "WIS" };
+    var equipSlotNames = new[] { "Weapon", "Ability", "Armor", "Ring" };
 }
 
-<div class="section-header">
-    <h2>Profile &amp; Account Summary</h2>
+<div class="section-header" style="margin-bottom: 10px;">
+    <div class="inline-meta-item" style="gap: 10px;">
+        <h2>Profile</h2>
+        <span class="badge-nossnl badge-readonly">
+            @(_scope == DataScope.ActiveCharacter ? ch.FormattedTitle : "Account Overview")
+        </span>
+    </div>
+
+    <div class="profile-scope-toggle" role="group" aria-label="Profile scope">
+        <button type="button"
+                class="scope-toggle-btn @(_scope == DataScope.ActiveCharacter ? "active" : "")"
+                @onclick="() => _scope = DataScope.ActiveCharacter">
+            Active Character
+        </button>
+        <button type="button"
+                class="scope-toggle-btn @(_scope == DataScope.AllCharacters ? "active" : "")"
+                @onclick="() => _scope = DataScope.AllCharacters">
+            All Characters
+        </button>
+    </div>
 </div>
 
-<div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-bottom: 12px;">
-    <div class="drop-card">
-        <span class="drop-title">Active Characters</span>
-        <div class="drop-value">@State.Data.ActiveCharacters.Count</div>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Highest Fame: @highestFame.ToString("N0")</span>
-    </div>
-    <div class="drop-card">
-        <span class="drop-title">Total Logged Drops</span>
-        <div class="drop-value" style="color: var(--accent-white);">@qualifiedLoot.Count</div>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Shinies: @qualifiedLoot.Count(l => l.IsShiny)</span>
-    </div>
-    <div class="drop-card">
-        <span class="drop-title">Dungeons Completed</span>
-        <div class="drop-value" style="color: var(--accent-green);">@State.Data.DungeonRuns.Count</div>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">Tracked via Boss Kills</span>
-    </div>
-    <div class="drop-card">
-        <span class="drop-title">Collection Progress</span>
-        <div class="drop-value" style="color: var(--accent-gold);">
-            @collection.Owned / @collection.Total
+@if (_scope == DataScope.ActiveCharacter)
+{
+    <div class="profile-hero-card">
+        <div class="profile-hero-identity">
+            <div class="profile-hero-avatar">
+                <GameSprite Class="ch.Class" SkinId="ch.SkinId" Size="44" />
+            </div>
+            <div class="profile-hero-meta">
+                <div class="inline-meta-item" style="gap: 8px; flex-wrap: wrap;">
+                    <strong class="profile-hero-name">@ch.Class #@ch.ClassSlotNumber</strong>
+                    @if (!string.IsNullOrWhiteSpace(ch.Name) && !string.Equals(ch.Name, ch.Class.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="profile-hero-alias">@ch.Name</span>
+                    }
+                    <span class="@(ch.IsSeasonal ? "badge-ssnl" : "badge-nossnl") badge-readonly">
+                        @(ch.IsSeasonal ? $"SSNL {ch.SeasonTag}" : $"Reg {ch.SeasonTag}")
+                    </span>
+                </div>
+                <div class="profile-hero-sub">
+                    <span class="@(ch.MaxedStats == 8 ? "stat-maxed" : "")">@ch.MaxedStats/8</span>
+                    <span>•</span>
+                    <span>Fame: <strong>@ch.BaseFame.ToString("N0")</strong></span>
+                    <span>•</span>
+                    <span>Exalts: <strong style="color: var(--accent-gold);">@ch.TotalExaltations/40</strong></span>
+                </div>
+            </div>
         </div>
-        <span style="font-size: 0.8rem; color: var(--text-muted);">@collection.Percent% Unique Items (by ItemId)</span>
+
+        <div class="profile-hero-middle">
+            <div class="profile-equip-strip" title="Equipped gear (from passive sniffer)">
+                @for (int i = 0; i < 4; i++)
+                {
+                    int eqId = i < ch.EquipmentIds.Length ? ch.EquipmentIds[i] : 0;
+                    string slotLabel = equipSlotNames[i];
+                    if (eqId > 0)
+                    {
+                        string eqName = GameData.TryGetItem(eqId, out var eqMeta) ? eqMeta.Name : $"Item 0x{eqId:X4}";
+                        <div class="profile-equip-slot sprite-tip-host">
+                            <GameSprite ItemId="eqId" Size="30" />
+                            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                                <div class="rotmg-tooltip-title">@eqName</div>
+                                <div class="rotmg-tooltip-sub">@slotLabel</div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="profile-equip-slot is-empty" title="Empty @slotLabel slot">
+                            <span>@slotLabel[0]</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="attributes-pill" tabindex="0">
+                <span class="attributes-pill-label">ATTRIBUTES</span>
+                <span class="attributes-pill-badge">@ch.MaxedStats/8 • +@ch.TotalExaltations</span>
+
+                <div class="attributes-popover">
+                    <div class="exalt-popover-title">Character Attributes &amp; Exaltations</div>
+
+                    <div class="attributes-summary-grid">
+                        <div class="attr-kv">
+                            <span>Maxed Stats</span>
+                            <strong class="@(ch.MaxedStats == 8 ? "stat-maxed" : "")">@ch.MaxedStats / 8</strong>
+                        </div>
+                        <div class="attr-kv">
+                            <span>Base Fame</span>
+                            <strong>@ch.BaseFame.ToString("N0")</strong>
+                        </div>
+                        <div class="attr-kv">
+                            <span>Total Fame</span>
+                            <strong>@(ch.TotalFame > 0 ? ch.TotalFame.ToString("N0") : "—")</strong>
+                        </div>
+                        <div class="attr-kv">
+                            <span>Exaltations</span>
+                            <strong style="color: var(--accent-gold);">@ch.TotalExaltations / 40</strong>
+                        </div>
+                    </div>
+
+                    <div class="exalt-popover-title" style="margin-top: 10px;">Exaltation Stat Bonuses</div>
+                    <div class="exalt-grid">
+                        @for (int i = 0; i < 8; i++)
+                        {
+                            int bonus = i < ch.ExaltBonuses.Length ? ch.ExaltBonuses[i] : 0;
+                            <div class="exalt-cell @(bonus > 0 ? "has-bonus" : "")">
+                                <span class="exalt-stat">@exaltLabels[i]</span>
+                                <span class="exalt-val">+@bonus</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="profile-kpi-row">
+    @if (_scope == DataScope.AllCharacters)
+    {
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Active Characters</span>
+            <div class="profile-kpi-val">@State.Data.ActiveCharacters.Count</div>
+            <span class="profile-kpi-sub">Highest Fame: @highestFame.ToString("N0")</span>
+        </div>
+    }
+    else
+    {
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Best Drop Score</span>
+            <div class="profile-kpi-val" style="color: var(--accent-gold);">@Math.Round(bestDropScore) <span style="font-size: 0.78rem; font-weight: 600;">pts</span></div>
+            <span class="profile-kpi-sub">Character Total Drops: @ch.TotalDrops</span>
+        </div>
+    }
+
+    <div class="profile-kpi-card">
+        <span class="profile-kpi-label">Logged Drops</span>
+        <div class="profile-kpi-val" style="color: var(--accent-white);">@qualifiedLoot.Count</div>
+        <span class="profile-kpi-sub">Shinies: @shinyCount</span>
+    </div>
+
+    <div class="profile-kpi-card">
+        <span class="profile-kpi-label">Dungeons Completed</span>
+        <div class="profile-kpi-val" style="color: var(--accent-green);">@scopedRuns.Count</div>
+        <span class="profile-kpi-sub">Tracked via Boss Kills</span>
+    </div>
+
+    <div class="profile-kpi-card">
+        <span class="profile-kpi-label">Collection Progress</span>
+        <div class="profile-kpi-val" style="color: var(--accent-gold);">@collection.Owned / @collection.Total</div>
+        <span class="profile-kpi-sub">@collection.Percent% Unique Items</span>
     </div>
 </div>
 
-<DreamSetPanel />
-<TopDropsPanel />
-<BestBagPanel />
+<!-- 3-COLUMN PROFILE LAYOUT -->
+<div class="profile-columns-grid">
+    <section class="profile-col-card">
+        <DreamSetPanel Scope="_scope" />
+    </section>
+
+    <section class="profile-col-card">
+        <TopDropsPanel Scope="_scope" />
+    </section>
+
+    <section class="profile-col-card">
+        <BestBagPanel Scope="_scope" />
+    </section>
+</div>
+
+@code {
+    // D4: Profile defaults to Active Character with a quick toggle to All Characters
+    private DataScope _scope = DataScope.ActiveCharacter;
+}

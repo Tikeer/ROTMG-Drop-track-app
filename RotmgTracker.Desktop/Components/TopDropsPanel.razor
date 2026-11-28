@@ -1,11 +1,7 @@
 @inherits StateAwareComponent
 
-<div class="section-header" style="margin-top: 16px;">
-    <h2>Top 10 Drops (by Rarity Score)</h2>
-</div>
-
 @{
-    var topDrops = State.GetLootSnapshot(DataScope.AllCharacters)
+    var topDrops = State.GetLootSnapshot(Scope)
         .Where(l => l.BagType != DropType.Other)
         .OrderByDescending(l => l.RarityScore)
         .Take(10)
@@ -13,53 +9,65 @@
     int rank = 1;
 }
 
+<div class="profile-col-header">
+    <div>
+        <h3 class="profile-col-title">Top 10 Drops</h3>
+        <span class="profile-col-sub">Ranked by Rarity Score</span>
+    </div>
+</div>
+
 @if (topDrops.Count == 0)
 {
-    <div class="empty-state">No scored drops yet. Your best drops will rank here automatically!</div>
+    <div class="empty-state" style="padding: 20px 14px; font-size: 0.84rem;">
+        No scored drops in this scope yet.
+    </div>
 }
 else
 {
-    <div class="quest-list">
+    <div class="profile-col-list">
         @foreach (var drop in topDrops)
         {
-            <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
-                <span style="color: var(--text-muted); font-weight: 700; min-width: 28px;">#@rank</span>
-                <div class="inline-meta-item" style="min-width: 260px; gap: 10px;">
-                    <ItemSprite ItemId="drop.ItemId"
-                                Rarity="drop.Rarity"
-                                IsShiny="drop.IsShiny"
-                                Size="36"
-                                ShowTooltip="false" />
-                    <div>
-                        <div class="inline-meta-item">
-                            <strong style="color: @(drop.IsShiny ? "#f472b6" : "var(--accent-white)");">@drop.ItemName</strong>
-                            @if (drop.IsShiny)
-                            {
-                                <span class="shiny-pill">SHINY</span>
-                            }
-                        </div>
-                        <span style="font-size: 0.74rem; color: #c084fc;">
-                            [@drop.Rarity • @drop.EnchantmentSlots slots • @UiHelpers.FormatDropType(drop.BagType)]
-                        </span>
+            <div class="top-drop-card" style="border-left: 3px solid @UiHelpers.GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
+                <span class="top-drop-rank">#@rank</span>
+
+                <ItemSprite ItemId="drop.ItemId"
+                            ItemName="@drop.ItemName"
+                            Rarity="drop.Rarity"
+                            IsShiny="drop.IsShiny"
+                            DropQuality="drop.BagType"
+                            RarityScore="drop.RarityScore"
+                            ExtraMeta="@($"{drop.DungeonName} • {drop.DroppedAt:yyyy-MM-dd HH:mm}")"
+                            Size="36" />
+
+                <div class="top-drop-info">
+                    <div class="top-drop-name-row">
+                        <strong class="top-drop-name" style="color: @(drop.IsShiny ? "#f472b6" : "var(--text-primary)");" title="@drop.ItemName">
+                            @drop.ItemName
+                        </strong>
+                        @if (drop.IsShiny)
+                        {
+                            <span class="shiny-pill">SHINY</span>
+                        }
+                    </div>
+                    <div class="top-drop-meta">
+                        <span class="rarity-text-@drop.Rarity.ToString().ToLowerInvariant()">@drop.Rarity</span>
+                        <span>•</span>
+                        <GameSprite PortalObjectType="drop.DungeonPortalObjectType" DungeonName="@drop.DungeonName" Size="14" Title="@drop.DungeonName" />
+                        <span class="top-drop-dungeon" title="@drop.DungeonName">@drop.DungeonName</span>
+                        @if (Scope == DataScope.AllCharacters)
+                        {
+                            <GameSprite Class="drop.CharacterClass" SkinId="drop.CharacterSkinId" Size="14" Title="@drop.CharacterName" />
+                        }
                     </div>
                 </div>
-                <div class="inline-meta-item" style="flex: 1; font-size: 0.78rem; color: var(--text-muted); flex-wrap: wrap; gap: 10px;">
-                    <span class="inline-meta-item">
-                        <GameSprite PortalObjectType="drop.DungeonPortalObjectType" DungeonName="@drop.DungeonName" Size="16" Title="@drop.DungeonName" />
-                        <span>@drop.DungeonName</span>
-                    </span>
-                    <span class="inline-meta-item">
-                        <GameSprite Class="drop.CharacterClass" SkinId="drop.CharacterSkinId" Size="16" Title="@drop.CharacterName" />
-                        <span>@drop.CharacterName</span>
-                    </span>
-                    <span class="inline-meta-item">
-                        <UiIcon Name="clock" Size="12" />
-                        <span>@drop.DroppedAt.ToString("yyyy-MM-dd HH:mm")</span>
-                    </span>
-                </div>
-                <strong style="color: var(--accent-gold); min-width: 90px; text-align: right;">@drop.RarityScore pts</strong>
+
+                <strong class="top-drop-pts">@Math.Round(drop.RarityScore)</strong>
             </div>
             rank++;
         }
     </div>
+}
+
+@code {
+    [Parameter] public DataScope Scope { get; set; } = DataScope.ActiveCharacter;
 }
