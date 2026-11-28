@@ -11,7 +11,9 @@
     var deathFame = DeathFameCalculator.Estimate(active, State.GetDungeonRunsSnapshot(DataScope.AllCharacters));
 }
 
-<div class="char-bar-v2">
+<div class="char-bar-v2 @(_draggingKey != null ? "is-reordering" : "")"
+     @onmouseup="OnDragEnd"
+     @onmouseleave="OnDragEnd">
     <div class="char-bar-v2-left">
         <!-- CUSTOM DARK CHARACTER DROPDOWN (D6) -->
         <div class="custom-dropdown">
@@ -75,23 +77,20 @@
             @(active.IsSeasonal ? $"SSNL ({active.SeasonTag})" : "NOSSNL")
         </span>
 
-        <!-- DRAGGABLE / REORDERABLE STAT PILLS (Fame, Exalt, Stars, Gold) -->
+        <!-- DRAGGABLE / REORDERABLE STAT PILLS (Fame, Exalt, Stars, Gold — hold & slide) -->
         @foreach (var key in pillOrder)
         {
-            bool isOver = _dragOverKey == key && _draggingKey != null && _draggingKey != key;
             bool isDragging = _draggingKey == key;
 
             @switch (key)
             {
                 case "fame":
-                    <div class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(key)"
-                         @ondragover:preventDefault="true"
-                         @ondragenter="() => OnDragEnter(key)"
-                         @ondrop="() => OnDrop(key)"
-                         @ondragend="OnDragEnd"
-                         title="Base fame &amp; Est. Death Fame • Drag to reorder">
+                    <div @key="key"
+                         class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "")"
+                         @onmousedown="e => OnPillMouseDown(key, e)"
+                         @onmouseenter="() => OnPillMouseEnter(key)"
+                         @onmouseup="OnDragEnd"
+                         title="Base fame &amp; Est. Death Fame • Hold &amp; slide to reorder">
                         <GameSprite UiSpriteName="fame_icon" Size="15" />
                         <span class="stat-pill-label">Fame</span>
                         <span class="stat-pill-value">@active.BaseFame.ToString("N0")</span>
@@ -119,14 +118,12 @@
                     break;
 
                 case "exalt":
-                    <div class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(key)"
-                         @ondragover:preventDefault="true"
-                         @ondragenter="() => OnDragEnter(key)"
-                         @ondrop="() => OnDrop(key)"
-                         @ondragend="OnDragEnd"
-                         title="@FormatExaltTooltip(exalts) • Drag to reorder">
+                    <div @key="key"
+                         class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "")"
+                         @onmousedown="e => OnPillMouseDown(key, e)"
+                         @onmouseenter="() => OnPillMouseEnter(key)"
+                         @onmouseup="OnDragEnd"
+                         title="@FormatExaltTooltip(exalts) • Hold &amp; slide to reorder">
                         <span class="stat-pill-label">Exalt</span>
                         <span class="stat-pill-value @(active.TotalExaltations > 0 ? "exalt-active" : "")">
                             @active.TotalExaltations/40
@@ -148,14 +145,12 @@
                     break;
 
                 case "stars":
-                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(key)"
-                         @ondragover:preventDefault="true"
-                         @ondragenter="() => OnDragEnter(key)"
-                         @ondrop="() => OnDrop(key)"
-                         @ondragend="OnDragEnd"
-                         title="Account rank stars (stat 30, synced passively • Drag to reorder)">
+                    <div @key="key"
+                         class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "")"
+                         @onmousedown="e => OnPillMouseDown(key, e)"
+                         @onmouseenter="() => OnPillMouseEnter(key)"
+                         @onmouseup="OnDragEnd"
+                         title="Account rank stars (stat 30, synced passively • Hold &amp; slide to reorder)">
                         @if (Sprites.TryGetUiSprite("StarIcon", out _))
                         {
                             <GameSprite UiSpriteName="StarIcon" Size="15" />
@@ -174,14 +169,12 @@
                     break;
 
                 case "gold":
-                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
-                         draggable="true"
-                         @ondragstart="() => OnDragStart(key)"
-                         @ondragover:preventDefault="true"
-                         @ondragenter="() => OnDragEnter(key)"
-                         @ondrop="() => OnDrop(key)"
-                         @ondragend="OnDragEnd"
-                         title="Realm Gold (stat 35, synced passively • Drag to reorder)">
+                    <div @key="key"
+                         class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "")"
+                         @onmousedown="e => OnPillMouseDown(key, e)"
+                         @onmouseenter="() => OnPillMouseEnter(key)"
+                         @onmouseup="OnDragEnd"
+                         title="Realm Gold (stat 35, synced passively • Hold &amp; slide to reorder)">
                         <GameSprite UiSpriteName="gold_icon" Size="15" />
                         <span class="stat-pill-label">Gold</span>
                         <span class="stat-pill-value" style="color: #fbbf24;">@State.AccountGold.ToString("N0")</span>
@@ -309,28 +302,22 @@
     private ModalKind PendingModal { get; set; } = ModalKind.None;
 
     private string? _draggingKey;
-    private string? _dragOverKey;
 
     private string ManualKilledBy { get; set; } = "";
     private string NewCharName { get; set; } = "";
     private RotmgClass NewCharClass { get; set; } = RotmgClass.Wizard;
     private bool NewCharSeasonal { get; set; } = true;
 
-    private void OnDragStart(string key) => _draggingKey = key;
-
-    private void OnDragEnter(string key)
+    private void OnPillMouseDown(string key, MouseEventArgs e)
     {
-        if (_draggingKey != null && _draggingKey != key)
-            _dragOverKey = key;
+        if (e.Button != 0) return;
+        _draggingKey = key;
     }
 
-    private void OnDrop(string targetKey)
+    private void OnPillMouseEnter(string targetKey)
     {
         if (_draggingKey == null || _draggingKey == targetKey)
-        {
-            OnDragEnd();
             return;
-        }
 
         var order = UiSettings.CharacterBarOrder.ToList();
         int fromIdx = order.IndexOf(_draggingKey);
@@ -341,14 +328,11 @@
             order.Insert(toIdx, _draggingKey);
             UiSettings.SetCharacterBarOrder(order);
         }
-
-        OnDragEnd();
     }
 
     private void OnDragEnd()
     {
         _draggingKey = null;
-        _dragOverKey = null;
     }
 
     private void OnNewCharClassChanged(string val)

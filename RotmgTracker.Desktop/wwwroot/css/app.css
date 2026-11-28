@@ -925,10 +925,19 @@ input, select { user-select: text; }
     border-radius: 10px;
     padding: 10px 12px;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
 }
 
 .exalt-pill:hover .exalt-popover {
     display: block;
+}
+
+.exalt-pill:hover .fame-popover {
+    display: flex;
+}
+
+.char-bar-v2.is-reordering .exalt-popover {
+    display: none !important;
 }
 
 .exalt-popover-title {
@@ -3467,7 +3476,10 @@ input, select { user-select: text; }
 }
 
 .char-stat-draggable.is-dragging {
-    opacity: 0.45;
+    border-color: var(--accent-white);
+    background: rgba(56, 189, 248, 0.16);
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+    cursor: grabbing;
 }
 
 .char-stat-draggable.is-drag-over {
@@ -3617,7 +3629,6 @@ input, select { user-select: text; }
 /* ===== Est. Death Fame Breakdown ===== */
 .fame-popover {
     min-width: 245px;
-    display: flex;
     flex-direction: column;
     gap: 5px;
 }
