@@ -1,503 +1,1332 @@
 {
-  "_info": "Generated directly from official DECA ORG_* and REALMWHITE labels in resources.assets XML. Shiny variants inherit their base item source.",
-  "version": 2,
+  "_info": "Generated from official DECA ORG_*, REALMWHITE, and ST setName XML metadata in resources.assets. Grouped by Dungeon -> Boss -> Items + ST Sets.",
+  "version": 3,
   "dungeons": {
-    "Abyss of Demons": [
-      "Adamantine Helm",
-      "An Ancient's Embrace",
-      "Berserker's Breastplate",
-      "Demon Blade",
-      "Sword of Illumination",
-      "Volcanic Sheath"
-    ],
-    "Ancient Ruins": [
-      "Amber Encrusted Helmet",
-      "Arcane Rapier",
-      "Sandstone Seal",
-      "Titan's Heart"
-    ],
-    "Candyland Hunting Grounds": [
-      "Bubblegum Bucket",
-      "Candy Ring",
-      "Candy-Coated Armor",
-      "Helm of the Swift Bunny"
-    ],
-    "Cnidarian Reef": [
-      "Bottled Medusozoan",
-      "Cnidaria Rod"
-    ],
-    "Crystal Cavern": [
-      "Cloak of Refraction",
-      "Corsair's Crown Jewel",
-      "Crystalline Sigil",
-      "Crystallised Mist",
-      "Echoes Prism",
-      "Eternal Star",
-      "Fractal Blades",
-      "Fractured Gemstone Wakizashi",
-      "Irradiance Sheath",
-      "Star of Enlightenment",
-      "Sweetcut Wakizashi"
-    ],
-    "Cultist Hideout": [
-      "Bloodshed Ring",
-      "Burial Blades",
-      "Ritual Robe",
-      "Skull of Corrupted Souls",
-      "Staff of Unholy Sacrifice"
-    ],
-    "Cursed Library": [
-      "Ceremonial Wand",
-      "Corruption Cutter",
-      "Necronomicon",
-      "Ronin's Wakizashi",
-      "Scholar's Seal",
-      "Sweettreats Dagger",
-      "Wand of Hidden Knowledge"
-    ],
-    "Davy Jones' Locker": [
-      "Captain's Ring",
-      "Ghostly Prism",
-      "Quartermaster Scabbard",
-      "Spirit Dagger"
-    ],
-    "Deadwater Docks": [
-      "Big Berdtha",
-      "Ghost Ship's Bell",
-      "Joker Timbrel",
-      "Pirate King's Cutlass",
-      "Sweettreats Sword",
-      "Wavecrest Concertina"
-    ],
-    "Forbidden Jungle": [
-      "Cracked Crystal Skull",
-      "Crystal Bone Ring",
-      "Robe of the Tlatoani",
-      "Staff of the Crystal Serpent"
-    ],
-    "Forest Maze": [
-      "Bramble Bow",
-      "Cocoon Quiver"
-    ],
-    "Fungal Cavern": [
-      "Cave Dweller Trap",
-      "Crystal Shield",
-      "Crystallized Worm Spellblade",
-      "Fungal Breastplate",
-      "Sporous Spray Spell",
-      "Tome of the Mushroom Tribes"
-    ],
-    "Haunted Cemetery": [
-      "Amulet of Dispersion",
-      "Plague Poison",
-      "Resurrected Warrior's Armor",
-      "Rusted Barrel",
-      "Scarlet Etched Branch",
-      "Soul's Guidance"
-    ],
-    "High Tech Terror": [
-      "B.O.W.",
-      "E.Y.E.",
-      "Q.U.I.V.E.R.",
-      "Rose Brooch",
-      "S.H.E.A.T.H.",
-      "S.T.A.F.F.",
-      "Sheath of Thunderous Rites",
-      "Spring Rose"
-    ],
-    "Ice Cave": [
-      "Ase's Echo",
-      "Esben's Shaman Attire",
-      "Esben's Twisted Heart",
-      "Esben's Vows",
-      "Esben's Wedding Ring",
-      "Skullish Remains of Esben",
-      "Staff of Esben",
-      "Staff of Esben Legacy",
-      "Sweettreats Staff"
-    ],
-    "Kogbold Steamworks": [
-      "Atavistic Soul Sabre",
-      "Brain Cube",
-      "Chain Dagger",
-      "Clockwork Repeater",
-      "Frost Storm Bow",
-      "Kogbold Cower Shield",
-      "Laser Pointer",
-      "Mechanical Kogbold Limb",
-      "Overclocking Amulet",
-      "Scepter of Rust",
-      "Socket Blade",
-      "Solar Flare Igniter",
-      "Steam Pipe"
-    ],
-    "Lair of Draconis": [
-      "Arashi",
-      "Celestial Blade",
-      "Draconic Insignia",
-      "Fire Dragon Battle Armor",
-      "Floral Corset",
-      "Forbidden Artifact",
-      "Leaf Dragon Hide Armor",
-      "Midnight Star",
-      "Snowflake Blade",
-      "Sweettreats Katana",
-      "Vision of Draconis",
-      "Water Dragon Silk Robe"
-    ],
-    "Lair of Shaitan": [
-      "Hanagasaku",
-      "Igneous Starblossom",
-      "Skull of Endless Torment",
-      "Wakizashi of Crossing Fires"
-    ],
-    "Lost Halls": [
-      "Blade of Eternal Rebirth",
-      "Breastplate of New Life",
-      "Magical Lodestone",
-      "Marble Seal",
-      "Sword of the Colossus"
-    ],
-    "Mad Lab": [
-      "Conducting Wand",
-      "Eggstatic Conductor",
-      "Experimental Ring",
-      "Robe of the Mad Scientist",
-      "Scepter of Fulmination",
-      "Storm Caller",
-      "Traditional Blouse"
-    ],
-    "Magic Woods": [
-      "Dragon Slayer",
-      "Enchantment Orb",
-      "Fairy Ring",
-      "Shield of Flowing Clarity",
-      "Spirit Staff",
-      "Woodland Robe"
-    ],
-    "Manor of the Immortals": [
-      "Blood Siphoning Katana",
-      "Bone Dagger",
-      "Chasuble of Holy Light",
-      "Kyuuketsuki Hitogoroshi",
-      "Ring of Divine Faith",
-      "St. Abraham's Wand",
-      "Tome of Purification"
-    ],
-    "Moonlight Village": [
-      "+Makakoyumi",
-      "+Tezutsu Hanabi",
-      "Elegant Parasol",
-      "Ethereal Happi",
-      "Flowering Kimono",
-      "Fortitude",
-      "Kagenohikari",
-      "Makakoyumi",
-      "Mischief",
-      "Rain Maker",
-      "Sage's Wakibiki",
-      "Taiko Drums",
-      "Tezutsu Hanabi",
-      "Vigor"
-    ],
-    "Mountain Temple": [
-      "Entrancing Hourglass",
-      "Jade Storm",
-      "Kaiken",
-      "Orb of Aether",
-      "Sweettreats Wand",
-      "Wand of the Fallen"
-    ],
-    "Ocean Trench": [
-      "Arctic Bow",
-      "Coral Bow",
-      "Coral Ring",
-      "Coral Silk Armor",
-      "Coral Venom Trap",
-      "Sharktooth Sigil",
-      "Squidver"
-    ],
-    "Oryx's Castle": [
-      "Ancient Stone Sword",
-      "Cloak of the Mad God",
-      "Esoteric Buckler",
-      "Spiteful Scutum",
-      "Tome of Holy Furor",
-      "Tome of the Dragon"
-    ],
-    "Oryx's Sanctuary": [
-      "Avarice",
-      "Ballistic Star",
-      "Battalion Banner",
-      "Centaur's Shielding",
-      "Chancellor's Cranium",
-      "Chaotic Scripture",
-      "Collector's Monocle",
-      "Diplomatic Robe",
-      "Divine Coronation",
-      "Divinity",
-      "Enforcer",
-      "Eternal Echo",
-      "Exalted God's Horn",
-      "Excubicur",
-      "Gambler's Fate",
-      "Genesis Spell",
-      "Gladiator Guard",
-      "Lumiaire",
-      "Oryx's Escutcheon",
-      "Superior",
-      "Turncoat Cape",
-      "Vesture of Duality"
-    ],
-    "Parasite Chambers": [
-      "Maw of Malignance",
-      "Perennial Cranium",
-      "Recurring Terror Spell",
-      "Scepter of Devastation",
-      "Scepter of the Transgressor",
-      "Tome of Pain"
-    ],
-    "Pirate Cave": [
-      "Corsair Ring"
-    ],
-    "Puppet Master's Encore": [
-      "Prism of Dire Instability",
-      "Sacramental Crossbow",
-      "Sunny Side Bow",
-      "Thousand Shot"
-    ],
-    "Puppet Master's Theatre": [
-      "Blood Coated Dirk",
-      "Harlequin Armor",
-      "Marionette Ravager",
-      "Prism of Dancing Swords"
-    ],
-    "Realm of the Mad God": [
-      "Adventurer's Scarf",
-      "Babel Blocks",
-      "Barnacle Basher",
-      "Barnacle Shell",
-      "Beehemoth Quiver",
-      "Bloodbath Blade",
-      "Bloom-Fire Scepter",
-      "Cavalry Lance",
-      "Celestial Recurve",
-      "Cloak of Bloody Surprises",
-      "Cloak of Eerie Trepidation",
-      "Cloak of the Deep",
-      "Cold Front",
-      "Crystal Mace",
-      "Crystal Sword",
-      "Crystal Wand",
-      "Crystallised Fang's Venom",
-      "Dirk of Cronus",
-      "Doom's Emblem",
-      "Dragon Mace",
-      "Elderfrost Heirloom",
-      "Enchanted Ice Blade",
-      "Esben's Twisted Heart",
-      "Evolutionary Records",
-      "Fossilized Skull",
-      "Frostfall Rod",
-      "Frozen Wand",
-      "Frozen Whisper",
-      "General's Arsenal",
-      "Hama Yumi",
-      "Helm of the Jack-o'-naut",
-      "Helm of the Juggernaut",
-      "Helm of the Juggernaut - Chaos",
-      "Helm of the Juggernaut - Jade",
-      "Helm of the Juggernaut - Midas",
-      "Icebreaker Maul",
-      "Jailer's Scythe",
-      "Kagebooshi",
-      "Kageboshi",
-      "Kogbold Multitool",
-      "Laser Rifle",
-      "Longbow of Spirits and Shadows",
-      "Mace of the Pumpkin Effigy",
-      "Neo Laser Rifle",
-      "Obsidian Lyre",
-      "Orb of Conflict",
-      "Orb of Conflict - Chaos",
-      "Orb of Terror",
-      "Phantasm Dirk",
-      "Pirate's Artillery",
-      "Pollen Incendiary",
-      "Quiver of Thunder",
-      "Quiver of Thunder - Overcharged",
-      "Ravenous Wand",
-      "Ray Katana",
-      "Rectangular Prism",
-      "Rift Rippers",
-      "Runes of Knowledge",
-      "Scary Stories",
-      "Seal of Blasphemous Prayer",
-      "Shield of Jawgmur",
-      "Shield of Ogmur",
-      "Shifting Shroud",
-      "Skeletal Sigilpede",
-      "Skull of Restless Souls",
-      "Spooky Smasher",
-      "Tablet of the King's Avatar",
-      "Torrential Staff",
-      "Trap of the Blood Spirit",
-      "Trap of the Vile Spirit",
-      "Winter's Dire Kiss",
-      "Wrathful Conduit"
-    ],
-    "Secluded Thicket": [
-      "Penetrating Blast Spell",
-      "Sealed Crystal Skull",
-      "Tezcacoatl's Tail",
-      "Tlatoani's Shroud"
-    ],
-    "Snake Pit": [
-      "Eternal Snowflake Wand",
-      "Snake Charmer Pungi",
-      "Snake Eye Ring",
-      "Wand of the Bulwark"
-    ],
-    "Spectral Penitentiary": [
-      "Amulet of Restoration",
-      "Blood Ritual Tools",
-      "Boundless Vessel",
-      "Cackling Straitjacket",
-      "Command Cornea",
-      "Damnation",
-      "Deliverance",
-      "Motivational Megaphone",
-      "Ocular Entrapment",
-      "Overwhelming Axehead",
-      "Pandemic Poison",
-      "Sinister Syringes",
-      "Tools of the Tarnished",
-      "Wretched Rags"
-    ],
-    "Spider Den": [
-      "Poison Fang Dagger",
-      "Spider Shuriken",
-      "Spider's Eye Ring"
-    ],
-    "Sprite World": [
-      "Cloak of the Planewalker",
-      "Mace of the Celestial Forest",
-      "Sprite Wand",
-      "Staff of Extreme Prejudice",
-      "Staff of Iceblast"
-    ],
-    "Sulfurous Wetlands": [
-      "Bogwood Crook",
-      "Brambletooth Tachi",
-      "Sulfuric Stone",
-      "Thistleleaf Necklace",
-      "Warped Mantle"
-    ],
-    "The Crawling Depths": [
-      "Doku No Ken",
-      "Mace of the Depths",
-      "Occult Bow",
-      "Silken Sigil",
-      "Spider Silk Bow",
-      "Sweettreats Bow"
-    ],
-    "The Hive": [
-      "Honey Scepter",
-      "Orb of Sweet Demise"
-    ],
-    "The Nest": [
-      "Ashen Talon",
-      "Beehemoth Armor",
-      "Beehemoth Quiver",
-      "Beekeeper's Flamethrower",
-      "Combcutter Kunai",
-      "Hivemaster Helm",
-      "Hivemind Mace",
-      "Queen's Stinger",
-      "Storied Blades",
-      "Swarmlord's Sigil"
-    ],
-    "The Shatters": [
-      "Bracer of the Guardian",
-      "Crest of the Rising Sun",
-      "Dusky Catalyst",
-      "Ice Crown",
-      "Mantle of the Monarchy",
-      "Noble Mandolin",
-      "Peacekeeper",
-      "Polarity Poison",
-      "Primal Arcana",
-      "Royal Guard's Cuirass",
-      "Sentinel's Sidearm",
-      "Sovereign Cinder-Blade",
-      "The Forgotten Crown",
-      "The Golden Forgotten Crown",
-      "The Twilight Gemstone",
-      "Valor",
-      "Vanguard's Visage",
-      "Vest of Abandoned Shadows",
-      "Warmonger"
-    ],
-    "The Tavern": [
-      "Brewer's Bangle",
-      "Cask Corslet",
-      "Deadly Keg",
-      "Double Vision Darts",
-      "Greaterhosen",
-      "Lovebite Armor",
-      "Mighty Stein",
-      "The Right Hook",
-      "Tipsy Topper"
-    ],
-    "The Third Dimension": [
-      "Bronze Pocketwatch",
-      "Cloak of Cubic Enigma",
-      "Morning Square",
-      "Ring of Cubed Wisdom",
-      "Seal of Cubic Conundra",
-      "Shadow Serpent Sidearm",
-      "The Triangle"
-    ],
-    "The Void": [
-      "Armor of Nil",
-      "Bow of the Void",
-      "Omnipotence Ring",
-      "Quiver of Shadows",
-      "Sourcestone"
-    ],
-    "Tomb of the Ancients": [
-      "Frimarra",
-      "Pharaoh's Requiem",
-      "Ring of the Nile",
-      "Ring of the Northern Light",
-      "Ring of the Pyramid",
-      "Ring of the Sphinx",
-      "Tome of Frigid Protection",
-      "Tome of Holy Protection"
-    ],
-    "Toxic Sewers": [
-      "Cursed Canopic Jar",
-      "Murky Toxin",
-      "Void Blade"
-    ],
-    "Undead Lair": [
-      "Bow of the Morning Star",
-      "Doom Bow",
-      "Ring of Skeletal Specters",
-      "Spectral Sword",
-      "Spirit's Bane",
-      "The Crimson Blade",
-      "Wandering Souls Spell"
-    ],
-    "Woodland Labyrinth": [
-      "Elder Heartwood Staff",
-      "Labyrinth Dweller's Sheath",
-      "Leaf Bow",
-      "Sakura Wakizashi",
-      "Snow Branch",
-      "Staff of Rich History",
-      "Tectonus",
-      "Wakizashi of Eastern Winds"
-    ]
+    "Abyss of Demons": {
+      "bosses": [
+        {
+          "boss": "Malphas, Gilded Forgemaster",
+          "items": [
+            "Adamantine Helm",
+            "An Ancient's Embrace",
+            "Berserker's Breastplate",
+            "Demon Blade",
+            "Sword of Illumination",
+            "Volcanic Sheath"
+          ]
+        }
+      ],
+      "st": [
+        "Molten Mantle",
+        "Ring of the Inferno",
+        "Scorchium Stone",
+        "Staff of Eruption"
+      ]
+    },
+    "Ancient Ruins": {
+      "bosses": [
+        {
+          "boss": "Sandstone Titan",
+          "items": [
+            "Amber Encrusted Helmet",
+            "Arcane Rapier",
+            "Sandstone Seal",
+            "Titan's Heart"
+          ]
+        }
+      ],
+      "st": [
+        "Earthen Ward",
+        "Rocky Robe",
+        "Steadfast Glyph",
+        "Stonemould Mace"
+      ]
+    },
+    "Candyland Hunting Grounds": {
+      "bosses": [
+        {
+          "boss": "Swoll Fairy",
+          "items": [
+            "Bubblegum Bucket",
+            "Candy Ring",
+            "Candy-Coated Armor",
+            "Helm of the Swift Bunny"
+          ]
+        }
+      ],
+      "st": [
+        "Fairy Plate",
+        "Legacy Fairy Plate",
+        "Legacy Pixie-Enchanted Sword",
+        "Legacy Ring of Pure Wishes",
+        "Legacy Seal of the Enchanted Forest",
+        "Pixie-Enchanted Sword",
+        "Ring of Pure Wishes",
+        "Seal of the Enchanted Forest"
+      ]
+    },
+    "Cnidarian Reef": {
+      "bosses": [
+        {
+          "boss": "Royal Cnidarian",
+          "items": [
+            "Bottled Medusozoan",
+            "Cnidaria Rod"
+          ]
+        }
+      ],
+      "st": [
+        "Imperial Keepsake",
+        "Oceanic Apparel",
+        "Slurpian Sea Scroll",
+        "Tideturner Trident"
+      ]
+    },
+    "Crystal Cavern": {
+      "bosses": [
+        {
+          "boss": "Crystal Entity",
+          "items": [
+            "Cloak of Refraction",
+            "Corsair's Crown Jewel",
+            "Crystalline Sigil",
+            "Crystallised Mist",
+            "Echoes Prism",
+            "Fractal Blades",
+            "Fractured Gemstone Wakizashi",
+            "Irradiance Sheath",
+            "Star of Enlightenment"
+          ]
+        }
+      ],
+      "st": [
+        "Crystalline Kunai",
+        "Eternal Star",
+        "Luminous Armor",
+        "Quartz Cutter",
+        "Radiant Heart",
+        "Sweetcut Wakizashi"
+      ]
+    },
+    "Cultist Hideout": {
+      "bosses": [
+        {
+          "boss": "Malus",
+          "items": [
+            "Bloodshed Ring",
+            "Burial Blades",
+            "Ritual Robe",
+            "Skull of Corrupted Souls",
+            "Staff of Unholy Sacrifice"
+          ]
+        }
+      ],
+      "st": [
+        "Edictum Praetoris",
+        "Interregnum",
+        "Memento Mori",
+        "Toga Picta"
+      ]
+    },
+    "Cursed Library": {
+      "bosses": [
+        {
+          "boss": "Avalon the Archivist",
+          "items": [
+            "Ceremonial Wand",
+            "Corruption Cutter",
+            "Necronomicon",
+            "Ronin's Wakizashi",
+            "Scholar's Seal",
+            "Sweettreats Dagger",
+            "Wand of Hidden Knowledge"
+          ]
+        }
+      ],
+      "st": [
+        "Garb of the Ordained",
+        "Holy Artifact",
+        "Pontifex Ring",
+        "Tome of Exorcism"
+      ]
+    },
+    "Davy Jones' Locker": {
+      "bosses": [
+        {
+          "boss": "Davy Jones",
+          "items": [
+            "Captain's Ring",
+            "Ghostly Prism",
+            "Quartermaster Scabbard",
+            "Spirit Dagger"
+          ]
+        }
+      ],
+      "st": [
+        "Phantom Sickle",
+        "Reaper's Shroud",
+        "Soul Necklace",
+        "Spectre Cloak"
+      ]
+    },
+    "Deadwater Docks": {
+      "bosses": [
+        {
+          "boss": "Calamity Crab",
+          "items": [
+            "Ghost Ship's Bell",
+            "Wavecrest Concertina"
+          ]
+        },
+        {
+          "boss": "Jon Bilgewater the Pirate King",
+          "items": [
+            "Big Berdtha",
+            "Joker Timbrel",
+            "Pirate King's Cutlass",
+            "Sweettreats Sword"
+          ]
+        }
+      ],
+      "st": [
+        "First Mate's Hook",
+        "Naval Uniform",
+        "Swashbuckler's Sickle",
+        "Tricorne of the High Seas"
+      ]
+    },
+    "Forbidden Jungle": {
+      "bosses": [
+        {
+          "boss": "Mixcoatl the Masked God",
+          "items": [
+            "Cracked Crystal Skull",
+            "Crystal Bone Ring",
+            "Robe of the Tlatoani",
+            "Staff of the Crystal Serpent"
+          ]
+        }
+      ],
+      "st": [
+        "Fang Necklace",
+        "Ragged Robes",
+        "Ritual Skull",
+        "Shaman's Staff",
+        "Soul Gem Amulet"
+      ]
+    },
+    "Forest Maze": {
+      "bosses": [
+        {
+          "boss": "Mama Megamoth",
+          "items": [
+            "Bramble Bow",
+            "Cocoon Quiver"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Fungal Cavern": {
+      "bosses": [
+        {
+          "boss": "Crystal Worm Mother",
+          "items": [
+            "Cave Dweller Trap",
+            "Crystal Shield",
+            "Crystallized Worm Spellblade",
+            "Fungal Breastplate",
+            "Sporous Spray Spell",
+            "Tome of the Mushroom Tribes"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Haunted Cemetery": {
+      "bosses": [
+        {
+          "boss": "Ghost of Skuld",
+          "items": [
+            "Amulet of Dispersion",
+            "Plague Poison",
+            "Resurrected Warrior's Armor",
+            "Rusted Barrel",
+            "Scarlet Etched Branch",
+            "Soul's Guidance"
+          ]
+        }
+      ],
+      "st": [
+        "Etherite Dagger",
+        "Ghastly Drape",
+        "Legacy Etherite Dagger",
+        "Legacy Ghastly Drape",
+        "Legacy Mantle of Skuld",
+        "Legacy Spectral Ring of Horrors",
+        "Mantle of Skuld",
+        "Spectral Ring of Horrors"
+      ]
+    },
+    "High Tech Terror": {
+      "bosses": [
+        {
+          "boss": "F.E.R.A.L.",
+          "items": [
+            "B.O.W.",
+            "E.Y.E.",
+            "Q.U.I.V.E.R.",
+            "Rose Brooch",
+            "S.H.E.A.T.H.",
+            "S.T.A.F.F.",
+            "Sheath of Thunderous Rites",
+            "Spring Rose"
+          ]
+        }
+      ],
+      "st": [
+        "Gearhawk Morning Star",
+        "Mechpilot's Jerkin",
+        "Mechraptor Sigil",
+        "Pressure Gauge Band"
+      ]
+    },
+    "Ice Cave": {
+      "bosses": [
+        {
+          "boss": "Esben the Neurotic",
+          "items": [
+            "Ase's Echo",
+            "Esben's Shaman Attire",
+            "Esben's Twisted Heart",
+            "Esben's Vows",
+            "Esben's Wedding Ring",
+            "Skullish Remains of Esben",
+            "Staff of Esben",
+            "Staff of Esben Legacy",
+            "Sweettreats Staff"
+          ]
+        }
+      ],
+      "st": [
+        "Chainmail Body Armor",
+        "Dalvar's Battle Axe",
+        "Gjallarhorn",
+        "Sunken Buckler"
+      ]
+    },
+    "Kogbold Steamworks": {
+      "bosses": [
+        {
+          "boss": "Factory Control Core",
+          "items": [
+            "Atavistic Soul Sabre",
+            "Brain Cube",
+            "Chain Dagger",
+            "Clockwork Repeater",
+            "Frost Storm Bow",
+            "Kogbold Cower Shield",
+            "Laser Pointer",
+            "Mechanical Kogbold Limb",
+            "Overclocking Amulet",
+            "Scepter of Rust",
+            "Socket Blade",
+            "Solar Flare Igniter",
+            "Steam Pipe"
+          ]
+        }
+      ],
+      "st": [
+        "Blast Proof Robes",
+        "Experimental Cannon",
+        "Lucky Grenade",
+        "Rocket Launcher",
+        "Sentry Turret",
+        "Targeting Monocular",
+        "Tinkerers Apron",
+        "Unstable Firework"
+      ]
+    },
+    "Lair of Draconis": {
+      "bosses": [
+        {
+          "boss": "Pyyr the Crimson Dragon",
+          "items": [
+            "Fire Dragon Battle Armor"
+          ]
+        },
+        {
+          "boss": "Nikao the Azure Dragon",
+          "items": [
+            "Water Dragon Silk Robe"
+          ]
+        },
+        {
+          "boss": "Limoz the Viridian Dragon",
+          "items": [
+            "Leaf Dragon Hide Armor"
+          ]
+        },
+        {
+          "boss": "Feargus the Obsidian Dragon",
+          "items": [
+            "Arashi",
+            "Midnight Star"
+          ]
+        },
+        {
+          "boss": "Ivory Wyvern",
+          "items": [
+            "Celestial Blade",
+            "Draconic Insignia",
+            "Floral Corset",
+            "Forbidden Artifact",
+            "Snowflake Blade",
+            "Sweettreats Katana",
+            "Vision of Draconis"
+          ]
+        }
+      ],
+      "st": [
+        "Amulet of Drakefyre",
+        "Helm of Draconic Dominance",
+        "Indomptable",
+        "Zaarvox's Heart"
+      ]
+    },
+    "Lair of Shaitan": {
+      "bosses": [
+        {
+          "boss": "Shaitan the Advisor",
+          "items": [
+            "Hanagasaku",
+            "Igneous Starblossom",
+            "Skull of Endless Torment",
+            "Wakizashi of Crossing Fires"
+          ]
+        }
+      ],
+      "st": [
+        "Fiery Katana",
+        "Firelight Necklace",
+        "Flame Guard",
+        "Pyro Sheath"
+      ]
+    },
+    "Lost Halls": {
+      "bosses": [
+        {
+          "boss": "Marble Colossus",
+          "items": [
+            "Blade of Eternal Rebirth",
+            "Breastplate of New Life",
+            "Magical Lodestone",
+            "Marble Seal",
+            "Sword of the Colossus"
+          ]
+        }
+      ],
+      "st": [
+        "Abyssal Insignia",
+        "Brain of the Golem",
+        "Carved Golem Remains",
+        "Eye of the Void",
+        "Fallen One's Blade",
+        "Golem Garments",
+        "Rusty Cuffs",
+        "Vortex Plating"
+      ]
+    },
+    "Mad Lab": {
+      "bosses": [
+        {
+          "boss": "Dr Terrible",
+          "items": [
+            "Conducting Wand",
+            "Eggstatic Conductor",
+            "Experimental Ring",
+            "Robe of the Mad Scientist"
+          ]
+        },
+        {
+          "boss": "Horrific Creation",
+          "items": [
+            "Scepter of Fulmination",
+            "Storm Caller"
+          ]
+        }
+      ],
+      "st": [
+        "A.R.M.O.R.",
+        "Abomination's Wrath",
+        "B.O.O.M.",
+        "C.O.N.T.R.O.L.L.E.R.",
+        "Garment of the Beast",
+        "Grotesque Scepter",
+        "Horrific Claws",
+        "SummonerST0"
+      ]
+    },
+    "Magic Woods": {
+      "bosses": [
+        {
+          "boss": "Fountain Spirit",
+          "items": [
+            "Dragon Slayer",
+            "Enchantment Orb",
+            "Fairy Ring",
+            "Shield of Flowing Clarity",
+            "Spirit Staff",
+            "Woodland Robe"
+          ]
+        }
+      ],
+      "st": [
+        "Bergenia Bow",
+        "Chrysanthemum Corsage",
+        "Hollyhock Hide",
+        "Lifebringing Lotus"
+      ]
+    },
+    "Manor of the Immortals": {
+      "bosses": [
+        {
+          "boss": "Lord Ruthven",
+          "items": [
+            "Blood Siphoning Katana",
+            "Bone Dagger",
+            "Chasuble of Holy Light",
+            "Kyuuketsuki Hitogoroshi",
+            "Ring of Divine Faith",
+            "St. Abraham's Wand",
+            "Tome of Purification"
+          ]
+        }
+      ],
+      "st": [
+        "Hallowed Hide",
+        "Ruthven's Rosary",
+        "Soulcursed Scythe",
+        "Vampiric Cape"
+      ]
+    },
+    "Moonlight Village": {
+      "bosses": [
+        {
+          "boss": "Dancer Miko",
+          "items": [
+            "Flowering Kimono",
+            "Mischief",
+            "Taiko Drums"
+          ]
+        },
+        {
+          "boss": "Sage Genji",
+          "items": [
+            "+Makakoyumi",
+            "Makakoyumi",
+            "Sage's Wakibiki",
+            "Vigor"
+          ]
+        },
+        {
+          "boss": "Drummer Kaguya",
+          "items": [
+            "+Tezutsu Hanabi",
+            "Ethereal Happi",
+            "Fortitude",
+            "Tezutsu Hanabi"
+          ]
+        },
+        {
+          "boss": "Kitsune Umi",
+          "items": [
+            "Elegant Parasol",
+            "Kagenohikari",
+            "Rain Maker"
+          ]
+        }
+      ],
+      "st": [
+        "Daybreak Chakram",
+        "Heavenly Magatama",
+        "Hirejou Tenne",
+        "Reikoku"
+      ]
+    },
+    "Mountain Temple": {
+      "bosses": [
+        {
+          "boss": "Daichi the Fallen",
+          "items": [
+            "Jade Storm",
+            "Kaiken",
+            "Orb of Aether",
+            "Sweettreats Wand",
+            "Wand of the Fallen"
+          ]
+        }
+      ],
+      "st": [
+        "Akuma's Tear",
+        "Divination Cloak",
+        "Invocation Scroll",
+        "Kamishimo",
+        "Kazekiri",
+        "Omamori",
+        "Ryu's Blade",
+        "Shakujo"
+      ]
+    },
+    "Ocean Trench": {
+      "bosses": [
+        {
+          "boss": "Thessal the Mermaid Goddess",
+          "items": [
+            "Arctic Bow",
+            "Coral Bow",
+            "Coral Ring",
+            "Coral Silk Armor",
+            "Coral Venom Trap",
+            "Sharktooth Sigil",
+            "Squidver"
+          ]
+        }
+      ],
+      "st": [
+        "Alexander's Band",
+        "Barrier Reef",
+        "Loch Sheath",
+        "Saif of the Deep"
+      ]
+    },
+    "Oryx's Castle": {
+      "bosses": [
+        {
+          "boss": "Stone Guardian",
+          "items": [
+            "Ancient Stone Sword"
+          ]
+        },
+        {
+          "boss": "Janus the Doorwarden",
+          "items": [
+            "Esoteric Buckler",
+            "Spiteful Scutum"
+          ]
+        },
+        {
+          "boss": "Oryx the Mad God",
+          "items": [
+            "Cloak of the Mad God",
+            "Tome of Holy Furor",
+            "Tome of the Dragon"
+          ]
+        }
+      ],
+      "st": [
+        "Almandine Armor of Anger",
+        "Almandine Ring of Wrath",
+        "Onyx Shield of the Mad God",
+        "Sword of the Mad God"
+      ]
+    },
+    "Oryx's Sanctuary": {
+      "bosses": [
+        {
+          "boss": "Archbishop Leucoryx",
+          "items": [
+            "Chaotic Scripture",
+            "Divine Coronation",
+            "Lumiaire",
+            "Vesture of Duality"
+          ]
+        },
+        {
+          "boss": "Chancellor Dammah",
+          "items": [
+            "Chancellor's Cranium",
+            "Diplomatic Robe",
+            "Genesis Spell",
+            "Superior"
+          ]
+        },
+        {
+          "boss": "Chief Beisa",
+          "items": [
+            "Battalion Banner",
+            "Centaur's Shielding",
+            "Enforcer",
+            "Excubicur"
+          ]
+        },
+        {
+          "boss": "Treasurer Gemsbok",
+          "items": [
+            "Avarice",
+            "Collector's Monocle",
+            "Gambler's Fate",
+            "Turncoat Cape"
+          ]
+        },
+        {
+          "boss": "Oryx the Mad God 3",
+          "items": [
+            "Ballistic Star",
+            "Divinity",
+            "Eternal Echo",
+            "Exalted God's Horn",
+            "Gladiator Guard",
+            "Oryx's Escutcheon"
+          ]
+        }
+      ],
+      "st": [
+        "Bloodstone Ring",
+        "Champion's Bastion",
+        "Mercy's Bane",
+        "Oryx's Greatsword"
+      ]
+    },
+    "Parasite Chambers": {
+      "bosses": [
+        {
+          "boss": "Nightmare Colony",
+          "items": [
+            "Maw of Malignance",
+            "Perennial Cranium",
+            "Recurring Terror Spell",
+            "Scepter of Devastation",
+            "Scepter of the Transgressor",
+            "Tome of Pain"
+          ]
+        }
+      ],
+      "st": [
+        "Hivemind Circlet",
+        "Parasitic Concoction",
+        "Rags of the Host",
+        "Symbiotic Ripper"
+      ]
+    },
+    "Pirate Cave": {
+      "bosses": [
+        {
+          "boss": "Dreadstump the Pirate King",
+          "items": [
+            "Corsair Ring"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Puppet Master's Encore": {
+      "bosses": [
+        {
+          "boss": "The Puppet Master",
+          "items": [
+            "Prism of Dire Instability",
+            "Sacramental Crossbow",
+            "Sunny Side Bow",
+            "Thousand Shot"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Puppet Master's Theatre": {
+      "bosses": [
+        {
+          "boss": "The Puppet Master",
+          "items": [
+            "Blood Coated Dirk",
+            "Harlequin Armor",
+            "Marionette Ravager",
+            "Prism of Dancing Swords"
+          ]
+        }
+      ],
+      "st": [
+        "Lightshow Scepter",
+        "Magic Wand",
+        "Magician's Robe",
+        "Performer's Hat"
+      ]
+    },
+    "Realm of the Mad God": {
+      "bosses": [
+        {
+          "boss": "Lord of the Lost Lands",
+          "items": [
+            "Shield of Jawgmur",
+            "Shield of Ogmur"
+          ]
+        },
+        {
+          "boss": "Hermit God",
+          "items": [
+            "Helm of the Jack-o'-naut",
+            "Helm of the Juggernaut",
+            "Helm of the Juggernaut - Chaos",
+            "Helm of the Juggernaut - Jade",
+            "Helm of the Juggernaut - Midas"
+          ]
+        },
+        {
+          "boss": "Cube God",
+          "items": [
+            "Dirk of Cronus",
+            "Phantasm Dirk"
+          ]
+        },
+        {
+          "boss": "Skull Shrine",
+          "items": [
+            "Orb of Conflict",
+            "Orb of Conflict - Chaos",
+            "Orb of Terror"
+          ]
+        },
+        {
+          "boss": "Pentaract Tower",
+          "items": [
+            "Seal of Blasphemous Prayer"
+          ]
+        },
+        {
+          "boss": "Avatar of the Forgotten King",
+          "items": [
+            "Tablet of the King's Avatar"
+          ]
+        },
+        {
+          "boss": "Rock Dragon",
+          "items": [
+            "Ray Katana"
+          ]
+        },
+        {
+          "boss": "Ghost Ship",
+          "items": [
+            "Trap of the Blood Spirit",
+            "Trap of the Vile Spirit"
+          ]
+        },
+        {
+          "boss": "Crystal Prisoner",
+          "items": [
+            "Crystal Sword",
+            "Crystal Wand"
+          ]
+        },
+        {
+          "boss": "Realm Encounters & Biomes",
+          "items": [
+            "Adventurer's Scarf",
+            "Babel Blocks",
+            "Barnacle Basher",
+            "Barnacle Shell",
+            "Beehemoth Quiver",
+            "Bloodbath Blade",
+            "Bloom-Fire Scepter",
+            "Cavalry Lance",
+            "Celestial Recurve",
+            "Cloak of Bloody Surprises",
+            "Cloak of Eerie Trepidation",
+            "Cloak of the Deep",
+            "Cold Front",
+            "Crystal Mace",
+            "Crystallised Fang's Venom",
+            "Doom's Emblem",
+            "Dragon Mace",
+            "Elderfrost Heirloom",
+            "Enchanted Ice Blade",
+            "Esben's Twisted Heart",
+            "Evolutionary Records",
+            "Fossilized Skull",
+            "Frostfall Rod",
+            "Frozen Wand",
+            "Frozen Whisper",
+            "General's Arsenal",
+            "Hama Yumi",
+            "Icebreaker Maul",
+            "Jailer's Scythe",
+            "Kagebooshi",
+            "Kageboshi",
+            "Kogbold Multitool",
+            "Laser Rifle",
+            "Longbow of Spirits and Shadows",
+            "Mace of the Pumpkin Effigy",
+            "Neo Laser Rifle",
+            "Obsidian Lyre",
+            "Pirate's Artillery",
+            "Pollen Incendiary",
+            "Quiver of Thunder",
+            "Quiver of Thunder - Overcharged",
+            "Ravenous Wand",
+            "Rectangular Prism",
+            "Rift Rippers",
+            "Runes of Knowledge",
+            "Scary Stories",
+            "Shifting Shroud",
+            "Skeletal Sigilpede",
+            "Skull of Restless Souls",
+            "Spooky Smasher",
+            "Torrential Staff",
+            "Winter's Dire Kiss",
+            "Wrathful Conduit"
+          ]
+        }
+      ],
+      "st": [
+        "1-Bit Robe",
+        "Angel's Fanfare",
+        "Anointed Robe",
+        "Aquamarine Amulet",
+        "Archangel's Judgement",
+        "Astronomer's Gown",
+        "Augur of the Tempest",
+        "Bloodletting Leeches",
+        "Brilliance Bow",
+        "Bronze Pocketwatch",
+        "Cane of Caduceus",
+        "Ceremonial Merlot",
+        "Cosmic Astrolabe",
+        "Daevite Progenitor",
+        "Doctor's Overcoat",
+        "Embellished Quiver",
+        "Entrancing Hourglass",
+        "Eye of Divination",
+        "Firestarter",
+        "Flames of Genesis",
+        "Hailstorm",
+        "Harmonious Harp",
+        "Heavenly Halo",
+        "Kiritsukeru",
+        "Luxurious Leather",
+        "Monochrome Staff",
+        "MysticST0",
+        "MysticST1",
+        "MysticST2",
+        "Nebular Rod",
+        "Ornate Armor",
+        "Plague Mask",
+        "Quintessential Quiver",
+        "Regal Ring",
+        "Reinforced Root Armor",
+        "Resplendent Bow",
+        "Ring of Pagan Favor",
+        "Ring of the Covetous Heart",
+        "Ritualistic Pa'u",
+        "Sacred Lute",
+        "Seraphim's Guard",
+        "Staff of Rich History",
+        "Strange Ring",
+        "Theurgy Wand",
+        "Thundering Chorus",
+        "Tiki Pendant",
+        "Traditional Blouse",
+        "Traveler's Trinket",
+        "Treasure Orb",
+        "Watarimono",
+        "Wind Dancer Robe",
+        "Wings of Sanctity"
+      ]
+    },
+    "Secluded Thicket": {
+      "bosses": [
+        {
+          "boss": "Xolotl the Lightning God",
+          "items": [
+            "Penetrating Blast Spell",
+            "Sealed Crystal Skull",
+            "Tezcacoatl's Tail",
+            "Tlatoani's Shroud"
+          ]
+        }
+      ],
+      "st": [
+        "Bolt in a Bottle",
+        "Lightning Wand",
+        "Thunderstorm Tunic",
+        "Totem Scepter"
+      ]
+    },
+    "Snake Pit": {
+      "bosses": [
+        {
+          "boss": "Stheno the Snake Queen",
+          "items": [
+            "Eternal Snowflake Wand",
+            "Snake Charmer Pungi",
+            "Snake Eye Ring",
+            "Wand of the Bulwark"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Spectral Penitentiary": {
+      "bosses": [
+        {
+          "boss": "Doctor Lobotomik",
+          "items": [
+            "Blood Ritual Tools",
+            "Cackling Straitjacket",
+            "Sinister Syringes"
+          ]
+        },
+        {
+          "boss": "Overseer Oculon",
+          "items": [
+            "Command Cornea",
+            "Ocular Entrapment"
+          ]
+        },
+        {
+          "boss": "Groundskeeper Gretch",
+          "items": [
+            "Overwhelming Axehead",
+            "Tools of the Tarnished",
+            "Wretched Rags"
+          ]
+        },
+        {
+          "boss": "Griefkeeper Zole",
+          "items": [
+            "Motivational Megaphone",
+            "Pandemic Poison"
+          ]
+        },
+        {
+          "boss": "Soulwarden Murcian",
+          "items": [
+            "Amulet of Restoration",
+            "Boundless Vessel",
+            "Damnation",
+            "Deliverance"
+          ]
+        }
+      ],
+      "st": [
+        "Accursed Memory",
+        "Blade of Fates",
+        "Gravetender's Vest",
+        "Jewel of Vengeance"
+      ]
+    },
+    "Spider Den": {
+      "bosses": [
+        {
+          "boss": "Arachna the Spider Queen",
+          "items": [
+            "Poison Fang Dagger",
+            "Spider Shuriken",
+            "Spider's Eye Ring"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "Sprite World": {
+      "bosses": [
+        {
+          "boss": "Limon the Sprite Goddess",
+          "items": [
+            "Cloak of the Planewalker",
+            "Mace of the Celestial Forest",
+            "Sprite Wand",
+            "Staff of Extreme Prejudice",
+            "Staff of Iceblast"
+          ]
+        }
+      ],
+      "st": [
+        "Dimensional Union",
+        "Hyper Sigil",
+        "Infinite Bands",
+        "Sprite's Dream"
+      ]
+    },
+    "Sulfurous Wetlands": {
+      "bosses": [
+        {
+          "boss": "Heart of the Wetlands",
+          "items": [
+            "Bogwood Crook",
+            "Brambletooth Tachi",
+            "Sulfuric Stone",
+            "Thistleleaf Necklace",
+            "Warped Mantle"
+          ]
+        }
+      ],
+      "st": [
+        "Mossy Guard",
+        "Pulsating Wand",
+        "Swampy Sigil",
+        "Willow Sprout"
+      ]
+    },
+    "The Crawling Depths": {
+      "bosses": [
+        {
+          "boss": "Son of Arachna",
+          "items": [
+            "Doku No Ken",
+            "Mace of the Depths",
+            "Occult Bow",
+            "Silken Sigil",
+            "Spider Silk Bow",
+            "Sweettreats Bow"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "The Hive": {
+      "bosses": [
+        {
+          "boss": "Queen Bee",
+          "items": [
+            "Honey Scepter",
+            "Orb of Sweet Demise"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "The Nest": {
+      "bosses": [
+        {
+          "boss": "Killer Bee Queen",
+          "items": [
+            "Ashen Talon",
+            "Beehemoth Armor",
+            "Beehemoth Quiver",
+            "Beekeeper's Flamethrower",
+            "Combcutter Kunai",
+            "Hivemaster Helm",
+            "Hivemind Mace",
+            "Queen's Stinger",
+            "Storied Blades",
+            "Swarmlord's Sigil"
+          ]
+        }
+      ],
+      "st": [
+        "Apiary Armor",
+        "Honey Circlet",
+        "Honeytomb Snare",
+        "Nectar Crossfire"
+      ]
+    },
+    "The Shatters": {
+      "bosses": [
+        {
+          "boss": "The Bridge Sentinel",
+          "items": [
+            "Bracer of the Guardian",
+            "Mantle of the Monarchy",
+            "Royal Guard's Cuirass",
+            "Sentinel's Sidearm",
+            "Vanguard's Visage"
+          ]
+        },
+        {
+          "boss": "Twilight Archmage",
+          "items": [
+            "Dusky Catalyst",
+            "Polarity Poison",
+            "Primal Arcana",
+            "The Twilight Gemstone",
+            "Valor",
+            "Vest of Abandoned Shadows"
+          ]
+        },
+        {
+          "boss": "The Forgotten King",
+          "items": [
+            "Crest of the Rising Sun",
+            "Ice Crown",
+            "Noble Mandolin",
+            "Peacekeeper",
+            "Sovereign Cinder-Blade",
+            "The Forgotten Crown",
+            "The Golden Forgotten Crown",
+            "Warmonger"
+          ]
+        }
+      ],
+      "st": [
+        "Ancient Eminence",
+        "Corruption Tether",
+        "Defiled Equilibrium",
+        "Legacy Ancient Spell: Pierce",
+        "Legacy Forgotten Ring",
+        "Legacy Robe of Twilight",
+        "Legacy Sentient Staff",
+        "Twilight Shroud"
+      ]
+    },
+    "The Tavern": {
+      "bosses": [
+        {
+          "boss": "Bradley the Barkeep",
+          "items": [
+            "Brewer's Bangle",
+            "Cask Corslet",
+            "Deadly Keg",
+            "Double Vision Darts",
+            "Greaterhosen",
+            "Lovebite Armor",
+            "Mighty Stein",
+            "The Right Hook",
+            "Tipsy Topper"
+          ]
+        }
+      ],
+      "st": []
+    },
+    "The Third Dimension": {
+      "bosses": [
+        {
+          "boss": "Tesseract Goddess",
+          "items": [
+            "Cloak of Cubic Enigma",
+            "Morning Square",
+            "Ring of Cubed Wisdom",
+            "Seal of Cubic Conundra",
+            "Shadow Serpent Sidearm",
+            "The Triangle"
+          ]
+        }
+      ],
+      "st": [
+        "Cuband",
+        "Cubic Frame",
+        "Polygonal Garbs",
+        "Squaroid Staff"
+      ]
+    },
+    "The Void": {
+      "bosses": [
+        {
+          "boss": "Void Entity",
+          "items": [
+            "Armor of Nil",
+            "Bow of the Void",
+            "Omnipotence Ring",
+            "Quiver of Shadows",
+            "Sourcestone"
+          ]
+        }
+      ],
+      "st": [
+        "Cane of the Void",
+        "Darkness Overcoat",
+        "Void Leeches",
+        "Void Mask"
+      ]
+    },
+    "Tomb of the Ancients": {
+      "bosses": [
+        {
+          "boss": "Bes",
+          "items": [
+            "Ring of the Pyramid",
+            "Tome of Frigid Protection",
+            "Tome of Holy Protection"
+          ]
+        },
+        {
+          "boss": "Nut",
+          "items": [
+            "Frimarra",
+            "Ring of the Nile"
+          ]
+        },
+        {
+          "boss": "Geb",
+          "items": [
+            "Pharaoh's Requiem",
+            "Ring of the Northern Light",
+            "Ring of the Sphinx"
+          ]
+        }
+      ],
+      "st": [
+        "Book of Geb",
+        "Geb's Ring of Wisdom",
+        "Shendyt of Geb",
+        "Wand of Geb"
+      ]
+    },
+    "Toxic Sewers": {
+      "bosses": [
+        {
+          "boss": "Gulpord the Slime God",
+          "items": [
+            "Cursed Canopic Jar",
+            "Murky Toxin",
+            "Void Blade"
+          ]
+        }
+      ],
+      "st": [
+        "Acidic Armor",
+        "Alchemist's Disheveled Garbs",
+        "Makeshift Blowpipe",
+        "Pernicious Peridot",
+        "Protective Gloves",
+        "Toxic Toad",
+        "Toxin Tooth",
+        "Virulent Venom"
+      ]
+    },
+    "Undead Lair": {
+      "bosses": [
+        {
+          "boss": "Septavius, Master of the Undead",
+          "items": [
+            "Bow of the Morning Star",
+            "Doom Bow",
+            "Ring of Skeletal Specters",
+            "Spectral Sword",
+            "Spirit's Bane",
+            "The Crimson Blade",
+            "Wandering Souls Spell"
+          ]
+        }
+      ],
+      "st": [
+        "ArcherST0",
+        "Quiver of Shrieking Specters",
+        "Revenant Ring",
+        "Wraith's Brigandine"
+      ]
+    },
+    "Woodland Labyrinth": {
+      "bosses": [
+        {
+          "boss": "Murderous Megamoth",
+          "items": [
+            "Elder Heartwood Staff",
+            "Labyrinth Dweller's Sheath",
+            "Leaf Bow",
+            "Sakura Wakizashi",
+            "Snow Branch",
+            "Tectonus",
+            "Wakizashi of Eastern Winds"
+          ]
+        }
+      ],
+      "st": [
+        "Bud of Beginning",
+        "Leafweave Raiment",
+        "Mace of the Woods",
+        "Razorthorn Branch"
+      ]
+    }
   }
 }

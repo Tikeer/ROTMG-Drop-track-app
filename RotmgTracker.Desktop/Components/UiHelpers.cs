@@ -59,17 +59,51 @@ public static class UiHelpers
     }
 
     /// <summary>
-    /// Single source of truth for Item Collection progress (matched strictly by ItemId; Blueprints excluded).
+    /// Shared eligibility predicate for Item Collection & Profile progress.
+    /// Excludes Blueprints and T0 starter gear; Legacy/Reskins hidden by default; Tiered split into Weapon/Armor vs Ability/Ring.
+    /// </summary>
+    public static bool MatchesCollectionBaseFilter(
+        ItemMetadata item,
+        bool includeTiered = false,
+        int minWeaponArmorTier = 12,
+        int minAbilityRingTier = 6,
+        bool includeLegacy = false,
+        bool includeReskins = false)
+    {
+        if (item.Quality == DropType.BPs) return false;
+        if (!includeLegacy && item.IsLegacy) return false;
+        if (!includeReskins && item.IsReskin) return false;
+
+        // Non-tiered (UT / ST / Shiny): Tier < 0 (T0 starter gear has Tier == 0 and is excluded!)
+        if (item.Tier < 0)
+            return true;
+
+        if (!includeTiered || item.Tier == 0)
+            return false;
+
+        if (item.IsWeaponOrArmor)
+            return minWeaponArmorTier > 0 && item.Tier >= minWeaponArmorTier;
+
+        if (item.IsAbilityOrRing)
+            return minAbilityRingTier > 0 && item.Tier >= minAbilityRingTier;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Single source of truth for Item Collection progress (matched strictly by ItemId; Blueprints, T0, Legacy, Reskins excluded by default).
     /// </summary>
     public static (int Owned, int Total, double Percent) ComputeCollectionProgress(
         IEnumerable<ItemMetadata> catalogItems,
         IEnumerable<LootDropRecord> loot,
         bool includeTiered = false,
-        int minTier = 12)
+        int minWeaponArmorTier = 12,
+        int minAbilityRingTier = 6,
+        bool includeLegacy = false,
+        bool includeReskins = false)
     {
         var eligible = catalogItems
-            .Where(i => i.Quality != DropType.BPs)
-            .Where(i => includeTiered ? (i.Tier <= 0 || i.Tier >= minTier) : i.Tier <= 0)
+            .Where(i => MatchesCollectionBaseFilter(i, includeTiered, minWeaponArmorTier, minAbilityRingTier, includeLegacy, includeReskins))
             .ToList();
 
         var ownedIds = loot

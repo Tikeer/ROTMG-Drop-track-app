@@ -17,7 +17,16 @@ public record ItemMetadata(
     int SlotType = 0,
     string ForgeTier = "",
     string TextureFile = "",
-    int TextureIndex = 0);
+    int TextureIndex = 0,
+    int FeedPower = 0,
+    int FameBonus = 0,
+    bool IsReskin = false,
+    bool IsLegacy = false,
+    string SetName = "")
+{
+    public bool IsWeaponOrArmor => SlotType is 1 or 2 or 3 or 6 or 7 or 8 or 14 or 17 or 24;
+    public bool IsAbilityOrRing => SlotType > 0 && !IsWeaponOrArmor;
+}
 
 public record EnemyMetadata(
     int ObjectType,
@@ -174,7 +183,7 @@ public class GameDataService
         Directory.CreateDirectory(_appDataDir);
 
         // Podbicie wersji katalogów dla wymuszenia świeżego skanowania
-        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v8.json");
+        _itemCatalogPath = Path.Combine(_appDataDir, "item_catalog_v9.json");
         _enemyCatalogPath = Path.Combine(_appDataDir, "enemy_catalog_v9.json");
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
@@ -275,9 +284,14 @@ public class GameDataService
     public EnemyMetadata? ResolveEnemyByName(string bossName)
     {
         if (string.IsNullOrWhiteSpace(bossName)) return null;
-        return _enemies.Values.FirstOrDefault(e =>
-            string.Equals(e.DisplayName, bossName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(e.IdName, bossName, StringComparison.OrdinalIgnoreCase));
+        return _enemies.Values
+            .Where(e =>
+                string.Equals(e.DisplayName, bossName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(e.IdName, bossName, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(e => !string.IsNullOrWhiteSpace(e.TextureFile) && !e.TextureFile.Equals("invisible", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(e => e.IsBoss)
+            .ThenByDescending(e => e.MaxHp)
+            .FirstOrDefault();
     }
 
     public string? FindResourcesAssetsPath() => FindRotmgResourcesAssetsPath();
@@ -718,6 +732,13 @@ public class GameDataService
         bool isShiny = labelTokens.Contains("SHINY") ||
                        (texFile.Contains("Shiny", StringComparison.OrdinalIgnoreCase) && idName.EndsWith(" Shiny", StringComparison.OrdinalIgnoreCase));
 
+        bool isReskin = !isShiny && (
+            labelTokens.Contains("RESKIN") ||
+            idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase) ||
+            idName.Contains("- Midas", StringComparison.OrdinalIgnoreCase));
+
+        string setName = obj.Attribute("setName")?.Value?.Trim() ?? string.Empty;
+
         string finalItemName = displayName;
         if (isShiny)
         {
@@ -726,17 +747,26 @@ public class GameDataService
                 ? baseClean
                 : $"Shiny {baseClean}";
         }
-        else if (labelTokens.Contains("RESKIN") ||
-                 idName.StartsWith("Retro ", StringComparison.OrdinalIgnoreCase) ||
-                 idName.Contains("- Midas", StringComparison.OrdinalIgnoreCase))
+        else if (isReskin && !Regex.IsMatch(idName, @"^(?:H|S\d+)?[A-Za-z]+ST\d$", RegexOptions.IgnoreCase))
         {
+            // Keep human-readable displayName when idName is an internal code like HDruidST0 / S15WizardST0
             finalItemName = idName;
         }
+
+        bool isLegacy = labelTokens.Contains("LEGACY") ||
+                        finalItemName.StartsWith("Legacy ", StringComparison.OrdinalIgnoreCase) ||
+                        finalItemName.EndsWith(" Legacy", StringComparison.OrdinalIgnoreCase) ||
+                        setName.StartsWith("Legacy ", StringComparison.OrdinalIgnoreCase);
 
         int tier = -1;
         string? tierStr = obj.Element("Tier")?.Value;
         if (!string.IsNullOrWhiteSpace(tierStr) && int.TryParse(tierStr, out int parsedTier))
             tier = parsedTier;
+
+        int feedPower = int.TryParse(obj.Element("feedPower")?.Value, out int fp) ? fp : 0;
+        int fameBonus = int.TryParse(obj.Element("XPBonus")?.Value, out int xp)
+            ? xp
+            : (int.TryParse(obj.Element("FameBonus")?.Value, out int fb) ? fb : 0);
 
         forgeMap.TryGetValue(objectType, out var forgeEntry);
         string forgeTier = ResolveItemForgeTier(forgeEntry, labelTokens);
@@ -752,7 +782,12 @@ public class GameDataService
             slotType,
             forgeTier,
             texFile,
-            texIndex);
+            texIndex,
+            feedPower,
+            fameBonus,
+            isReskin,
+            isLegacy,
+            setName);
     }
 }
 
@@ -843,8 +878,8 @@ public class GameDataService
             return DropType.Tops;
         }
 
-        // Pozostały gear z tierem nie jest osobną kategorią; itemy bez tieru to UT
-        if (tier > 0)
+        // Pozostały gear z tierem (w tym T0 starter gear) nie jest UT; itemy bez tieru (tier < 0) to UT
+        if (tier >= 0)
             return DropType.Other;
 
         return DropType.UT;
@@ -874,6 +909,17 @@ public class GameDataService
     {
         slotType = 0;
         xmlBagType = 0;
+
+        // Odrzucamy przedmioty testowe / dev DECA (Testiken*, Testing *, *1Rarity..4Rarity, Trick *, BASETYPE)
+        if (labelTokens.Contains("BASETYPE") ||
+            idName.StartsWith("Testiken", StringComparison.OrdinalIgnoreCase) ||
+            idName.StartsWith("Testing ", StringComparison.OrdinalIgnoreCase) ||
+            displayName.StartsWith("Testing ", StringComparison.OrdinalIgnoreCase) ||
+            idName.StartsWith("Trick ", StringComparison.OrdinalIgnoreCase) ||
+            Regex.IsMatch(idName, @"\d+Rarity$", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
 
         // Odrzucamy paczki schematiców w stosach (np. "Schematic x5")
         if (Regex.IsMatch(displayName, @"Schematic\s*x\d+", RegexOptions.IgnoreCase) ||

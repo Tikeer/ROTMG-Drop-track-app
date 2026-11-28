@@ -8,13 +8,23 @@ public sealed record TrophyHallItem(
     ItemMetadata Meta,
     int OwnedCount,
     ItemRarity BestRarity,
-    double BestScore);
+    double BestScore,
+    int[] RarityCounts,
+    string BossName,
+    string DungeonName,
+    bool IsStSection = false);
+
+public sealed record TrophyHallBossGroup(
+    string BossName,
+    List<TrophyHallItem> Items);
 
 public sealed record TrophyHallDungeonRow(
     string DungeonName,
     int PortalObjectType,
     double Graves,
     int Completions,
+    List<TrophyHallBossGroup> BossGroups,
+    List<TrophyHallItem> StItems,
     List<TrophyHallItem> Items)
 {
     public int OwnedCount => Items.Count(i => i.OwnedCount > 0);
@@ -23,9 +33,9 @@ public sealed record TrophyHallDungeonRow(
 }
 
 /// <summary>
-/// Maps collectible items to their source dungeon(s) using bundled Data/item_sources.json,
+/// Maps collectible items to their source (Dungeon, Boss) or Dungeon ST section using bundled Data/item_sources.json (v3),
 /// optional user override in AppData/RotmgTracker/item_sources.json, and runtime LootHistory overlay (D5).
-/// Shiny variants automatically inherit their base item's source dungeon(s).
+/// Shiny variants automatically inherit their base item's source(s).
 /// </summary>
 public sealed class ItemSourceService
 {
@@ -37,27 +47,37 @@ public sealed class ItemSourceService
         "", "Nexus", "Vault", "Unknown Dungeon", "Daily Quest Room", "Pet Yard", "Guild Hall", "Cloth Bazaar"
     };
 
-    // Normalized base item name -> list of source dungeon names
-    private readonly Dictionary<string, HashSet<string>> _baseSourcesByItem = new(StringComparer.OrdinalIgnoreCase);
+    private sealed record ItemSourceRef(string Dungeon, string Boss, bool IsSt);
 
-    // Prewarmed / cached default Trophy Hall snapshot (AllCharacters, no search/category filters, non-tiered, non-BP)
+    // Normalized base item name -> source mappings (Dungeon, Boss, IsSt)
+    private readonly Dictionary<string, List<ItemSourceRef>> _sourcesByBaseItem = new(StringComparer.OrdinalIgnoreCase);
+    // Dungeon -> ordered boss list from item_sources.json
+    private readonly Dictionary<string, List<string>> _bossOrderByDungeon = new(StringComparer.OrdinalIgnoreCase);
+
+    // Prewarmed / cached default Trophy Hall snapshot (AllCharacters, non-tiered, non-BP, no legacy/reskin)
     private readonly object _cacheLock = new();
     private int _cachedLootCount = -1;
     private int _cachedRunsCount = -1;
     private List<TrophyHallDungeonRow>? _cachedDefaultRows;
 
-    public int MappedBaseItemCount => _baseSourcesByItem.Count;
+    public int MappedBaseItemCount => _sourcesByBaseItem.Count;
     public int MappedDungeonCount { get; private set; }
 
-    /// <summary>
-    /// Returns the primary known source dungeon for an item (strip "Shiny " prefix automatically), or null if unmapped.
-    /// </summary>
     public string? GetPrimaryDungeonForItem(string itemName)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return null;
         string baseName = StripShinyPrefix(itemName);
-        if (_baseSourcesByItem.TryGetValue(baseName, out var dungeons) && dungeons.Count > 0)
-            return dungeons.First();
+        if (_sourcesByBaseItem.TryGetValue(baseName, out var list) && list.Count > 0)
+            return list[0].Dungeon;
+        return null;
+    }
+
+    public (string Dungeon, string Boss)? GetPrimarySourceForItem(string itemName)
+    {
+        if (string.IsNullOrWhiteSpace(itemName)) return null;
+        string baseName = StripShinyPrefix(itemName);
+        if (_sourcesByBaseItem.TryGetValue(baseName, out var list) && list.Count > 0)
+            return (list[0].Dungeon, list[0].Boss);
         return null;
     }
 
@@ -69,7 +89,7 @@ public sealed class ItemSourceService
         var loot = state.GetLootSnapshot(DataScope.AllCharacters);
         var runs = state.GetDungeonRunsSnapshot(DataScope.AllCharacters);
         var defaultItems = gameData.GetAllKnownItems()
-            .Where(i => i.Quality != DropType.BPs && i.Tier <= 0)
+            .Where(i => i.Quality != DropType.BPs && i.Tier < 0 && !i.IsLegacy && !i.IsReskin)
             .OrderByDescending(i => i.IsShiny)
             .ThenBy(i => i.Name)
             .ToList();
@@ -119,6 +139,26 @@ public sealed class ItemSourceService
             LoadFromFile(userOverride);
     }
 
+    private void AddMapping(string rawItemName, string dungeon, string boss, bool isSt)
+    {
+        string baseName = StripShinyPrefix(rawItemName);
+        if (string.IsNullOrWhiteSpace(baseName)) return;
+
+        if (!_sourcesByBaseItem.TryGetValue(baseName, out var list))
+        {
+            list = new List<ItemSourceRef>();
+            _sourcesByBaseItem[baseName] = list;
+        }
+
+        if (!list.Any(x =>
+                string.Equals(x.Dungeon, dungeon, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(x.Boss, boss, StringComparison.OrdinalIgnoreCase) &&
+                x.IsSt == isSt))
+        {
+            list.Add(new ItemSourceRef(dungeon, boss, isSt));
+        }
+    }
+
     private void LoadFromFile(string path)
     {
         if (!File.Exists(path)) return;
@@ -134,22 +174,57 @@ public sealed class ItemSourceService
             foreach (var prop in dungeonsEl.EnumerateObject())
             {
                 string dungeon = prop.Name.Trim();
-                if (string.IsNullOrWhiteSpace(dungeon) || prop.Value.ValueKind != JsonValueKind.Array)
-                    continue;
+                if (string.IsNullOrWhiteSpace(dungeon)) continue;
 
-                allDungeons.Add(dungeon);
-                foreach (var itemEl in prop.Value.EnumerateArray())
+                // v3 format: { "bosses": [ { "boss": "...", "items": [...] } ], "st": [...] }
+                if (prop.Value.ValueKind == JsonValueKind.Object)
                 {
-                    string? rawName = itemEl.GetString();
-                    if (string.IsNullOrWhiteSpace(rawName)) continue;
+                    allDungeons.Add(dungeon);
+                    var bossOrder = new List<string>();
 
-                    string baseName = StripShinyPrefix(rawName);
-                    if (!_baseSourcesByItem.TryGetValue(baseName, out var set))
+                    if (prop.Value.TryGetProperty("bosses", out var bossesEl) && bossesEl.ValueKind == JsonValueKind.Array)
                     {
-                        set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        _baseSourcesByItem[baseName] = set;
+                        foreach (var bossObj in bossesEl.EnumerateArray())
+                        {
+                            string boss = bossObj.TryGetProperty("boss", out var bProp) ? (bProp.GetString()?.Trim() ?? dungeon) : dungeon;
+                            if (!bossOrder.Contains(boss, StringComparer.OrdinalIgnoreCase))
+                                bossOrder.Add(boss);
+
+                            if (bossObj.TryGetProperty("items", out var itemsEl) && itemsEl.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var itemEl in itemsEl.EnumerateArray())
+                                {
+                                    string? rawName = itemEl.GetString();
+                                    if (!string.IsNullOrWhiteSpace(rawName))
+                                        AddMapping(rawName, dungeon, boss, isSt: false);
+                                }
+                            }
+                        }
                     }
-                    set.Add(dungeon);
+
+                    if (bossOrder.Count > 0)
+                        _bossOrderByDungeon[dungeon] = bossOrder;
+
+                    if (prop.Value.TryGetProperty("st", out var stEl) && stEl.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var stItemEl in stEl.EnumerateArray())
+                        {
+                            string? rawName = stItemEl.GetString();
+                            if (!string.IsNullOrWhiteSpace(rawName))
+                                AddMapping(rawName, dungeon, "ST Sets", isSt: true);
+                        }
+                    }
+                }
+                // v2 fallback format: [ "Item1", "Item2" ]
+                else if (prop.Value.ValueKind == JsonValueKind.Array)
+                {
+                    allDungeons.Add(dungeon);
+                    foreach (var itemEl in prop.Value.EnumerateArray())
+                    {
+                        string? rawName = itemEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(rawName))
+                            AddMapping(rawName, dungeon, dungeon, isSt: false);
+                    }
                 }
             }
 
@@ -169,8 +244,16 @@ public sealed class ItemSourceService
         return trimmed;
     }
 
+    private sealed class OwnedAggregate
+    {
+        public int Count;
+        public ItemRarity BestRarity;
+        public double BestScore;
+        public readonly int[] RarityCounts = new int[5];
+    }
+
     /// <summary>
-    /// Builds Trophy Hall dungeon rows for the given filtered items, scoped loot snapshot, and scoped dungeon runs.
+    /// Builds Trophy Hall dungeon rows grouped by Boss + ST section, with per-rarity ownership counts.
     /// Strict ItemId ownership matching (single source of truth).
     /// </summary>
     public List<TrophyHallDungeonRow> BuildTrophyHall(
@@ -179,29 +262,26 @@ public sealed class ItemSourceService
         IReadOnlyList<DungeonRunRecord> scopedRuns,
         GameDataService gameData)
     {
-        // Aggregate owned stats by ItemId (single source of truth)
-        var ownedById = new Dictionary<int, (int Count, ItemRarity BestRarity, double BestScore)>();
-        // Overlay: observed (baseItemName -> dungeons) from actual drops in LootHistory
-        var overlayByBaseName = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var ownedById = new Dictionary<int, OwnedAggregate>();
+        var overlayByBaseName = new Dictionary<string, List<ItemSourceRef>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var drop in scopedLoot)
         {
             if (drop.ItemId > 0)
             {
-                if (ownedById.TryGetValue(drop.ItemId, out var prev))
+                if (!ownedById.TryGetValue(drop.ItemId, out var agg))
                 {
-                    ownedById[drop.ItemId] = (
-                        prev.Count + 1,
-                        drop.Rarity > prev.BestRarity ? drop.Rarity : prev.BestRarity,
-                        Math.Max(prev.BestScore, drop.RarityScore));
+                    agg = new OwnedAggregate();
+                    ownedById[drop.ItemId] = agg;
                 }
-                else
-                {
-                    ownedById[drop.ItemId] = (1, drop.Rarity, drop.RarityScore);
-                }
+
+                agg.Count++;
+                if (drop.Rarity > agg.BestRarity) agg.BestRarity = drop.Rarity;
+                if (drop.RarityScore > agg.BestScore) agg.BestScore = drop.RarityScore;
+                int rIdx = Math.Clamp((int)drop.Rarity, 0, 4);
+                agg.RarityCounts[rIdx]++;
             }
 
-            // Only overlay LootHistory for unmapped White/ST/Shiny items (never pollute already-mapped dungeons with random event/chest/Tops drops)
             bool isSpecialCollectible = drop.BagType is DropType.RegularWhite or DropType.LegendaryWhite
                 or DropType.EventWhite or DropType.ST or DropType.Shiny or DropType.Shivine;
 
@@ -210,19 +290,22 @@ public sealed class ItemSourceService
                 !IgnoredOverlayDungeons.Contains(drop.DungeonName.Trim()))
             {
                 string baseName = StripShinyPrefix(drop.ItemName);
-                if (!_baseSourcesByItem.ContainsKey(baseName))
+                if (!_sourcesByBaseItem.ContainsKey(baseName))
                 {
-                    if (!overlayByBaseName.TryGetValue(baseName, out var dset))
+                    if (!overlayByBaseName.TryGetValue(baseName, out var list))
                     {
-                        dset = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        overlayByBaseName[baseName] = dset;
+                        list = new List<ItemSourceRef>();
+                        overlayByBaseName[baseName] = list;
                     }
-                    dset.Add(drop.DungeonName.Trim());
+                    string dName = drop.DungeonName.Trim();
+                    string bName = string.IsNullOrWhiteSpace(drop.BossName) ? dName : drop.BossName.Trim();
+                    bool isSt = drop.BagType == DropType.ST;
+                    if (!list.Any(x => string.Equals(x.Dungeon, dName, StringComparison.OrdinalIgnoreCase)))
+                        list.Add(new ItemSourceRef(dName, bName, isSt));
                 }
             }
         }
 
-        // Completions count per dungeon name (case-insensitive)
         var compByDungeon = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var run in scopedRuns)
         {
@@ -231,68 +314,130 @@ public sealed class ItemSourceService
             compByDungeon[d] = compByDungeon.GetValueOrDefault(d) + 1;
         }
 
-        // Group filtered items into dungeon buckets
-        var buckets = new Dictionary<string, List<TrophyHallItem>>(StringComparer.OrdinalIgnoreCase);
-        var seenPerBucket = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
+        // Dungeon -> (BossBuckets, StList, SeenIds)
+        var bossBucketsByDungeon = new Dictionary<string, Dictionary<string, List<TrophyHallItem>>>(StringComparer.OrdinalIgnoreCase);
+        var stByDungeon = new Dictionary<string, List<TrophyHallItem>>(StringComparer.OrdinalIgnoreCase);
+        var seenInDungeon = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
 
-        void AddToBucket(string dungeon, TrophyHallItem entry)
+        void EnsureDungeon(string dungeon)
         {
-            if (!buckets.TryGetValue(dungeon, out var list))
+            if (!bossBucketsByDungeon.ContainsKey(dungeon))
             {
-                list = new List<TrophyHallItem>();
-                buckets[dungeon] = list;
-                seenPerBucket[dungeon] = new HashSet<int>();
+                bossBucketsByDungeon[dungeon] = new Dictionary<string, List<TrophyHallItem>>(StringComparer.OrdinalIgnoreCase);
+                stByDungeon[dungeon] = new List<TrophyHallItem>();
+                seenInDungeon[dungeon] = new HashSet<int>();
             }
-            if (seenPerBucket[dungeon].Add(entry.Meta.ItemId))
-                list.Add(entry);
+        }
+
+        void AddItemToDungeon(string dungeon, string boss, bool isSt, ItemMetadata meta, OwnedAggregate? agg)
+        {
+            EnsureDungeon(dungeon);
+            if (!seenInDungeon[dungeon].Add(meta.ItemId))
+                return;
+
+            var counts = agg != null ? (int[])agg.RarityCounts.Clone() : new int[5];
+            bool putInSt = isSt || meta.Quality == DropType.ST;
+            string displayBoss = putInSt
+                ? (string.IsNullOrWhiteSpace(meta.SetName) ? "ST Item" : meta.SetName)
+                : boss;
+
+            var entry = new TrophyHallItem(
+                Meta: meta,
+                OwnedCount: agg?.Count ?? 0,
+                BestRarity: agg?.BestRarity ?? ItemRarity.Common,
+                BestScore: agg?.BestScore ?? 0.0,
+                RarityCounts: counts,
+                BossName: displayBoss,
+                DungeonName: dungeon,
+                IsStSection: putInSt);
+
+            if (putInSt)
+            {
+                stByDungeon[dungeon].Add(entry);
+            }
+            else
+            {
+                var bDict = bossBucketsByDungeon[dungeon];
+                if (!bDict.TryGetValue(boss, out var bList))
+                {
+                    bList = new List<TrophyHallItem>();
+                    bDict[boss] = bList;
+                }
+                bList.Add(entry);
+            }
         }
 
         foreach (var meta in filteredItems)
         {
-            var stats = ownedById.TryGetValue(meta.ItemId, out var s)
-                ? s
-                : (Count: 0, BestRarity: ItemRarity.Common, BestScore: 0.0);
-
-            var entry = new TrophyHallItem(meta, stats.Count, stats.BestRarity, stats.BestScore);
+            ownedById.TryGetValue(meta.ItemId, out var agg);
             string baseName = StripShinyPrefix(meta.Name);
 
             bool assigned = false;
-            if (_baseSourcesByItem.TryGetValue(baseName, out var staticSources))
+            if (_sourcesByBaseItem.TryGetValue(baseName, out var staticRefs))
             {
-                foreach (var d in staticSources)
+                foreach (var src in staticRefs)
                 {
-                    AddToBucket(d, entry);
+                    AddItemToDungeon(src.Dungeon, src.Boss, src.IsSt, meta, agg);
                     assigned = true;
                 }
             }
-
-            if (overlayByBaseName.TryGetValue(baseName, out var liveSources))
+            else if (overlayByBaseName.TryGetValue(baseName, out var liveRefs))
             {
-                foreach (var d in liveSources)
+                foreach (var src in liveRefs)
                 {
-                    AddToBucket(d, entry);
+                    AddItemToDungeon(src.Dungeon, src.Boss, src.IsSt, meta, agg);
                     assigned = true;
                 }
             }
 
             if (!assigned)
             {
-                AddToBucket(UncategorizedDungeon, entry);
+                string fallbackBoss = meta.Quality == DropType.ST && !string.IsNullOrWhiteSpace(meta.SetName)
+                    ? meta.SetName
+                    : (meta.Tier >= 0 ? "Tiered Gear" : "Event / Special");
+                AddItemToDungeon(UncategorizedDungeon, fallbackBoss, isSt: false, meta, agg);
             }
         }
 
-        var rows = new List<TrophyHallDungeonRow>(buckets.Count);
-        foreach (var (dungeon, items) in buckets)
+        static int CompareItems(TrophyHallItem a, TrophyHallItem b)
         {
-            // Sort items within a dungeon: owned first, then non-shiny before shiny, then by name
-            items.Sort((a, b) =>
+            int ownedCmp = (b.OwnedCount > 0).CompareTo(a.OwnedCount > 0);
+            if (ownedCmp != 0) return ownedCmp;
+            int shinyCmp = a.Meta.IsShiny.CompareTo(b.Meta.IsShiny);
+            if (shinyCmp != 0) return shinyCmp;
+            return string.Compare(a.Meta.Name, b.Meta.Name, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var rows = new List<TrophyHallDungeonRow>(bossBucketsByDungeon.Count);
+        foreach (var (dungeon, bDict) in bossBucketsByDungeon)
+        {
+            var bossOrder = _bossOrderByDungeon.TryGetValue(dungeon, out var ord) ? ord : null;
+            var orderedBosses = bDict
+                .OrderBy(kv =>
+                {
+                    if (bossOrder == null) return 999;
+                    int idx = bossOrder.FindIndex(b => string.Equals(b, kv.Key, StringComparison.OrdinalIgnoreCase));
+                    return idx >= 0 ? idx : 999;
+                })
+                .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(kv =>
+                {
+                    kv.Value.Sort(CompareItems);
+                    return new TrophyHallBossGroup(kv.Key, kv.Value);
+                })
+                .ToList();
+
+            var stItems = stByDungeon[dungeon];
+            stItems.Sort((a, b) =>
             {
-                int ownedCmp = (b.OwnedCount > 0).CompareTo(a.OwnedCount > 0);
-                if (ownedCmp != 0) return ownedCmp;
-                int shinyCmp = a.Meta.IsShiny.CompareTo(b.Meta.IsShiny);
-                if (shinyCmp != 0) return shinyCmp;
-                return string.Compare(a.Meta.Name, b.Meta.Name, StringComparison.OrdinalIgnoreCase);
+                int setCmp = string.Compare(a.Meta.SetName, b.Meta.SetName, StringComparison.OrdinalIgnoreCase);
+                if (setCmp != 0) return setCmp;
+                return CompareItems(a, b);
             });
+
+            var allItems = new List<TrophyHallItem>();
+            foreach (var bg in orderedBosses) allItems.AddRange(bg.Items);
+            allItems.AddRange(stItems);
 
             var portal = gameData.ResolvePortalByDungeonName(dungeon);
             double graves = dungeon.Equals(UncategorizedDungeon, StringComparison.OrdinalIgnoreCase)
@@ -306,7 +451,9 @@ public sealed class ItemSourceService
                 PortalObjectType: portal?.ObjectType ?? 0,
                 Graves: graves,
                 Completions: compByDungeon.GetValueOrDefault(dungeon),
-                Items: items));
+                BossGroups: orderedBosses,
+                StItems: stItems,
+                Items: allItems));
         }
 
         return rows;
