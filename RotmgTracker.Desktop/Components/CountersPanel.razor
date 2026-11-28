@@ -2,7 +2,7 @@
 @inject GameDataService GameData
 
 <div class="section-header">
-    <h2>📈 Dungeon Completion Counter & Analytics</h2>
+    <h2>Dungeon Completion Counter &amp; Analytics</h2>
     <div style="display: flex; gap: 8px;">
         <select class="select" @bind="CounterScopeFilter">
             <option value="ALL">All-Time (Global)</option>
@@ -45,8 +45,11 @@
     {
         <div class="drop-card">
             <div class="drop-card-header">
-                <span class="drop-title" style="color: var(--text-primary); font-weight: 700;">@d.DungeonName</span>
-                <span class="badge-nossnl">@d.Graves/10 💀</span>
+                <span class="drop-title inline-meta-item" style="color: var(--text-primary); font-weight: 700;">
+                    <GameSprite PortalObjectType="d.Portal?.ObjectType ?? 0" DungeonName="@d.DungeonName" Size="20" Title="@d.DungeonName" />
+                    <span>@d.DungeonName</span>
+                </span>
+                <span class="badge-nossnl badge-readonly graves-inline">@d.Graves.ToString("0.#")/10 <UiIcon Name="skull" Size="12" /></span>
             </div>
             <div class="drop-value" style="color: var(--accent-green);">@d.Count</div>
             <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--text-muted);">

@@ -7,7 +7,9 @@
     <div class="daily-quests">
         <div class="daily-quests-header">
             <button type="button" class="daily-quests-toggle" @onclick="ToggleCollapsed">
-                @(IsCollapsed ? "▶" : "▼") 📜 Daily Quests
+                <span>@(IsCollapsed ? "▶" : "▼")</span>
+                <UiIcon Name="scroll" Size="15" />
+                <span>Daily Quests</span>
                 <span class="daily-quests-count">@readyCount / @State.Data.ActiveQuests.Count ready</span>
             </button>
         </div>
@@ -24,7 +26,10 @@
                     <div class="daily-quest @(quest.IsCompleted ? "done" : "")"
                          title="Drops from @quest.BossName in @quest.DungeonName • Reward: @quest.RewardName">
                         <div class="daily-quest-top">
-                            <strong class="daily-quest-name">@(string.IsNullOrEmpty(quest.MarkName) ? quest.DungeonName : quest.MarkName)</strong>
+                            <span class="inline-meta-item" style="min-width: 0;">
+                                <GameSprite MarkItemId="quest.MarkItemId" Size="18" Title="@quest.MarkName" />
+                                <strong class="daily-quest-name">@(string.IsNullOrEmpty(quest.MarkName) ? quest.DungeonName : quest.MarkName)</strong>
+                            </span>
                             <span class="daily-quest-count">
                                 @if (quest.IsCompleted)
                                 {
@@ -36,7 +41,10 @@
                         <div class="quest-progress-bar">
                             <div class="quest-progress-fill" style="width: @(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
                         </div>
-                        <div class="daily-quest-sub">📍 @quest.DungeonName • 🎁 @quest.RewardName</div>
+                        <div class="daily-quest-sub inline-meta-item">
+                            <GameSprite PortalObjectType="quest.DungeonPortalObjectType" DungeonName="@quest.DungeonName" Size="14" Title="@quest.DungeonName" />
+                            <span>@quest.DungeonName • @quest.RewardName</span>
+                        </div>
                     </div>
                 }
             </div>

@@ -2,7 +2,7 @@
 @inherits StateAwareComponent
 
 <div class="section-header">
-    <h2>🛡️ Backup & Sync (Mac ↔ Windows)</h2>
+    <h2>Backup &amp; Sync (Mac / Windows)</h2>
 </div>
 
 <div class="opening-card" style="margin-bottom: 16px;">
@@ -14,8 +14,14 @@
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn" @onclick="CreateBackup">💾 Create backup now</button>
-            <button class="btn" @onclick="() => OpenFolder(State.BackupFolder)">📂 Open backup folder</button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="CreateBackup">
+                <UiIcon Name="save" Size="15" />
+                <span>Create backup now</span>
+            </button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.BackupFolder)">
+                <UiIcon Name="folder" Size="15" />
+                <span>Open backup folder</span>
+            </button>
         </div>
 
         @if (!string.IsNullOrEmpty(BackupMessage))
@@ -57,10 +63,22 @@
         </div>
 
         <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn" @onclick="Export">📤 Export history</button>
-            <button class="btn" @onclick="() => OpenFolder(State.ExportFolder)">📂 Open Exports Folder</button>
-            <button class="btn" @onclick="Import">📥 Import from import folder</button>
-            <button class="btn" @onclick="() => OpenFolder(State.ImportFolder)">📂 Open Imports Folder</button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="Export">
+                <UiIcon Name="upload" Size="15" />
+                <span>Export history</span>
+            </button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.ExportFolder)">
+                <UiIcon Name="folder" Size="15" />
+                <span>Open Exports Folder</span>
+            </button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="Import">
+                <UiIcon Name="download" Size="15" />
+                <span>Import from import folder</span>
+            </button>
+            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.ImportFolder)">
+                <UiIcon Name="folder" Size="15" />
+                <span>Open Imports Folder</span>
+            </button>
         </div>
 
         @if (!string.IsNullOrEmpty(TransferMessage))

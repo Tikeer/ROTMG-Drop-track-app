@@ -3,11 +3,12 @@
 <div class="section-header">
     <h2>@State.ActiveCharacter.FormattedTitle — Drop Counters</h2>
     <div style="display: flex; gap: 10px; align-items: center;">
-        <span class="badge-nossnl">
-            📍 Map: @State.CurrentDungeonName
+        <span class="badge-nossnl badge-readonly inline-meta-item">
+            <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="16" />
+            <span>@State.CurrentDungeonName</span>
             @if (State.CurrentDungeonGraves > 0)
             {
-                <span>(@State.CurrentDungeonGraves/10 💀)</span>
+                <span class="graves-inline">(@State.CurrentDungeonGraves.ToString("0.#")/10 <UiIcon Name="skull" Size="12" />)</span>
             }
         </span>
         <span style="color: var(--text-muted); font-size: 0.9rem;">
@@ -20,10 +21,14 @@
     @foreach (var dropType in DisplayDropTypes)
     {
         int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
+        var repBag = UiHelpers.GetRepresentativeBag(dropType);
         <div class="drop-card">
             <div class="drop-card-header">
                 <span class="drop-title">@UiHelpers.FormatDropType(dropType)</span>
-                <span class="bag-dot @UiHelpers.GetDotClass(dropType)"></span>
+                <div class="inline-meta-item">
+                    <GameSprite BagObjectType="repBag.ObjectType" FallbackBagType="repBag.FallbackBag" Size="20" Title="@UiHelpers.FormatDropType(dropType)" />
+                    <span class="bag-dot @UiHelpers.GetDotClass(dropType)"></span>
+                </div>
             </div>
             <div class="drop-value">@val</div>
         </div>
@@ -31,7 +36,7 @@
 </div>
 
 <div class="section-header" style="margin-top: 8px;">
-    <h2>Recent Bag Drops (Grouped by Physical Bag)</h2>
+    <h2>Recent Bag Drops</h2>
     <button class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("loot")'>View Full Loot History →</button>
 </div>
 
@@ -49,31 +54,41 @@ else
         @foreach (var bagGroup in recentBagGroups)
         {
             var first = bagGroup[0];
-            <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
-                <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
-                    <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
-                    <div>⭐ Fame: <strong>@first.BaseFameAtDrop</strong> • @first.ServerName</div>
+            <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
+                <div style="min-width: 145px; font-size: 0.78rem; color: var(--text-muted);">
+                    <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
+                        <UiIcon Name="clock" Size="12" />
+                        <span>@first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    </div>
+                    <div>Fame: <strong>@first.BaseFameAtDrop.ToString("N0")</strong> • @first.ServerName</div>
                 </div>
-                <div class="badge-nossnl" title="Bag Sprite ObjectType: 0x@(first.BagObjectType.ToString("X4"))">
-                    🎒 @first.PhysicalBag
+                <div class="badge-nossnl badge-readonly inline-meta-item" title="@first.PhysicalBag (0x@(first.BagObjectType.ToString("X4")))">
+                    <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="22" Title="@first.PhysicalBag.ToString()" />
+                    <span>@first.PhysicalBag</span>
                 </div>
-                <div class="badge-ssnl" title="Character SkinId: @first.CharacterSkinId">
-                    🧙 @first.CharacterName
+                <div class="badge-ssnl badge-readonly inline-meta-item" title="SkinId: @first.CharacterSkinId">
+                    <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="20" Title="@first.CharacterName" />
+                    <span>@first.CharacterName</span>
                 </div>
-                <div class="badge-nossnl" title="Portal ObjectType: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
-                    🌀 @first.DungeonName (@first.GraveDifficulty/10 💀)
+                <div class="badge-nossnl badge-readonly inline-meta-item" title="Portal: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
+                    <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="18" Title="@first.DungeonName" />
+                    <span>@first.DungeonName (@first.GraveDifficulty.ToString("0.#")/10)</span>
                 </div>
-                <div class="badge-nossnl" title="Boss ObjectType: 0x@(first.BossObjectType.ToString("X4"))">
-                    👾 @first.BossName
+                <div class="badge-nossnl badge-readonly inline-meta-item" title="Boss: 0x@(first.BossObjectType.ToString("X4"))">
+                    <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="20" Title="@first.BossName" />
+                    <span>@first.BossName</span>
                 </div>
-                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
                     @foreach (var item in bagGroup)
                     {
-                        <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
-                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
-                                @(item.IsShiny ? "✨ " : "")@item.ItemName
-                            </strong>
-                            <span style="font-size: 0.75rem; color: #c084fc;">
+                        <div class="bag-item-chip" style="border-color: @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny);">
+                            <GameSprite ItemId="item.ItemId" Size="24" Title="@item.ItemName" />
+                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">@item.ItemName</strong>
+                            @if (item.IsShiny)
+                            {
+                                <span class="shiny-pill">SHINY</span>
+                            }
+                            <span style="font-size: 0.74rem; color: #c084fc;">
                                 [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
                             </span>
                         </div>
@@ -81,9 +96,10 @@ else
                 </div>
                 @if (first.CombatSessionId.HasValue)
                 {
-                    <button class="btn btn-sm" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                    <button class="btn btn-sm inline-meta-item" style="border-color: var(--accent-gold); color: var(--accent-gold);"
                             @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
-                        ⚔️ View Fight DPS
+                        <UiIcon Name="sword" Size="14" />
+                        <span>View Fight DPS</span>
                     </button>
                 }
             </div>

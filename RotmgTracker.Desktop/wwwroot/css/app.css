@@ -1271,3 +1271,60 @@ input, select { user-select: text; }
     border-radius: 8px;
     width: fit-content;
 }
+
+/* ===== Zero-Emoji UI Chrome & Sprite Badges (UI v2.5 Step 9) ===== */
+.ui-icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.inline-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.graves-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.bag-item-chip {
+    background: var(--bg-input);
+    padding: 5px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.shiny-pill {
+    background: rgba(244, 114, 182, 0.18);
+    color: #f472b6;
+    border: 1px solid rgba(244, 114, 182, 0.45);
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+}
+
+.collection-item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0;
+}
+
+.grave-equip-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-main);
+    border: 1px solid var(--border-subtle);
+    padding: 3px 6px;
+    border-radius: 7px;
+}

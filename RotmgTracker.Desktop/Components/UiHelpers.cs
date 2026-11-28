@@ -17,6 +17,16 @@ public static class UiHelpers
         DropType.Tops => "dot-tops",
         _ => "dot-bp"
     };
+
+    public static (int ObjectType, BagType FallbackBag) GetRepresentativeBag(DropType t) => t switch
+    {
+        DropType.RegularWhite or DropType.LegendaryWhite or DropType.EventWhite or DropType.Shiny or DropType.Shivine => (0x050C, BagType.WhiteBag),
+        DropType.ST => (0x050F, BagType.OrangeBag),
+        DropType.Tops => (0x06AC, BagType.RedBag),
+        DropType.UT or DropType.DivineGoodItem => (0x0509, BagType.CyanBag),
+        DropType.BPs => (0x050B, BagType.BlueBag),
+        _ => (0x0507, BagType.PurpleBag)
+    };
     public static string FormatDropType(DropType t) => t switch
     {
         DropType.RegularWhite => "Regular White",

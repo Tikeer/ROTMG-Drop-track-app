@@ -1,8 +1,6 @@
 @inherits StateAwareComponent
-@implements IDisposable
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
-@inject SpriteAtlasService Sprites
 @inject UiSettings UiSettings
 
 <div class="section-header">
@@ -190,20 +188,6 @@
     private bool IsScanning => GameData.IsRescanning || _rescanInProgress;
     private bool _rescanInProgress;
     private string RescanMessage { get; set; } = string.Empty;
-
-    protected override void OnInitialized()
-    {
-        base.OnInitialized();
-        Sprites.Changed += HandleSpritesChanged;
-    }
-
-    private void HandleSpritesChanged() => _ = InvokeAsync(StateHasChanged);
-
-    public new void Dispose()
-    {
-        Sprites.Changed -= HandleSpritesChanged;
-        base.Dispose();
-    }
 
     private void OnSeasonChanged(ChangeEventArgs e)
     {

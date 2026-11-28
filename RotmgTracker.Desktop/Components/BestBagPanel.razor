@@ -1,7 +1,7 @@
 @inherits StateAwareComponent
 
 <div class="section-header" style="margin-top: 16px;">
-    <h2>🎒 Best Bag (highest total Rarity Score in one bag)</h2>
+    <h2>Best Bag (highest total Rarity Score in one bag)</h2>
 </div>
 
 @{
@@ -19,19 +19,38 @@ else
     var first = bestBag[0];
 
     <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid var(--accent-gold);">
-        <div style="min-width: 140px; font-size: 0.78rem; color: var(--text-muted);">
-            <div style="font-weight: 700; color: var(--text-primary);">🕒 @first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
-            <div>📍 @first.DungeonName (@first.GraveDifficulty/10 💀)</div>
-            <div>🧙 @first.CharacterName • 👾 @first.BossName</div>
+        <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="32" Title="@first.PhysicalBag.ToString()" />
+        <div style="min-width: 170px; font-size: 0.78rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 3px;">
+            <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
+                <UiIcon Name="clock" Size="12" />
+                <span>@first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+            </div>
+            <div class="inline-meta-item">
+                <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="16" Title="@first.DungeonName" />
+                <span>@first.DungeonName (@first.GraveDifficulty.ToString("0.#")/10)</span>
+            </div>
+            <div class="inline-meta-item" style="gap: 8px;">
+                <span class="inline-meta-item">
+                    <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="16" Title="@first.CharacterName" />
+                    <span>@first.CharacterName</span>
+                </span>
+                <span class="inline-meta-item">
+                    <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="16" Title="@first.BossName" />
+                    <span>@first.BossName</span>
+                </span>
+            </div>
         </div>
-        <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
             @foreach (var item in bestBag.Where(i => i.RarityScore > 0))
             {
-                <div style="background: var(--bg-input); padding: 6px 12px; border-radius: 8px; border: 1px solid @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny); display: flex; align-items: center; gap: 8px;">
-                    <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">
-                        @(item.IsShiny ? "✨ " : "")@item.ItemName
-                    </strong>
-                    <span style="font-size: 0.75rem; color: #c084fc;">
+                <div class="bag-item-chip" style="border-color: @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny);">
+                    <GameSprite ItemId="item.ItemId" Size="26" Title="@item.ItemName" />
+                    <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">@item.ItemName</strong>
+                    @if (item.IsShiny)
+                    {
+                        <span class="shiny-pill">SHINY</span>
+                    }
+                    <span style="font-size: 0.74rem; color: #c084fc;">
                         [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
                     </span>
                 </div>

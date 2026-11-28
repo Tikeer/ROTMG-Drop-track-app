@@ -29,10 +29,12 @@ else if (!Startup.IsReady)
 else
 {
 <div class="app-shell">
-    <!-- LEFT NAVIGATION SIDEBAR (zwijany hamburgerem) -->
+    <!-- LEFT NAVIGATION SIDEBAR -->
     <aside class="sidebar @(SidebarCollapsed ? "collapsed" : "")">
         <div class="sidebar-top">
-            <button class="hamburger-btn" @onclick="ToggleSidebar" title="Menu">☰</button>
+            <button class="hamburger-btn" @onclick="ToggleSidebar" title="Menu">
+                <UiIcon Name="menu" Size="16" />
+            </button>
             <span class="sidebar-brand">RotMG Tracker</span>
         </div>
 
@@ -41,7 +43,7 @@ else
             <button class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
                     title="@nav.Label"
                     @onclick="() => SetTab(nav.Key)">
-                <span class="nav-icon">@nav.Icon</span>
+                <span class="nav-icon"><UiIcon Name="@nav.Icon" Size="17" /></span>
                 <span class="nav-label">@nav.Label</span>
             </button>
         }
@@ -63,8 +65,9 @@ else
                     <span class="status-rec" title="@Sniffer.Capture.FilePath">REC</span>
                 }
 
-                <span class="status-pill" title="Current in-game location">
-                    @State.CurrentDungeonName@(State.CurrentDungeonGraves > 0 ? $" ({State.CurrentDungeonGraves:0.#}/10)" : "")
+                <span class="status-pill inline-meta-item" title="Current in-game location">
+                    <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="16" />
+                    <span>@State.CurrentDungeonName@(State.CurrentDungeonGraves > 0 ? $" ({State.CurrentDungeonGraves:0.#}/10)" : "")</span>
                 </span>
             </div>
 
@@ -86,9 +89,10 @@ else
         @if (!string.IsNullOrEmpty(State.PendingAccountName))
         {
             <div class="char-bar" style="border-color: var(--accent-gold); background: rgba(245, 158, 11, 0.12);">
-                <div>
-                    <strong style="color: var(--accent-gold);">🎯 Detected Player in Nexus:</strong>
-                    <span style="margin-left: 8px;">Joined as <strong>@State.PendingAccountName</strong> (@State.PendingAccountClass). Is this your account?</span>
+                <div class="inline-meta-item" style="gap: 8px;">
+                    <GameSprite Class="State.PendingAccountClass" Size="22" />
+                    <strong style="color: var(--accent-gold);">Detected Player in Nexus:</strong>
+                    <span>Joined as <strong>@State.PendingAccountName</strong> (@State.PendingAccountClass). Is this your account?</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button class="btn btn-primary btn-sm" @onclick="State.ConfirmPendingAccount">Yes, Link Account</button>
@@ -165,14 +169,14 @@ else
 
     private static readonly (string Key, string Icon, string Label)[] NavItems =
     {
-        ("dashboard",  "📊", "Dashboard"),
-        ("loot",       "💎", "Loot History"),
-        ("dps",        "⚔️", "Live DPS & Fights"),
-        ("collection", "📖", "Item Collection"),
-        ("profile",    "👤", "Profile"),
-        ("graveyard",  "🪦", "Graveyard"),
-        ("data",       "🛡️", "Backup & Sync"),
-        ("settings",   "⚙️", "Settings")
+        ("dashboard",  "dashboard",  "Dashboard"),
+        ("loot",       "loot",       "Loot History"),
+        ("dps",        "sword",      "Live DPS & Fights"),
+        ("collection", "collection", "Item Collection"),
+        ("profile",    "profile",    "Profile"),
+        ("graveyard",  "graveyard",  "Graveyard"),
+        ("data",       "shield",     "Backup & Sync"),
+        ("settings",   "settings",   "Settings")
     };
 
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
@@ -202,7 +206,7 @@ else
         HighlightedCombatSessionId = sessionId;
         ActiveTab = "dps";
     }
-    
+
     public void Dispose()
     {
         State.OnStateChanged -= HandleExternalStateChanged;

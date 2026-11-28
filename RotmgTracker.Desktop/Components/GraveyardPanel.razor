@@ -1,7 +1,7 @@
 @inherits StateAwareComponent
 
 <div class="section-header">
-    <h2>🪦 Fallen Characters </h2>
+    <h2>Fallen Characters</h2>
 </div>
 
 @if (State.Data.Graveyard.Count == 0)
@@ -15,20 +15,37 @@ else
         {
             <div class="opening-card">
                 <div class="opening-header" style="cursor: default;">
-                    <div>
-                        <strong style="font-size: 1.05rem;">💀 @dead.FormattedTitle</strong>
-                        <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl")" style="margin-left: 8px;">
-                            @(dead.IsSeasonal ? $"SSNL ({dead.SeasonTag})" : "NOSSNL")
-                        </span>
-                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
-                            Killed by <strong style="color: #ef4444;">@(dead.KilledBy ?? "Unknown")</strong>
-                            in <strong>@(dead.DeathDungeon ?? "Unknown")</strong> (@(dead.DeathServer ?? "EUWest"))
-                            • @dead.DiedAt?.ToString("yyyy-MM-dd HH:mm")
+                    <div class="inline-meta-item" style="gap: 12px;">
+                        <GameSprite Class="dead.Class" SkinId="dead.SkinId" Size="32" Title="@dead.Class.ToString()" />
+                        <div>
+                            <div class="inline-meta-item" style="gap: 8px; flex-wrap: wrap;">
+                                <strong style="font-size: 1.02rem;">@dead.FormattedTitle</strong>
+                                <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl") badge-readonly">
+                                    @(dead.IsSeasonal ? $"SSNL ({dead.SeasonTag})" : "NOSSNL")
+                                </span>
+                                @if (dead.EquipmentIds is { Length: 4 } && dead.EquipmentIds.Any(id => id > 0))
+                                {
+                                    <span class="grave-equip-strip" title="Equipment worn at death">
+                                        @foreach (int eqId in dead.EquipmentIds)
+                                        {
+                                            if (eqId > 0)
+                                            {
+                                                <GameSprite ItemId="eqId" Size="22" />
+                                            }
+                                        }
+                                    </span>
+                                }
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                                Killed by <strong style="color: #ef4444;">@(dead.KilledBy ?? "Unknown")</strong>
+                                in <strong>@(dead.DeathDungeon ?? "Unknown")</strong> (@(dead.DeathServer ?? "EUWest"))
+                                • @dead.DiedAt?.ToString("yyyy-MM-dd HH:mm")
+                            </div>
                         </div>
                     </div>
                     <div class="opening-summary">
-                        <span>Base Fame: <strong>@dead.BaseFame</strong></span>
-                        <span style="color: var(--accent-gold);">Total Fame: <strong>@dead.TotalFame</strong></span>
+                        <span>Base Fame: <strong>@dead.BaseFame.ToString("N0")</strong></span>
+                        <span style="color: var(--accent-gold);">Total Fame: <strong>@dead.TotalFame.ToString("N0")</strong></span>
                         <span>Logged Drops: <strong style="color: var(--accent-white);">@dead.TotalDrops</strong></span>
                         <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveGraveyardEntry(dead.Id)">✕</button>
                     </div>

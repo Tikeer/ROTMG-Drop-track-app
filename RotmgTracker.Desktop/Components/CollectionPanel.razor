@@ -2,7 +2,7 @@
 @inject GameDataService GameData
 
 <div class="section-header">
-    <h2>📖 Item Collection & Checklist (@GameData.GetAllKnownItems().Count XML Items)</h2>
+    <h2>Item Collection &amp; Checklist (@GameData.GetAllKnownItems().Count XML Items)</h2>
 </div>
 
 <div class="quest-add-bar" style="flex-wrap: wrap; gap: 14px;">
@@ -19,7 +19,7 @@
         <option value="EVENT_WHITE">Realm Whites</option>
         <option value="REGULAR_WHITE">Regular Whites (Tier A–D)</option>
         <option value="ST">ST Sets</option>
-        <option value="SHINY">✨ Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
+        <option value="SHINY">Shiny Variants Only (@GameData.GetAllKnownItems().Count(i => i.IsShiny))</option>
         <option value="BP">Blueprints</option>
     </select>
 
@@ -93,13 +93,20 @@
                 }
             </div>
 
-            <div style="font-weight: 700; font-size: 0.95rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); margin: 4px 0;">
-                @(item.IsShiny ? "✨ " : "")@item.Name
-            </div>
-
-            <div style="font-size: 0.72rem; color: var(--text-muted); display: flex; justify-content: space-between;">
-                <span>ID: 0x@(item.ItemId.ToString("X4"))</span>
-                <span>Sprite: @item.TextureFile #@item.TextureIndex</span>
+            <div class="collection-item-row">
+                <GameSprite TextureFile="@item.TextureFile" TextureIndex="item.TextureIndex" Size="32" Title="@item.Name" />
+                <div style="min-width: 0; flex: 1;">
+                    <div style="font-weight: 700; font-size: 0.92rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <span>@item.Name</span>
+                        @if (item.IsShiny)
+                        {
+                            <span class="shiny-pill">SHINY</span>
+                        }
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">
+                        ID: 0x@(item.ItemId.ToString("X4"))
+                    </div>
+                </div>
             </div>
         </div>
     }

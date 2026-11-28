@@ -14,6 +14,7 @@
             <button type="button"
                     class="custom-dropdown-trigger @(isMaxed ? "maxed" : "")"
                     @onclick="ToggleCharDropdown">
+                <GameSprite Class="active.Class" SkinId="active.SkinId" Size="22" Title="@active.Class.ToString()" />
                 <span class="custom-dropdown-main">
                     <span class="custom-dropdown-title">@active.Class #@active.ClassSlotNumber</span>
                     @if (!string.IsNullOrWhiteSpace(active.Name) && active.Name != active.Class.ToString())
@@ -37,8 +38,9 @@
                                 class="custom-dropdown-option @(selected ? "selected" : "")"
                                 @onclick="() => SelectCharacter(ch.Id)">
                             <div class="dropdown-opt-top">
-                                <span class="dropdown-opt-name">
-                                    @ch.Class #@ch.ClassSlotNumber
+                                <span class="dropdown-opt-name inline-meta-item">
+                                    <GameSprite Class="ch.Class" SkinId="ch.SkinId" Size="20" Title="@ch.Class.ToString()" />
+                                    <span>@ch.Class #@ch.ClassSlotNumber</span>
                                     @if (!string.IsNullOrWhiteSpace(ch.Name) && ch.Name != ch.Class.ToString())
                                     {
                                         <span class="dropdown-opt-alias">• @ch.Name</span>

@@ -1,7 +1,7 @@
 @inherits StateAwareComponent
 
 <div class="section-header" style="margin-top: 16px;">
-    <h2>🏅 Top 10 Drops (by Rarity Score)</h2>
+    <h2>Top 10 Drops (by Rarity Score)</h2>
 </div>
 
 @{
@@ -22,18 +22,36 @@ else
     <div class="quest-list">
         @foreach (var drop in topDrops)
         {
-            <div class="quest-row" style="flex-wrap: wrap; gap: 14px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
+            <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
                 <span style="color: var(--text-muted); font-weight: 700; min-width: 28px;">#@rank</span>
-                <div style="min-width: 240px;">
-                    <strong style="color: @(drop.IsShiny ? "#f472b6" : "var(--accent-white)");">
-                        @(drop.IsShiny ? "✨ " : "")@drop.ItemName
-                    </strong>
-                    <span style="font-size: 0.75rem; color: #c084fc; margin-left: 6px;">
-                        [@drop.Rarity • @drop.EnchantmentSlots slots • @UiHelpers.FormatDropType(drop.BagType)]
-                    </span>
+                <div class="inline-meta-item" style="min-width: 260px; gap: 8px;">
+                    <GameSprite ItemId="drop.ItemId" Size="26" Title="@drop.ItemName" />
+                    <div>
+                        <div class="inline-meta-item">
+                            <strong style="color: @(drop.IsShiny ? "#f472b6" : "var(--accent-white)");">@drop.ItemName</strong>
+                            @if (drop.IsShiny)
+                            {
+                                <span class="shiny-pill">SHINY</span>
+                            }
+                        </div>
+                        <span style="font-size: 0.74rem; color: #c084fc;">
+                            [@drop.Rarity • @drop.EnchantmentSlots slots • @UiHelpers.FormatDropType(drop.BagType)]
+                        </span>
+                    </div>
                 </div>
-                <div style="flex: 1; font-size: 0.78rem; color: var(--text-muted);">
-                    📍 @drop.DungeonName • 🧙 @drop.CharacterName • 🕒 @drop.DroppedAt.ToString("yyyy-MM-dd HH:mm")
+                <div class="inline-meta-item" style="flex: 1; font-size: 0.78rem; color: var(--text-muted); flex-wrap: wrap; gap: 10px;">
+                    <span class="inline-meta-item">
+                        <GameSprite PortalObjectType="drop.DungeonPortalObjectType" DungeonName="@drop.DungeonName" Size="16" Title="@drop.DungeonName" />
+                        <span>@drop.DungeonName</span>
+                    </span>
+                    <span class="inline-meta-item">
+                        <GameSprite Class="drop.CharacterClass" SkinId="drop.CharacterSkinId" Size="16" Title="@drop.CharacterName" />
+                        <span>@drop.CharacterName</span>
+                    </span>
+                    <span class="inline-meta-item">
+                        <UiIcon Name="clock" Size="12" />
+                        <span>@drop.DroppedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                    </span>
                 </div>
                 <strong style="color: var(--accent-gold); min-width: 90px; text-align: right;">@drop.RarityScore pts</strong>
             </div>

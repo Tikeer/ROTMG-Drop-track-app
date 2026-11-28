@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Components;
 using RotmgTrackerV1.Core.Services;
+using RotmgTrackerV1.Core.Services.Sprites;
 
 namespace RotmgTrackerV1.Desktop.Components;
 
 /// <summary>
-/// Base class for tab panels: subscribes to TrackerStateService.OnStateChanged and refreshes automatically.
+/// Base class for tab panels: subscribes to TrackerStateService.OnStateChanged and SpriteAtlasService.Changed
+/// so every panel refreshes automatically on data or sprite atlas updates.
 /// Derived classes overriding OnInitialized must call base.OnInitialized().
 /// </summary>
 public abstract class StateAwareComponent : ComponentBase, IDisposable
@@ -12,10 +14,12 @@ public abstract class StateAwareComponent : ComponentBase, IDisposable
     private bool _disposed;
 
     [Inject] protected TrackerStateService State { get; set; } = default!;
+    [Inject] protected SpriteAtlasService Sprites { get; set; } = default!;
 
     protected override void OnInitialized()
     {
         State.OnStateChanged += HandleStateChanged;
+        Sprites.Changed += HandleStateChanged;
     }
 
     private void HandleStateChanged()
@@ -33,5 +37,6 @@ public abstract class StateAwareComponent : ComponentBase, IDisposable
     {
         _disposed = true;
         State.OnStateChanged -= HandleStateChanged;
+        Sprites.Changed -= HandleStateChanged;
     }
 }
