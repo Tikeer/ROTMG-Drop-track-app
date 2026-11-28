@@ -1,111 +1,139 @@
 @using System.Diagnostics
 @inherits StateAwareComponent
 
-<div class="section-header">
-    <h2>Backup &amp; Sync (Mac / Windows)</h2>
+@{
+    var backups = State.GetBackupFiles();
+}
+
+<div class="section-header" style="margin-bottom: 10px;">
+    <div class="inline-meta-item" style="gap: 10px;">
+        <h2>Backup &amp; Sync</h2>
+        <span class="badge-nossnl badge-readonly">Mac ↔ Windows</span>
+    </div>
 </div>
 
-<div class="opening-card" style="margin-bottom: 16px;">
-    <div style="padding: 14px 16px;">
-        <h3 style="margin: 0 0 8px 0;">Database backups</h3>
-        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
-            Automatic: one backup per day (state from the start of the day, last 14 kept) plus a "latest" backup refreshed hourly.
-            Folder: <code>@State.BackupFolder</code>
+<div class="safety-grid">
+    <!-- DATABASE BACKUPS -->
+    <section class="safety-card">
+        <div class="safety-card-header">
+            <div class="inline-meta-item" style="gap: 8px;">
+                <UiIcon Name="shield" Size="17" />
+                <h3>Database Backups</h3>
+            </div>
+            <span class="badge-nossnl badge-readonly">@backups.Count saved</span>
         </div>
 
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="CreateBackup">
-                <UiIcon Name="save" Size="15" />
-                <span>Create backup now</span>
+        <p class="safety-desc">
+            Automatic snapshots run via SQLite <code>VACUUM INTO</code>: one daily backup (last 14 kept) plus an hourly <code>latest</code> snapshot.
+        </p>
+
+        <div class="safety-path-box" title="@State.BackupFolder">
+            <span>Folder:</span>
+            <code>@State.BackupFolder</code>
+        </div>
+
+        <div class="safety-btn-row">
+            <button type="button" class="btn btn-primary btn-sm inline-meta-item" @onclick="CreateBackup">
+                <UiIcon Name="save" Size="14" />
+                <span>Create Backup Now</span>
             </button>
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.BackupFolder)">
-                <UiIcon Name="folder" Size="15" />
-                <span>Open backup folder</span>
+            <button type="button" class="btn btn-sm inline-meta-item" @onclick="() => OpenFolder(State.BackupFolder)">
+                <UiIcon Name="folder" Size="14" />
+                <span>Open Backup Folder</span>
             </button>
         </div>
 
-        @if (!string.IsNullOrEmpty(BackupMessage))
+        @if (!string.IsNullOrEmpty(_backupMessage))
         {
-            <div style="font-size: 0.85rem; margin-bottom: 8px;">@BackupMessage</div>
+            <div class="safety-status @(_backupError ? "is-error" : "is-ok")">@_backupMessage</div>
         }
 
-        @{
-            var backups = State.GetBackupFiles();
-        }
+        <div class="safety-subhead">Recent Snapshots</div>
         @if (backups.Count == 0)
         {
-            <div style="color: var(--text-muted); font-size: 0.85rem;">No backups yet (the first one is created on the next database save).</div>
+            <div class="safety-empty">No backups yet — the first snapshot is created automatically on the next database save.</div>
         }
         else
         {
-            <div style="font-size: 0.8rem; color: var(--text-muted);">
+            <div class="safety-backup-list">
                 @foreach (var f in backups.Take(8))
                 {
-                    <div>@f.Name — @(f.Length / 1024) KB — @f.LastWriteTime.ToString("yyyy-MM-dd HH:mm")</div>
+                    <div class="safety-backup-row">
+                        <span class="safety-backup-name" title="@f.Name">@f.Name</span>
+                        <span class="safety-backup-meta">@(f.Length / 1024) KB • @f.LastWriteTime.ToString("yyyy-MM-dd HH:mm")</span>
+                    </div>
                 }
             </div>
         }
 
-        <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
-            Restoring: close the app, copy the chosen file from the backup folder as <code>rotmg_tracker.db</code> (replace the existing one)
-            and delete any <code>rotmg_tracker.db-wal</code> / <code>-shm</code> files.
+        <div class="safety-note">
+            <strong>Restoring:</strong> close the app, copy a snapshot over <code>rotmg_tracker.db</code>, and remove any leftover <code>-wal</code> / <code>-shm</code> files.
         </div>
-    </div>
-</div>
+    </section>
 
-<div class="opening-card">
-    <div style="padding: 14px 16px;">
-        <h3 style="margin: 0 0 8px 0;">History transfer between computers</h3>
-        <div style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 10px;">
-            1) On computer A: "Export history" → a JSON file in the exports folder.<br />
-            2) Copy the file to computer B (cloud, USB drive) into its import folder..<br />
-            3) On computer B: "Import from import folder". Duplicates are skipped, a database backup is made before importing, and imported files are moved to import/done.
+    <!-- HISTORY SYNC BETWEEN COMPUTERS -->
+    <section class="safety-card">
+        <div class="safety-card-header">
+            <div class="inline-meta-item" style="gap: 8px;">
+                <UiIcon Name="upload" Size="17" />
+                <h3>History Transfer (Mac ↔ Windows)</h3>
+            </div>
         </div>
 
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="Export">
-                <UiIcon Name="upload" Size="15" />
-                <span>Export history</span>
+        <ol class="safety-steps">
+            <li>On computer A, click <strong>Export History</strong> to write a JSON bundle into <code>exports</code>.</li>
+            <li>Copy that JSON file to computer B into its <code>import</code> folder.</li>
+            <li>On computer B, click <strong>Import from Folder</strong> — duplicates are skipped, a pre-import backup is taken first, and processed files move to <code>import/done</code>.</li>
+        </ol>
+
+        <div class="safety-btn-row">
+            <button type="button" class="btn btn-primary btn-sm inline-meta-item" @onclick="Export">
+                <UiIcon Name="upload" Size="14" />
+                <span>Export History</span>
             </button>
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.ExportFolder)">
-                <UiIcon Name="folder" Size="15" />
-                <span>Open Exports Folder</span>
+            <button type="button" class="btn btn-sm inline-meta-item" @onclick="() => OpenFolder(State.ExportFolder)">
+                <UiIcon Name="folder" Size="14" />
+                <span>Open Exports</span>
             </button>
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="Import">
-                <UiIcon Name="download" Size="15" />
-                <span>Import from import folder</span>
+            <button type="button" class="btn btn-sm inline-meta-item" @onclick="Import">
+                <UiIcon Name="download" Size="14" />
+                <span>Import from Folder</span>
             </button>
-            <button class="btn inline-meta-item" style="justify-content: center;" @onclick="() => OpenFolder(State.ImportFolder)">
-                <UiIcon Name="folder" Size="15" />
-                <span>Open Imports Folder</span>
+            <button type="button" class="btn btn-sm inline-meta-item" @onclick="() => OpenFolder(State.ImportFolder)">
+                <UiIcon Name="folder" Size="14" />
+                <span>Open Imports</span>
             </button>
         </div>
 
-        @if (!string.IsNullOrEmpty(TransferMessage))
+        @if (!string.IsNullOrEmpty(_transferMessage))
         {
-            <div style="font-size: 0.85rem;">@TransferMessage</div>
+            <div class="safety-status @(_transferError ? "is-error" : "is-ok")">@_transferMessage</div>
         }
 
-        <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted);">
-            Transferred: drops, dungeon completions, DPS fights and characters. Not transferred: manual counters (+/−), quest tracker, wishlist, openings.
-            Import only works for the same account (the account name in the file must match the linked account).
+        <div class="safety-note">
+            <strong>Transferred:</strong> drops, dungeon completions, DPS fights, and characters (same linked account only).<br />
+            <strong>Local-only (not transferred):</strong> legacy import counters, Dream Set, Daily Quests, and UI settings.
         </div>
-    </div>
+    </section>
 </div>
 
 @code {
-    private string BackupMessage { get; set; } = string.Empty;
-    private string TransferMessage { get; set; } = string.Empty;
+    private string _backupMessage = string.Empty;
+    private bool _backupError;
+    private string _transferMessage = string.Empty;
+    private bool _transferError;
 
     private void CreateBackup()
     {
         try
         {
-            BackupMessage = $"Backup created: {State.CreateBackupNow()}";
+            _backupError = false;
+            _backupMessage = $"Backup created: {State.CreateBackupNow()}";
         }
         catch (Exception ex)
         {
-            BackupMessage = $"Could not create backup: {ex.Message}";
+            _backupError = true;
+            _backupMessage = $"Could not create backup: {ex.Message}";
         }
     }
 
@@ -113,11 +141,13 @@
     {
         try
         {
-            TransferMessage = $"Exported: {State.ExportHistory()}";
+            _transferError = false;
+            _transferMessage = $"Exported: {State.ExportHistory()}";
         }
         catch (Exception ex)
         {
-            TransferMessage = $"Export failed: {ex.Message}";
+            _transferError = true;
+            _transferMessage = $"Export failed: {ex.Message}";
         }
     }
 
@@ -125,11 +155,13 @@
     {
         try
         {
-            TransferMessage = State.ImportHistoryFromFolder().Summary;
+            _transferError = false;
+            _transferMessage = State.ImportHistoryFromFolder().Summary;
         }
         catch (Exception ex)
         {
-            TransferMessage = $"Import failed: {ex.Message}";
+            _transferError = true;
+            _transferMessage = $"Import failed: {ex.Message}";
         }
     }
 
@@ -148,7 +180,7 @@
         }
         catch
         {
-            // Brak menedżera plików - ścieżka jest widoczna w interfejsie
+            // No desktop file manager available — path stays visible in UI
         }
     }
 }

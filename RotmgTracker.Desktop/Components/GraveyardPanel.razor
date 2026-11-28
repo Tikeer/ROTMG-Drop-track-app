@@ -1,56 +1,169 @@
 @inherits StateAwareComponent
+@inject GameDataService GameData
 
-<div class="section-header">
-    <h2>Fallen Characters</h2>
+@{
+    var graves = State.Data.Graveyard;
+    int highestDeathFame = graves.Count > 0 ? graves.Max(g => Math.Max(g.TotalFame, g.BaseFame)) : 0;
+    long totalBaseFame = graves.Sum(g => (long)g.BaseFame);
+    int totalDropsOnFallen = graves.Sum(g => g.TotalDrops);
+    var slotNames = new[] { "Weapon", "Ability", "Armor", "Ring" };
+}
+
+<div class="section-header" style="margin-bottom: 10px;">
+    <div class="inline-meta-item" style="gap: 10px;">
+        <h2>Graveyard</h2>
+        <span class="badge-nossnl badge-readonly">@graves.Count fallen</span>
+    </div>
 </div>
 
-@if (State.Data.Graveyard.Count == 0)
+@if (graves.Count == 0)
 {
     <div class="empty-state">No fallen characters in the Graveyard yet. Stay safe in the Nexus!</div>
 }
 else
 {
+    <div class="profile-kpi-row" style="margin-bottom: 4px;">
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Fallen Characters</span>
+            <div class="profile-kpi-val">@graves.Count</div>
+            <span class="profile-kpi-sub">8/8 deaths: @graves.Count(g => g.MaxedStats == 8)</span>
+        </div>
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Highest Death Fame</span>
+            <div class="profile-kpi-val" style="color: var(--accent-gold);">@highestDeathFame.ToString("N0")</div>
+            <span class="profile-kpi-sub">Best single grave</span>
+        </div>
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Combined Base Fame</span>
+            <div class="profile-kpi-val">@totalBaseFame.ToString("N0")</div>
+            <span class="profile-kpi-sub">Across all fallen heroes</span>
+        </div>
+        <div class="profile-kpi-card">
+            <span class="profile-kpi-label">Logged Drops</span>
+            <div class="profile-kpi-val" style="color: var(--accent-white);">@totalDropsOnFallen</div>
+            <span class="profile-kpi-sub">Recorded before death</span>
+        </div>
+    </div>
+
     <div class="quest-list">
-        @foreach (var dead in State.Data.Graveyard)
+        @foreach (var dead in graves)
         {
-            <div class="opening-card">
-                <div class="opening-header" style="cursor: default;">
-                    <div class="inline-meta-item" style="gap: 12px;">
-                        <GameSprite Class="dead.Class" SkinId="dead.SkinId" Size="32" Title="@dead.Class.ToString()" />
-                        <div>
-                            <div class="inline-meta-item" style="gap: 8px; flex-wrap: wrap;">
-                                <strong style="font-size: 1.02rem;">@dead.FormattedTitle</strong>
-                                <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl") badge-readonly">
-                                    @(dead.IsSeasonal ? $"SSNL ({dead.SeasonTag})" : "NOSSNL")
-                                </span>
-                                @if (dead.EquipmentIds is { Length: 4 } && dead.EquipmentIds.Any(id => id > 0))
-                                {
-                                    <span class="grave-equip-strip" title="Equipment worn at death">
-                                        @foreach (int eqId in dead.EquipmentIds)
+            <div class="grave-card">
+                <div class="grave-main">
+                    <div class="grave-avatar">
+                        <GameSprite Class="dead.Class" SkinId="dead.SkinId" Size="38" Title="@dead.Class.ToString()" />
+                    </div>
+
+                    <div class="grave-info">
+                        <div class="inline-meta-item" style="gap: 8px; flex-wrap: wrap;">
+                            <strong class="grave-name">@dead.FormattedTitle</strong>
+                            <span class="@(dead.IsSeasonal ? "badge-ssnl" : "badge-nossnl") badge-readonly">
+                                @(dead.IsSeasonal ? $"SSNL {dead.SeasonTag}" : $"Reg {dead.SeasonTag}")
+                            </span>
+
+                            @if (dead.EquipmentIds is { Length: >= 4 } && dead.EquipmentIds.Take(4).Any(id => id > 0))
+                            {
+                                <span class="grave-equip-strip" title="Equipment worn at death">
+                                    @for (int i = 0; i < 4; i++)
+                                    {
+                                        int eqId = dead.EquipmentIds[i];
+                                        if (eqId > 0)
                                         {
-                                            if (eqId > 0)
-                                            {
-                                                <GameSprite ItemId="eqId" Size="22" />
-                                            }
+                                            string eqName = GameData.TryGetItem(eqId, out var eqMeta) ? eqMeta.Name : $"Item 0x{eqId:X4}";
+                                            <span class="sprite-tip-host inline-meta-item">
+                                                <GameSprite ItemId="eqId" Size="24" />
+                                                <div class="rotmg-tooltip rotmg-tooltip-sm">
+                                                    <div class="rotmg-tooltip-title">@eqName</div>
+                                                    <div class="rotmg-tooltip-sub">@slotNames[i]</div>
+                                                </div>
+                                            </span>
                                         }
-                                    </span>
+                                    }
+                                </span>
+                            }
+                        </div>
+
+                        <div class="grave-cause-row">
+                            <span class="inline-meta-item" style="gap: 5px;">
+                                <span>Killed by</span>
+                                @if (!string.IsNullOrWhiteSpace(dead.KilledBy))
+                                {
+                                    <GameSprite BossName="@dead.KilledBy" Size="18" Title="@dead.KilledBy" />
                                 }
-                            </div>
-                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
-                                Killed by <strong style="color: #ef4444;">@(dead.KilledBy ?? "Unknown")</strong>
-                                in <strong>@(dead.DeathDungeon ?? "Unknown")</strong> (@(dead.DeathServer ?? "EUWest"))
-                                • @dead.DiedAt?.ToString("yyyy-MM-dd HH:mm")
-                            </div>
+                                <strong style="color: #f87171;">@(dead.KilledBy ?? "Unknown")</strong>
+                            </span>
+                            <span>in</span>
+                            <span class="inline-meta-item" style="gap: 5px;">
+                                @if (!string.IsNullOrWhiteSpace(dead.DeathDungeon))
+                                {
+                                    <GameSprite DungeonName="@dead.DeathDungeon" Size="16" Title="@dead.DeathDungeon" />
+                                }
+                                <strong style="color: var(--text-primary);">@(dead.DeathDungeon ?? "Unknown")</strong>
+                            </span>
+                            <span>(@(dead.DeathServer ?? "EUWest"))</span>
+                            @if (dead.DiedAt.HasValue)
+                            {
+                                <span class="inline-meta-item" style="gap: 4px;">
+                                    <UiIcon Name="clock" Size="12" />
+                                    <span>@dead.DiedAt.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                                </span>
+                            }
                         </div>
                     </div>
-                    <div class="opening-summary">
-                        <span>Base Fame: <strong>@dead.BaseFame.ToString("N0")</strong></span>
-                        <span style="color: var(--accent-gold);">Total Fame: <strong>@dead.TotalFame.ToString("N0")</strong></span>
-                        <span>Logged Drops: <strong style="color: var(--accent-white);">@dead.TotalDrops</strong></span>
-                        <button class="btn btn-danger btn-sm" @onclick="() => State.RemoveGraveyardEntry(dead.Id)">✕</button>
+                </div>
+
+                <div class="grave-stats">
+                    <div class="grave-stat-col">
+                        <span class="grave-stat-lbl">Base Fame</span>
+                        <strong>@dead.BaseFame.ToString("N0")</strong>
                     </div>
+                    <div class="grave-stat-col">
+                        <span class="grave-stat-lbl">Total Fame</span>
+                        <strong style="color: var(--accent-gold);">@(dead.TotalFame > 0 ? dead.TotalFame.ToString("N0") : "—")</strong>
+                    </div>
+                    <div class="grave-stat-col">
+                        <span class="grave-stat-lbl">Drops</span>
+                        <strong style="color: var(--accent-white);">@dead.TotalDrops</strong>
+                    </div>
+
+                    <button type="button"
+                            class="dream-remove-btn"
+                            title="Delete graveyard entry"
+                            @onclick="() => RequestDelete(dead)">✕</button>
                 </div>
             </div>
         }
     </div>
+}
+
+@if (_pendingDelete != null)
+{
+    <div class="modal-backdrop" @onclick="CancelDelete">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <div class="modal-title">Remove Graveyard Entry?</div>
+            <div class="modal-body">
+                Are you sure you want to permanently remove <strong>@_pendingDelete.FormattedTitle</strong>
+                (killed by <strong>@(_pendingDelete.KilledBy ?? "Unknown")</strong>) from the Graveyard?
+                Historical loot records stay in Loot History.
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CancelDelete">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmDelete">Delete Entry</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private CharacterSession? _pendingDelete;
+
+    private void RequestDelete(CharacterSession entry) => _pendingDelete = entry;
+    private void CancelDelete() => _pendingDelete = null;
+
+    private void ConfirmDelete()
+    {
+        if (_pendingDelete == null) return;
+        State.RemoveGraveyardEntry(_pendingDelete.Id);
+        _pendingDelete = null;
+    }
 }
