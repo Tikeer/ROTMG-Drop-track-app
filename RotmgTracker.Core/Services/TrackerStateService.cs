@@ -972,8 +972,22 @@ public partial class TrackerStateService
 
     public void RemoveQuest(Guid questId)
     {
-        Data.ActiveQuests.RemoveAll(q => q.Id == questId);
-        SaveAsync();
+        using var guard = LockState();
+        if (Data.ActiveQuests.RemoveAll(q => q.Id == questId) > 0)
+        {
+            SaveAsync();
+            NotifyStateChanged();
+        }
+    }
+
+    public void ClearCompletedQuests()
+    {
+        using var guard = LockState();
+        if (Data.ActiveQuests.RemoveAll(q => q.IsCompleted) > 0)
+        {
+            SaveAsync();
+            NotifyStateChanged();
+        }
     }
 
     public void AddOpeningSession(string title)

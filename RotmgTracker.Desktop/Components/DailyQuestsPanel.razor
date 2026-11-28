@@ -1,23 +1,69 @@
 @inherits StateAwareComponent
+@inject GameDataService GameData
 
-@if (State.Data.ActiveQuests.Count > 0)
-{
-    int readyCount = State.Data.ActiveQuests.Count(q => q.IsCompleted);
+@{
+    var quests = State.Data.ActiveQuests;
+    int readyCount = quests.Count(q => q.IsCompleted);
+}
 
-    <div class="daily-quests">
-        <div class="daily-quests-header">
-            <button type="button" class="daily-quests-toggle" @onclick="ToggleCollapsed">
-                <span>@(IsCollapsed ? "▶" : "▼")</span>
-                <UiIcon Name="scroll" Size="15" />
-                <span>Daily Quests</span>
-                <span class="daily-quests-count">@readyCount / @State.Data.ActiveQuests.Count ready</span>
-            </button>
+<div class="daily-quests daily-quests-taskbar">
+    <div class="daily-quests-header">
+        <button type="button" class="daily-quests-toggle" @onclick="ToggleCollapsed">
+            <span class="dq-chevron">@(IsCollapsed ? "▶" : "▼")</span>
+            <UiIcon Name="scroll" Size="14" />
+            <span>Daily Quests</span>
+            @if (quests.Count > 0)
+            {
+                <span class="daily-quests-count">@readyCount / @quests.Count ready</span>
+            }
+            else
+            {
+                <span class="dq-empty-hint">No active marks • Tinkerer sync pending</span>
+            }
+        </button>
+
+        @if (IsCollapsed && quests.Count > 0)
+        {
+            <div class="dq-mini-pills">
+                @foreach (var q in quests.Take(6))
+                {
+                    <span class="dq-mini-pill @(q.IsCompleted ? "is-ready" : "")"
+                          title="@(string.IsNullOrEmpty(q.MarkName) ? q.DungeonName : q.MarkName) — @q.DungeonName (@q.CurrentMarks/@q.TargetMarks)">
+                        <GameSprite MarkItemId="q.MarkItemId" Size="16" />
+                        <span>@q.CurrentMarks/@q.TargetMarks</span>
+                    </span>
+                }
+                @if (quests.Count > 6)
+                {
+                    <span class="daily-quests-count">+@(quests.Count - 6)</span>
+                }
+            </div>
+        }
+
+        <div class="dq-actions">
+            @if (readyCount > 0)
+            {
+                <button type="button" class="btn btn-sm" @onclick="State.ClearCompletedQuests" title="Remove completed quests">
+                    Clear Ready
+                </button>
+            }
+            <button type="button" class="btn btn-sm" @onclick="OpenAddModal">+ Track Mark</button>
         </div>
+    </div>
 
-        @if (!IsCollapsed)
+    @if (!IsCollapsed)
+    {
+        if (quests.Count == 0)
+        {
+            <div class="dq-empty-box">
+                Track Tinkerer daily mark quests here — picked-up marks are counted automatically by the passive sniffer.
+                Automatic quest-list sync will be wired after checking Tinkerer TCP packets.
+            </div>
+        }
+        else
         {
             <div class="daily-quests-grid">
-                @foreach (var quest in State.Data.ActiveQuests)
+                @foreach (var quest in quests)
                 {
                     double pct = quest.TargetMarks > 0
                         ? Math.Min(100, (double)quest.CurrentMarks / quest.TargetMarks * 100)
@@ -30,16 +76,22 @@
                                 <GameSprite MarkItemId="quest.MarkItemId" Size="18" Title="@quest.MarkName" />
                                 <strong class="daily-quest-name">@(string.IsNullOrEmpty(quest.MarkName) ? quest.DungeonName : quest.MarkName)</strong>
                             </span>
-                            <span class="daily-quest-count">
-                                @if (quest.IsCompleted)
-                                {
-                                    <span>✓ </span>
-                                }
-                                @quest.CurrentMarks / @quest.TargetMarks
-                            </span>
+                            <div class="inline-meta-item" style="gap: 6px;">
+                                <span class="daily-quest-count">
+                                    @if (quest.IsCompleted)
+                                    {
+                                        <span>✓ </span>
+                                    }
+                                    @quest.CurrentMarks / @quest.TargetMarks
+                                </span>
+                                <button type="button"
+                                        class="dq-remove-btn"
+                                        title="Remove quest"
+                                        @onclick="() => State.RemoveQuest(quest.Id)">✕</button>
+                            </div>
                         </div>
                         <div class="quest-progress-bar">
-                            <div class="quest-progress-fill" style="width: @(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            <div class="quest-progress-fill" style="width: @(pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
                         </div>
                         <div class="daily-quest-sub inline-meta-item">
                             <GameSprite PortalObjectType="quest.DungeonPortalObjectType" DungeonName="@quest.DungeonName" Size="14" Title="@quest.DungeonName" />
@@ -49,11 +101,143 @@
                 }
             </div>
         }
+    }
+</div>
+
+@if (_showAddModal)
+{
+    var markSuggestions = GetMarkSuggestions();
+
+    <div class="modal-backdrop" @onclick="CloseAddModal">
+        <div class="modal-card dream-modal-card" @onclick:stopPropagation="true">
+            <div class="modal-title">Track Daily Mark Quest</div>
+            <div class="modal-body" style="font-size: 0.8rem;">
+                Pick a dungeon mark from game data. Progress increments automatically when the sniffer sees that mark drop.
+            </div>
+
+            <div class="modal-field">
+                <label class="modal-label">Mark / Dungeon</label>
+                <div class="autocomplete-host">
+                    <input class="input"
+                           style="width: 100%;"
+                           placeholder="Search mark or dungeon (e.g. Oryx, Void, MBC)..."
+                           value="@_markSearch"
+                           @oninput="OnMarkInput"
+                           @onfocus="() => _showMarkMenu = true" />
+
+                    @if (_showMarkMenu && markSuggestions.Count > 0)
+                    {
+                        <div class="dropdown-backdrop" @onclick="() => _showMarkMenu = false"></div>
+                        <div class="autocomplete-menu">
+                            @foreach (var m in markSuggestions)
+                            {
+                                <button type="button" class="autocomplete-option" @onclick="() => PickMark(m)">
+                                    <GameSprite MarkItemId="m.ItemId" Size="20" />
+                                    <div style="display: flex; flex-direction: column; min-width: 0;">
+                                        <span style="font-weight: 600;">@m.MarkName</span>
+                                        <span style="font-size: 0.72rem; color: var(--text-muted);">@m.DungeonName • @m.BossName</span>
+                                    </div>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="dream-modal-row">
+                <div class="modal-field" style="width: 110px;">
+                    <label class="modal-label">Marks Needed</label>
+                    <input class="input" type="number" min="1" max="12" @bind="_targetMarks" />
+                </div>
+
+                <div class="modal-field" style="flex: 1;">
+                    <label class="modal-label">Reward</label>
+                    <select class="select" style="width: 100%;" @bind="_rewardName">
+                        <option value="Standard Quest Chest">Standard Quest Chest</option>
+                        <option value="Mighty Quest Chest">Mighty Quest Chest</option>
+                        <option value="Epic Quest Chest">Epic Quest Chest</option>
+                        <option value="Daily Event Chest">Daily Event Chest</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CloseAddModal">Cancel</button>
+                <button type="button"
+                        class="btn btn-primary btn-sm"
+                        disabled="@(_selectedMark == null)"
+                        @onclick="ConfirmAddQuest">
+                    Track Quest
+                </button>
+            </div>
+        </div>
     </div>
 }
 
 @code {
-    private bool IsCollapsed { get; set; }
+    private bool IsCollapsed { get; set; } = true;
+    private bool _showAddModal;
+    private bool _showMarkMenu;
+    private string _markSearch = "";
+    private MarkMetadata? _selectedMark;
+    private int _targetMarks = 4;
+    private string _rewardName = "Mighty Quest Chest";
 
     private void ToggleCollapsed() => IsCollapsed = !IsCollapsed;
+
+    private void OpenAddModal()
+    {
+        _markSearch = "";
+        _selectedMark = null;
+        _targetMarks = 4;
+        _rewardName = "Mighty Quest Chest";
+        _showMarkMenu = false;
+        _showAddModal = true;
+    }
+
+    private void CloseAddModal()
+    {
+        _showAddModal = false;
+        _showMarkMenu = false;
+    }
+
+    private void OnMarkInput(ChangeEventArgs e)
+    {
+        _markSearch = e.Value?.ToString() ?? "";
+        _selectedMark = null;
+        _showMarkMenu = true;
+    }
+
+    private void PickMark(MarkMetadata mark)
+    {
+        _selectedMark = mark;
+        _markSearch = $"{mark.MarkName} ({mark.DungeonName})";
+        _showMarkMenu = false;
+    }
+
+    private List<MarkMetadata> GetMarkSuggestions()
+    {
+        string q = _markSearch.Trim();
+        var marks = GameData.GetAllKnownMarks().AsEnumerable();
+        if (q.Length > 0)
+        {
+            marks = marks.Where(m =>
+                m.MarkName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.DungeonName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.BossName.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+        return marks
+            .OrderBy(m => m.DungeonName, StringComparer.OrdinalIgnoreCase)
+            .Take(14)
+            .ToList();
+    }
+
+    private void ConfirmAddQuest()
+    {
+        if (_selectedMark == null) return;
+        int portalId = GameData.ResolvePortalByDungeonName(_selectedMark.DungeonName)?.ObjectType ?? 0;
+        State.AddMarkQuestWithMetadata(_selectedMark, Math.Clamp(_targetMarks, 1, 12), _rewardName, portalId);
+        IsCollapsed = false;
+        CloseAddModal();
+    }
 }
