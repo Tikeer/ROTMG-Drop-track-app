@@ -1,5 +1,6 @@
 @inherits StateAwareComponent
 @inject GameDataService GameData
+@inject UiSettings UiSettings
 
 <div class="section-header">
     <h2>
@@ -10,7 +11,7 @@
         }
     </h2>
     <div style="display: flex; gap: 8px;">
-        @if (State.CurrentDungeonPlayers.Count > 0)
+        @if (UiSettings.DebugMode && State.CurrentDungeonPlayers.Count > 0)
         {
             <button class="btn btn-primary btn-sm" @onclick="ArchiveTestFight">💾 Save Fight to History</button>
         }
@@ -21,7 +22,7 @@
 @if (State.CurrentDungeonPlayers.Count == 0)
 {
     <div class="empty-state">
-        Waiting for boss damage packets (`DAMAGE` on TCP:2050)... Enter a dungeon or click "⚡ Test Boss DPS" on the top bar.
+        Waiting for boss damage packets (DAMAGE on TCP:2050)... Enter a dungeon to see live damage breakdown.
     </div>
 }
 else

@@ -45,6 +45,27 @@ public record MarkMetadata(
     string TextureFile = "",
     int TextureIndex = 0);
 
+public record BagSpriteMetadata(
+    int ObjectType,
+    BagType BagType,
+    bool IsFat,
+    string TextureFile,
+    int TextureIndex);
+
+public record ClassSpriteMetadata(
+    RotmgClass Class,
+    int ObjectType,
+    string TextureFile,
+    int TextureIndex);
+
+public record SkinSpriteMetadata(
+    int SkinId,
+    string Name,
+    string TextureFile,
+    int TextureIndex);
+
+public record SpriteRef(string TextureFile, int TextureIndex);
+
 public class GameDataService
 {
     private sealed record ForgeXmlEntry(
@@ -59,14 +80,19 @@ public class GameDataService
     private readonly string _portalCatalogPath;
     private readonly string _markCatalogPath;
     private readonly string _lootOnlyCatalogPath;
+    private readonly string _visualCatalogPath;
     private readonly object _catalogLock = new();
 
     private readonly Dictionary<int, ItemMetadata> _items = new();
     private readonly Dictionary<int, EnemyMetadata> _enemies = new();
     private readonly Dictionary<string, PortalMetadata> _portalsByName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, PortalMetadata> _portalsByType = new();
     private readonly Dictionary<int, MarkMetadata> _marks = new();
     private readonly Dictionary<int, ItemMetadata> _lootOnlyItems = new();
     private readonly Dictionary<int, RotmgClass> _playerClasses = new();
+    private readonly Dictionary<int, BagSpriteMetadata> _bagSprites = new();
+    private readonly Dictionary<RotmgClass, ClassSpriteMetadata> _classSprites = new();
+    private readonly Dictionary<int, SkinSpriteMetadata> _skinSprites = new();
     private readonly List<string> _bossReasons = new();
 
     private readonly Dictionary<int, BagType> _bagContainers = new()
@@ -118,6 +144,27 @@ public class GameDataService
     ];
 
     public string ExtractionStatus { get; private set; } = "Not initialized";
+    private int _rescanRunning;
+    public bool IsRescanning => Volatile.Read(ref _rescanRunning) == 1;
+
+    /// <summary>Runs resources.assets scan on a dedicated background thread so UI never stalls.</summary>
+    public Task<int> RescanGameFilesAsync(string? customResourcesAssetsPath = null)
+    {
+        if (Interlocked.CompareExchange(ref _rescanRunning, 1, 0) != 0)
+            return Task.FromResult(0);
+
+        return Task.Factory.StartNew(() =>
+        {
+            try
+            {
+                return TryAutoExtractFromInstalledGame(customResourcesAssetsPath);
+            }
+            finally
+            {
+                Volatile.Write(ref _rescanRunning, 0);
+            }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
 
     public GameDataService()
     {
@@ -132,6 +179,7 @@ public class GameDataService
         _portalCatalogPath = Path.Combine(_appDataDir, "portal_catalog_v4.json");
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
         _lootOnlyCatalogPath = Path.Combine(_appDataDir, "loot_only_catalog_v1.json");
+        _visualCatalogPath = Path.Combine(_appDataDir, "visual_catalog_v1.json");
     }
 
     private bool _initialized;
@@ -144,8 +192,8 @@ public class GameDataService
 
         LoadCachedCatalogs();
 
-        // Brak pliku loot_only_catalog_v1.json wymusza jednorazowy rescan przy pierwszym starcie
-        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0 || _lootOnlyItems.Count == 0)
+        // Brak pliku loot_only_catalog_v1.json lub visual_catalog_v1.json wymusza jednorazowy rescan przy pierwszym starcie
+        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0 || _lootOnlyItems.Count == 0 || _classSprites.Count == 0 || _bagSprites.Count == 0)
         {
             TryAutoExtractFromInstalledGame();
         }
@@ -203,6 +251,64 @@ public class GameDataService
 
     public bool TryResolveMark(int itemId, out MarkMetadata mark) =>
         _marks.TryGetValue(itemId, out mark!);
+
+    public bool TryGetBagSprite(int bagObjectType, BagType fallbackBagType, out BagSpriteMetadata bagSprite)
+    {
+        if (bagObjectType > 0 && _bagSprites.TryGetValue(bagObjectType, out bagSprite!))
+            return true;
+
+        bagSprite = _bagSprites.Values
+            .OrderBy(b => b.IsFat)
+            .FirstOrDefault(b => b.BagType == fallbackBagType)!;
+        return bagSprite != null;
+    }
+
+    public bool TryGetClassSprite(RotmgClass rotmgClass, out ClassSpriteMetadata classSprite) =>
+        _classSprites.TryGetValue(rotmgClass, out classSprite!);
+
+    public bool TryGetSkinSprite(int skinId, out SkinSpriteMetadata skinSprite) =>
+        _skinSprites.TryGetValue(skinId, out skinSprite!);
+
+    public PortalMetadata? ResolvePortalByObjectType(int objectType) =>
+        objectType > 0 ? _portalsByType.GetValueOrDefault(objectType) : null;
+
+    public EnemyMetadata? ResolveEnemyByName(string bossName)
+    {
+        if (string.IsNullOrWhiteSpace(bossName)) return null;
+        return _enemies.Values.FirstOrDefault(e =>
+            string.Equals(e.DisplayName, bossName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(e.IdName, bossName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public string? FindResourcesAssetsPath() => FindRotmgResourcesAssetsPath();
+
+    /// <summary>Deduplicated set of all (TextureFile, TextureIndex) referenced by catalogs.</summary>
+    public List<SpriteRef> GetAllRequiredSpriteRefs()
+    {
+        lock (_catalogLock)
+        {
+            var seen = new HashSet<(string File, int Index)>();
+            var list = new List<SpriteRef>();
+
+            void Add(string file, int index)
+            {
+                if (string.IsNullOrWhiteSpace(file)) return;
+                if (seen.Add((file, index)))
+                    list.Add(new SpriteRef(file, index));
+            }
+
+            foreach (var i in _items.Values) Add(i.TextureFile, i.TextureIndex);
+            foreach (var i in _lootOnlyItems.Values) Add(i.TextureFile, i.TextureIndex);
+            foreach (var m in _marks.Values) Add(m.TextureFile, m.TextureIndex);
+            foreach (var p in _portalsByName.Values) Add(p.TextureFile, p.TextureIndex);
+            foreach (var e in _enemies.Values) Add(e.TextureFile, e.TextureIndex);
+            foreach (var b in _bagSprites.Values) Add(b.TextureFile, b.TextureIndex);
+            foreach (var c in _classSprites.Values) Add(c.TextureFile, c.TextureIndex);
+            foreach (var s in _skinSprites.Values) Add(s.TextureFile, s.TextureIndex);
+
+            return list;
+        }
+    }
 
     public BagType ResolveBagType(int containerObjectType) =>
         _bagContainers.GetValueOrDefault(containerObjectType, BagType.BrownBag); // wcześniej domyślnie White
@@ -336,7 +442,12 @@ public class GameDataService
                 _items.Clear();
                 _enemies.Clear();
                 _portalsByName.Clear();
+                _portalsByType.Clear();
                 _marks.Clear();
+                _lootOnlyItems.Clear();
+                _bagSprites.Clear();
+                _classSprites.Clear();
+                _skinSprites.Clear();
                 _bossReasons.Clear();
 
                 var forgeMap = new Dictionary<int, ForgeXmlEntry>();
@@ -455,10 +566,31 @@ public class GameDataService
     string displayName = (obj.Element("DisplayId")?.Value ?? idName).Trim();
     (string texFile, int texIndex) = ExtractTextureInfo(obj);
 
-    // 1. Klasy postaci (<Player />)
-    if (obj.Element("Player") != null && Enum.TryParse<RotmgClass>(idName, true, out var parsedClass))
+    string? classTag = obj.Element("Class")?.Value?.Trim();
+
+    // 1. Klasy postaci (<Player /> lub <Class>Player</Class>)
+    if ((obj.Element("Player") != null || string.Equals(classTag, "Player", StringComparison.OrdinalIgnoreCase)) &&
+        Enum.TryParse<RotmgClass>(idName, true, out var parsedClass))
     {
         _playerClasses[objectType] = parsedClass;
+        if (!string.IsNullOrWhiteSpace(texFile))
+            _classSprites[parsedClass] = new ClassSpriteMetadata(parsedClass, objectType, texFile, texIndex);
+        return;
+    }
+
+    // 1b. Skiny postaci (<Skin /> lub <Class>Skin</Class>)
+    if (obj.Element("Skin") != null || string.Equals(classTag, "Skin", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!string.IsNullOrWhiteSpace(texFile))
+            _skinSprites[objectType] = new SkinSpriteMetadata(objectType, displayName, texFile, texIndex);
+        return;
+    }
+
+    // 1c. Kontenery worków lootu (0x0500..0x06C0)
+    if (_bagContainers.TryGetValue(objectType, out var knownBagType))
+    {
+        if (!string.IsNullOrWhiteSpace(texFile))
+            _bagSprites[objectType] = new BagSpriteMetadata(objectType, knownBagType, objectType >= 0x0600, texFile, texIndex);
         return;
     }
 
@@ -494,7 +626,9 @@ public class GameDataService
 
         if (!_portalsByName.TryGetValue(cleanDung, out var existingPortal) || graves > existingPortal.GraveDifficulty)
         {
-            _portalsByName[cleanDung] = new PortalMetadata(objectType, idName, cleanDung, graves, texFile, texIndex);
+            var portalMeta = new PortalMetadata(objectType, idName, cleanDung, graves, texFile, texIndex);
+            _portalsByName[cleanDung] = portalMeta;
+            _portalsByType[objectType] = portalMeta;
         }
         return;
     }
@@ -897,7 +1031,13 @@ public class GameDataService
         {
             var loadedPortals = JsonSerializer.Deserialize<List<PortalMetadata>>(File.ReadAllText(_portalCatalogPath));
             if (loadedPortals != null)
-                foreach (var portal in loadedPortals) _portalsByName[portal.DungeonName] = portal;
+            {
+                foreach (var portal in loadedPortals)
+                {
+                    _portalsByName[portal.DungeonName] = portal;
+                    if (portal.ObjectType > 0) _portalsByType[portal.ObjectType] = portal;
+                }
+            }
         }
 
         if (File.Exists(_markCatalogPath))
@@ -905,6 +1045,21 @@ public class GameDataService
             var loadedMarks = JsonSerializer.Deserialize<List<MarkMetadata>>(File.ReadAllText(_markCatalogPath));
             if (loadedMarks != null)
                 foreach (var mark in loadedMarks) _marks[mark.ItemId] = mark;
+        }
+
+        if (File.Exists(_visualCatalogPath))
+        {
+            var visual = JsonSerializer.Deserialize<VisualCatalogCache>(File.ReadAllText(_visualCatalogPath));
+            if (visual != null)
+            {
+                foreach (var b in visual.Bags) _bagSprites[b.ObjectType] = b;
+                foreach (var c in visual.Classes)
+                {
+                    _classSprites[c.Class] = c;
+                    if (c.ObjectType > 0) _playerClasses[c.ObjectType] = c.Class;
+                }
+                foreach (var s in visual.Skins) _skinSprites[s.SkinId] = s;
+            }
         }
 
         if (_items.Count > 0)
@@ -929,8 +1084,21 @@ public class GameDataService
             File.WriteAllText(_enemyCatalogPath, JsonSerializer.Serialize(_enemies.Values.ToList(), options));
             File.WriteAllText(_portalCatalogPath, JsonSerializer.Serialize(_portalsByName.Values.ToList(), options));
             File.WriteAllText(_markCatalogPath, JsonSerializer.Serialize(_marks.Values.ToList(), options));
+            File.WriteAllText(_visualCatalogPath, JsonSerializer.Serialize(new VisualCatalogCache
+            {
+                Bags = _bagSprites.Values.ToList(),
+                Classes = _classSprites.Values.ToList(),
+                Skins = _skinSprites.Values.ToList()
+            }, options));
             File.WriteAllLines(Path.Combine(_appDataDir, "boss_reasons.txt"), _bossReasons.OrderBy(x => x));
         }
         catch { }
+    }
+
+    private sealed class VisualCatalogCache
+    {
+        public List<BagSpriteMetadata> Bags { get; set; } = new();
+        public List<ClassSpriteMetadata> Classes { get; set; } = new();
+        public List<SkinSpriteMetadata> Skins { get; set; } = new();
     }
 }

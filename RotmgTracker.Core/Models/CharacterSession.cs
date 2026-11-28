@@ -10,6 +10,7 @@ public class CharacterSession
     {
         var copy = (CharacterSession)MemberwiseClone();
         copy.EquipmentIds = (int[])EquipmentIds.Clone();
+        copy.ExaltBonuses = (int[])ExaltBonuses.Clone();
         copy.Drops = new Dictionary<DropType, int>(Drops);
         copy.LegacyDrops = new Dictionary<DropType, int>(LegacyDrops);
         return copy;
@@ -30,7 +31,7 @@ public class CharacterSession
     public int SkinId { get; set; }
 
     public bool IsSeasonal { get; set; } = true;
-    public string SeasonTag { get; set; } = "S1";
+    public string SeasonTag { get; set; } = "S31";
     public bool IsAlive { get; set; } = true;
 
     // Statystyki w formacie RealmEye (X/8 oraz Fame)
@@ -40,6 +41,17 @@ public class CharacterSession
 
     // 4 sloty założonego ekwipunku: [Weapon, Ability, Armor, Ring]
     public int[] EquipmentIds { get; set; } = new int[4];
+
+    // Bonusy z exaltacji (staty 105..112): [HP, MP, ATT, DEF, SPD, DEX, VIT, WIS]
+    public int[] ExaltBonuses { get; set; } = new int[8];
+
+    public int TotalExaltations =>
+        ExaltBonuses.Length >= 8
+            ? Math.Max(0, ExaltBonuses[0] / 5) + Math.Max(0, ExaltBonuses[1] / 5) +
+              Math.Max(0, ExaltBonuses[2]) + Math.Max(0, ExaltBonuses[3]) +
+              Math.Max(0, ExaltBonuses[4]) + Math.Max(0, ExaltBonuses[5]) +
+              Math.Max(0, ExaltBonuses[6]) + Math.Max(0, ExaltBonuses[7])
+            : 0;
 
     // Metadane czasu życia i śmierci (Graveyard)
     public DateTime CreatedAt { get; set; } = DateTime.Now;

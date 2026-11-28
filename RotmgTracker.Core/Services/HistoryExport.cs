@@ -26,7 +26,7 @@ public class ExportedCharacter
     public int ClassSlotNumber { get; set; }
     public string Name { get; set; } = string.Empty;
     public bool IsSeasonal { get; set; }
-    public string SeasonTag { get; set; } = "S1";
+    public string SeasonTag { get; set; } = TrackerStateService.DefaultSeasonTag;
     public bool IsAlive { get; set; } = true;
     public int SkinId { get; set; }
     public int MaxedStats { get; set; }

@@ -1,3 +1,42 @@
+@inherits StateAwareComponent
+@inject GameDataService GameData
+
+@{
+    var allLoot = State.GetLootSnapshot(DataScope.AllCharacters);
+    var qualifiedLoot = allLoot.Where(l => l.BagType != DropType.Other).ToList();
+    var collection = UiHelpers.ComputeCollectionProgress(GameData.GetAllKnownItems(), allLoot);
+    int highestFame = State.Data.ActiveCharacters.MaxBy(c => c.BaseFame)?.BaseFame ?? 0;
+}
+
+<div class="section-header">
+    <h2>Profile &amp; Account Summary</h2>
+</div>
+
+<div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-bottom: 12px;">
+    <div class="drop-card">
+        <span class="drop-title">Active Characters</span>
+        <div class="drop-value">@State.Data.ActiveCharacters.Count</div>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Highest Fame: @highestFame.ToString("N0")</span>
+    </div>
+    <div class="drop-card">
+        <span class="drop-title">Total Logged Drops</span>
+        <div class="drop-value" style="color: var(--accent-white);">@qualifiedLoot.Count</div>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Shinies: @qualifiedLoot.Count(l => l.IsShiny)</span>
+    </div>
+    <div class="drop-card">
+        <span class="drop-title">Dungeons Completed</span>
+        <div class="drop-value" style="color: var(--accent-green);">@State.Data.DungeonRuns.Count</div>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Tracked via Boss Kills</span>
+    </div>
+    <div class="drop-card">
+        <span class="drop-title">Collection Progress</span>
+        <div class="drop-value" style="color: var(--accent-gold);">
+            @collection.Owned / @collection.Total
+        </div>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">@collection.Percent% Unique Items (by ItemId)</span>
+    </div>
+</div>
+
 <DreamSetPanel />
 <TopDropsPanel />
 <BestBagPanel />

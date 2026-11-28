@@ -5,7 +5,7 @@
 </div>
 
 @{
-    var bestBag = UiHelpers.GroupByBagInstance(State.Data.LootHistory)
+    var bestBag = UiHelpers.GroupByBagInstance(State.GetLootSnapshot(DataScope.AllCharacters))
         .OrderByDescending(g => g.Sum(r => r.RarityScore))
         .FirstOrDefault();
 }

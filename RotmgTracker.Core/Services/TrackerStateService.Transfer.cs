@@ -169,6 +169,8 @@ public partial class TrackerStateService
             if (characterMap.TryGetValue(drop.CharacterId, out var localCharacterId))
                 drop.CharacterId = localCharacterId;
 
+            drop.SeasonTag = NormalizeSeasonTag(drop.SeasonTag);
+
             Data.LootHistory.Add(drop);
             lootIds.Add(drop.Id);
             lootKeys.Add((drop.ItemId, drop.DroppedAt.Ticks));
@@ -188,6 +190,8 @@ public partial class TrackerStateService
                 result.RunsSkipped++;
                 continue;
             }
+
+            run.SeasonTag = NormalizeSeasonTag(run.SeasonTag);
 
             Data.DungeonRuns.Add(run);
             runIds.Add(run.Id);
@@ -243,6 +247,7 @@ public partial class TrackerStateService
         }
 
         var created = CreateFreshCharacter(ec.Name, ec.Class, ec.IsSeasonal, ec.RotmgCharId);
+        created.SeasonTag = NormalizeSeasonTag(ec.SeasonTag);
         created.SkinId = ec.SkinId;
         created.MaxedStats = ec.MaxedStats;
         created.BaseFame = ec.BaseFame;

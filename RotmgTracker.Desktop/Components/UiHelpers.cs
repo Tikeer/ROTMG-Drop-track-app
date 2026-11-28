@@ -1,5 +1,6 @@
 using RotmgTrackerV1.Core.Enums;
 using RotmgTrackerV1.Core.Models;
+using RotmgTrackerV1.Core.Services;
 
 namespace RotmgTrackerV1.Desktop.Components;
 
@@ -44,5 +45,29 @@ public static class UiHelpers
             .GroupBy(r => r.BagInstanceId == Guid.Empty ? r.Id : r.BagInstanceId)
             .Select(g => g.ToList())
             .ToList();
+    }
+
+    /// <summary>
+    /// Single source of truth for Item Collection progress (matched strictly by ItemId).
+    /// </summary>
+    public static (int Owned, int Total, double Percent) ComputeCollectionProgress(
+        IEnumerable<ItemMetadata> catalogItems,
+        IEnumerable<LootDropRecord> loot,
+        bool includeTiered = false,
+        int minTier = 12)
+    {
+        var eligible = includeTiered
+            ? catalogItems.Where(i => i.Tier <= 0 || i.Tier >= minTier).ToList()
+            : catalogItems.Where(i => i.Tier <= 0).ToList();
+
+        var ownedIds = loot
+            .Where(l => l.ItemId > 0)
+            .Select(l => l.ItemId)
+            .ToHashSet();
+
+        int owned = eligible.Count(i => ownedIds.Contains(i.ItemId));
+        int total = eligible.Count;
+        double pct = total > 0 ? Math.Round((double)owned / total * 100.0, 1) : 0.0;
+        return (owned, total, pct);
     }
 }

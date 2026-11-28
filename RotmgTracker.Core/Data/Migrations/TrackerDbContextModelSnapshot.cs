@@ -66,6 +66,10 @@ namespace RotmgTrackerV1.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ExaltBonuses")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsAlive")
                         .HasColumnType("INTEGER");
 
@@ -211,6 +215,10 @@ namespace RotmgTrackerV1.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("BossName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("CharacterClass")
                         .HasColumnType("INTEGER");
 
@@ -232,6 +240,9 @@ namespace RotmgTrackerV1.Core.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsSeasonal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PortalId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("SeasonTag")

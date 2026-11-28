@@ -10,7 +10,6 @@
                 @(IsCollapsed ? "▶" : "▼") 📜 Daily Quests
                 <span class="daily-quests-count">@readyCount / @State.Data.ActiveQuests.Count ready</span>
             </button>
-            <button type="button" class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("quests")'>Manage →</button>
         </div>
 
         @if (!IsCollapsed)
@@ -46,8 +45,6 @@
 }
 
 @code {
-    [Parameter] public EventCallback<string> OnSetTab { get; set; }
-
     private bool IsCollapsed { get; set; }
 
     private void ToggleCollapsed() => IsCollapsed = !IsCollapsed;

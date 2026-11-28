@@ -172,6 +172,16 @@ public partial class TrackerStateService
                && tag.Skip(1).All(char.IsDigit);
     }
 
+    // Normalizuje tag sezonu (np. przy imporcie pliku sprzed migracji S1-S4 -> S31)
+    public static string NormalizeSeasonTag(string? tag)
+    {
+        string trimmed = (tag ?? string.Empty).Trim().ToUpperInvariant();
+        if (IsValidSeasonTag(trimmed) && int.TryParse(trimmed.AsSpan(1), out int num) && num >= 31)
+            return trimmed;
+
+        return DefaultSeasonTag;
+    }
+
     // Zmienia aktualny sezon (używany przez nowo tworzone postacie); istniejące postacie zachowują swój tag
     public bool SetCurrentSeason(string tag)
     {
@@ -441,7 +451,11 @@ public partial class TrackerStateService
         NotifyStateChanged();
     }
 
-    public void RecordDungeonCompletion(string dungeonName, DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands)
+    public void RecordDungeonCompletion(
+        string dungeonName,
+        DungeonDifficultyTier difficulty = DungeonDifficultyTier.Tier2_Godlands,
+        int portalId = 0,
+        string bossName = "")
     {
         if (string.IsNullOrWhiteSpace(dungeonName)) return;
 
@@ -454,6 +468,8 @@ public partial class TrackerStateService
             CharacterName = current.FormattedTitle,
             CharacterClass = current.Class,
             DungeonName = dungeonName.Trim(),
+            PortalId = portalId > 0 ? portalId : CurrentDungeonPortalType,
+            BossName = string.IsNullOrWhiteSpace(bossName) ? string.Empty : bossName.Trim(),
             DifficultyTier = difficulty,
             ServerName = CurrentServerName,
             IsSeasonal = current.IsSeasonal,
@@ -613,7 +629,7 @@ public partial class TrackerStateService
             AddNewCharacter($"{charClass}", charClass, isSeasonal, rotmgCharId);
     }
 
-    public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null, int skinId = 0)
+    public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null, int skinId = 0, int[]? exaltBonuses = null)
     {
         using var guard = LockState();
 
@@ -624,6 +640,8 @@ public partial class TrackerStateService
             current.EquipmentIds = equipment;
         if (skinId > 0)
             current.SkinId = skinId;
+        if (exaltBonuses is { Length: 8 })
+            current.ExaltBonuses = exaltBonuses;
 
         SaveAsync();
         NotifyStateChanged();
@@ -856,6 +874,7 @@ public partial class TrackerStateService
         Data.ActiveCharacters.Add(newChar);
         Data.ActiveCharacterId = newChar.Id;
         SaveAsync();
+        NotifyStateChanged();
     }
 
     public void DeleteActiveCharacter(Guid characterId)
@@ -868,6 +887,7 @@ public partial class TrackerStateService
             Data.ActiveCharacterId = Data.ActiveCharacters[0].Id;
 
         SaveAsync();
+        NotifyStateChanged();
     }
 
     public void ChangeDropCount(DropType type, int delta)

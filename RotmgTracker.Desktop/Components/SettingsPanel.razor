@@ -1,0 +1,233 @@
+@inherits StateAwareComponent
+@inject RotmgSnifferService Sniffer
+@inject GameDataService GameData
+@inject UiSettings UiSettings
+
+<div class="section-header">
+    <h2>Settings</h2>
+</div>
+
+<div class="settings-grid">
+    <!-- GENERAL & SEASON -->
+    <div class="settings-card">
+        <h3 class="settings-card-title">General &amp; Season</h3>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Current Season</div>
+                <div class="settings-row-desc">Applied automatically to newly created seasonal characters. Existing characters keep their original season tag.</div>
+            </div>
+            <select class="select" style="width: 110px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged">
+                @foreach (var s in SeasonChoices())
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Linked Account</div>
+                <div class="settings-row-desc">
+                    @if (!string.IsNullOrEmpty(State.LinkedAccountName))
+                    {
+                        <span>Connected to <strong>@State.LinkedAccountName</strong>. Used for automatic character detection and history import verification.</span>
+                    }
+                    else
+                    {
+                        <span>No account linked yet. Enter the Nexus in-game with the sniffer running to link your account.</span>
+                    }
+                </div>
+            </div>
+            @if (!string.IsNullOrEmpty(State.LinkedAccountName))
+            {
+                <button class="btn btn-danger btn-sm" @onclick="State.UnlinkAccount">Unlink Account</button>
+            }
+        </div>
+    </div>
+
+    <!-- PASSIVE SNIFFER -->
+    <div class="settings-card">
+        <h3 class="settings-card-title">Passive Sniffer</h3>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">
+                    <span class="status-diode @(Sniffer.IsListening ? "online" : "offline")" style="margin-right: 8px;"></span>
+                    @(Sniffer.IsListening ? "Listening (TCP:2050)" : "Sniffer Stopped")
+                </div>
+                <div class="settings-row-desc">@Sniffer.StatusMessage • Packets captured: <strong>@Sniffer.PacketsCaptured.ToString("N0")</strong></div>
+            </div>
+            <button class="btn btn-sm @(Sniffer.IsListening ? "" : "btn-primary")" @onclick="ToggleSniffer">
+                @(Sniffer.IsListening ? "Stop Sniffer" : "Start Sniffer")
+            </button>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Packet Capture Log</div>
+                <div class="settings-row-desc">
+                    @if (Sniffer.CaptureEnabled)
+                    {
+                        <span>Recording diagnostic capture to <code>@Sniffer.Capture.FilePath</code></span>
+                    }
+                    else
+                    {
+                        <span>Records decoded protocol events for troubleshooting. Capture files contain account metadata and stay local.</span>
+                    }
+                </div>
+            </div>
+            <button class="btn btn-sm @(Sniffer.CaptureEnabled ? "btn-danger" : "")" @onclick="ToggleCapture">
+                @(Sniffer.CaptureEnabled ? "Stop Capture" : "Start Capture")
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME DATA & CATALOGS -->
+    <div class="settings-card">
+        <h3 class="settings-card-title">Game Data &amp; Catalogs</h3>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Extracted Catalogs</div>
+                <div class="settings-row-desc">
+                    Items: <strong>@GameData.GetAllKnownItems().Count</strong>
+                    (Shinies: <strong>@GameData.GetAllKnownItems().Count(i => i.IsShiny)</strong>) •
+                    Portals: <strong>@GameData.GetAllKnownDungeons().Count</strong> •
+                    Bosses: <strong>@GameData.GetAllKnownBosses().Count</strong> •
+                    Marks: <strong>@GameData.GetAllKnownMarks().Count</strong>
+                </div>
+                <div class="settings-row-desc" style="margin-top: 4px;">Status: @GameData.ExtractionStatus</div>
+                @if (!string.IsNullOrEmpty(RescanMessage))
+                {
+                    <div class="settings-row-desc" style="margin-top: 4px; color: var(--accent-white);">@RescanMessage</div>
+                }
+            </div>
+            <button class="btn btn-primary btn-sm" disabled="@IsScanning" @onclick="RescanGameFilesAsync">
+                @(IsScanning ? "Rescanning..." : "Rescan Game Files")
+            </button>
+        </div>
+    </div>
+
+    <!-- DEVELOPER / DEBUG -->
+    <div class="settings-card">
+        <h3 class="settings-card-title">Debug &amp; Developer Tools</h3>
+
+        <div class="settings-row">
+            <div class="settings-row-info">
+                <div class="settings-row-label">Developer Mode</div>
+                <div class="settings-row-desc">Reveals diagnostic actions (DPS simulator, manual fight archiving, legacy dungeon counter view).</div>
+            </div>
+            <label class="checkbox-label">
+                <input type="checkbox" checked="@UiSettings.DebugMode" @onchange="OnDebugModeChanged" />
+                Enabled
+            </label>
+        </div>
+
+        @if (UiSettings.DebugMode)
+        {
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <div class="settings-row-label">Test Boss DPS</div>
+                    <div class="settings-row-desc">Simulates incoming DAMAGE packets for testing the Live DPS meter.</div>
+                </div>
+                <button class="btn btn-sm" @onclick="SimulateBossDps">Test Boss DPS</button>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <div class="settings-row-label">Legacy Dungeon Counters</div>
+                    <div class="settings-row-desc">Open the hidden Dungeon Completion Counter view.</div>
+                </div>
+                <button class="btn btn-sm" @onclick='() => OnSetTab.InvokeAsync("counters")'>Open Counters</button>
+            </div>
+
+            <div class="settings-row">
+                <div class="settings-row-info">
+                    <div class="settings-row-label">Diagnostics</div>
+                    <div class="settings-row-desc">
+                        AppData: <code>@State.AppDataFolder</code><br />
+                        Loot records: <strong>@State.Data.LootHistory.Count</strong> •
+                        Dungeon runs: <strong>@State.Data.DungeonRuns.Count</strong> •
+                        Combat fights: <strong>@State.Data.CombatHistory.Count</strong>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnSetTab { get; set; }
+
+    private bool IsScanning => GameData.IsRescanning || _rescanInProgress;
+    private bool _rescanInProgress;
+    private string RescanMessage { get; set; } = string.Empty;
+
+    private void OnSeasonChanged(ChangeEventArgs e)
+    {
+        if (e.Value is string s)
+            State.SetCurrentSeason(s);
+    }
+
+    private List<string> SeasonChoices()
+    {
+        int cur = int.TryParse(State.CurrentSeasonTag.AsSpan(1), out int n) ? n : 31;
+        int first = Math.Min(cur, 31);
+        int last = Math.Max(cur, 31) + 3;
+
+        var list = new List<string>();
+        for (int i = first; i <= last; i++)
+            list.Add($"S{i}");
+        return list;
+    }
+
+    private void ToggleSniffer()
+    {
+        if (Sniffer.IsListening) Sniffer.StopListening();
+        else Sniffer.StartListening();
+        StateHasChanged();
+    }
+
+    private void ToggleCapture()
+    {
+        Sniffer.ToggleCapture();
+        StateHasChanged();
+    }
+
+    private async Task RescanGameFilesAsync()
+    {
+        if (IsScanning) return;
+        _rescanInProgress = true;
+        RescanMessage = "Scanning RotMG resources.assets in background...";
+        StateHasChanged();
+
+        try
+        {
+            int count = await GameData.RescanGameFilesAsync();
+            RescanMessage = count > 0
+                ? $"Rescan completed: {count} items loaded."
+                : GameData.ExtractionStatus;
+        }
+        catch (Exception ex)
+        {
+            RescanMessage = $"Rescan failed: {ex.Message}";
+        }
+        finally
+        {
+            _rescanInProgress = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnDebugModeChanged(ChangeEventArgs e)
+    {
+        UiSettings.DebugMode = e.Value is true;
+    }
+
+    private void SimulateBossDps()
+    {
+        Sniffer.SimulateDungeonDpsFight();
+        OnSetTab.InvokeAsync("dps");
+    }
+}

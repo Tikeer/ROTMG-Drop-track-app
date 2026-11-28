@@ -1,0 +1,290 @@
+@inherits StateAwareComponent
+
+@{
+    var active = State.ActiveCharacter;
+    bool isMaxed = active.MaxedStats >= 8;
+    bool canDelete = State.Data.ActiveCharacters.Count > 1;
+    var exalts = active.ExaltBonuses is { Length: 8 } ? active.ExaltBonuses : new int[8];
+}
+
+<div class="char-bar-v2">
+    <div class="char-bar-v2-left">
+        <!-- CUSTOM DARK CHARACTER DROPDOWN (D6) -->
+        <div class="custom-dropdown">
+            <button type="button"
+                    class="custom-dropdown-trigger @(isMaxed ? "maxed" : "")"
+                    @onclick="ToggleCharDropdown">
+                <span class="custom-dropdown-main">
+                    <span class="custom-dropdown-title">@active.Class #@active.ClassSlotNumber</span>
+                    @if (!string.IsNullOrWhiteSpace(active.Name) && active.Name != active.Class.ToString())
+                    {
+                        <span class="custom-dropdown-alias">@active.Name</span>
+                    }
+                </span>
+                <span class="custom-dropdown-stats">@active.MaxedStats/8</span>
+                <span class="custom-dropdown-caret">@(CharMenuOpen ? "▴" : "▾")</span>
+            </button>
+
+            @if (CharMenuOpen)
+            {
+                <div class="dropdown-backdrop" @onclick="CloseMenus"></div>
+                <div class="custom-dropdown-menu">
+                    @foreach (var ch in State.Data.ActiveCharacters)
+                    {
+                        bool selected = ch.Id == active.Id;
+                        bool chMaxed = ch.MaxedStats >= 8;
+                        <button type="button"
+                                class="custom-dropdown-option @(selected ? "selected" : "")"
+                                @onclick="() => SelectCharacter(ch.Id)">
+                            <div class="dropdown-opt-top">
+                                <span class="dropdown-opt-name">
+                                    @ch.Class #@ch.ClassSlotNumber
+                                    @if (!string.IsNullOrWhiteSpace(ch.Name) && ch.Name != ch.Class.ToString())
+                                    {
+                                        <span class="dropdown-opt-alias">• @ch.Name</span>
+                                    }
+                                </span>
+                                <span class="dropdown-opt-stats @(chMaxed ? "maxed" : "")">@ch.MaxedStats/8</span>
+                            </div>
+                            <div class="dropdown-opt-sub">
+                                <span>Fame: @ch.BaseFame.ToString("N0")</span>
+                                <span>Drops: @ch.TotalDrops</span>
+                                <span class="@(ch.IsSeasonal ? "opt-ssnl" : "opt-nossnl")">
+                                    @(ch.IsSeasonal ? $"SSNL ({ch.SeasonTag})" : "NOSSNL")
+                                </span>
+                            </div>
+                        </button>
+                    }
+                    <div class="custom-dropdown-divider"></div>
+                    <button type="button" class="custom-dropdown-action" @onclick="OpenNewCharModal">
+                        + New Character
+                    </button>
+                </div>
+            }
+        </div>
+
+        <!-- READ-ONLY SEASON BADGE -->
+        <span class="@(active.IsSeasonal ? "badge-ssnl" : "badge-nossnl") badge-readonly"
+              title="Detected by sniffer. Change default season for new characters in Settings.">
+            @(active.IsSeasonal ? $"SSNL ({active.SeasonTag})" : "NOSSNL")
+        </span>
+
+        <!-- READ-ONLY FAME PILL (D11) -->
+        <div class="stat-pill" title="Base fame (read-only, synced passively from sniffer)">
+            <span class="stat-pill-label">Fame</span>
+            <span class="stat-pill-value">@active.BaseFame.ToString("N0")</span>
+        </div>
+
+        <!-- READ-ONLY EXALTATIONS (STATS 105-112) -->
+        <div class="stat-pill exalt-pill" title="@FormatExaltTooltip(exalts)">
+            <span class="stat-pill-label">Exalt</span>
+            <span class="stat-pill-value @(active.TotalExaltations > 0 ? "exalt-active" : "")">
+                @active.TotalExaltations/40
+            </span>
+            <div class="exalt-popover">
+                <div class="exalt-popover-title">Exaltation Bonuses (Stats 105–112)</div>
+                <div class="exalt-grid">
+                    @for (int i = 0; i < ExaltLabels.Length; i++)
+                    {
+                        int val = exalts[i];
+                        <div class="exalt-cell @(val > 0 ? "has-bonus" : "")">
+                            <span class="exalt-stat">@ExaltLabels[i]</span>
+                            <span class="exalt-val">+@val</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHARACTER ACTIONS MENU (D9) -->
+    <div class="char-bar-v2-right">
+        <div class="custom-dropdown">
+            <button type="button" class="btn btn-sm actions-trigger" title="Character actions" @onclick="ToggleActionMenu">
+                Actions ▾
+            </button>
+
+            @if (ActionMenuOpen)
+            {
+                <div class="dropdown-backdrop" @onclick="CloseMenus"></div>
+                <div class="custom-dropdown-menu align-right action-menu">
+                    <button type="button" class="custom-dropdown-option" @onclick="OpenMarkDeadModal">
+                        <span class="action-opt-title danger">Mark as Dead</span>
+                        <span class="action-opt-sub">Move character to Graveyard (keeps all history)</span>
+                    </button>
+                    <button type="button"
+                            class="custom-dropdown-option"
+                            disabled="@(!canDelete)"
+                            @onclick="OpenDeleteModal">
+                        <span class="action-opt-title @(canDelete ? "danger" : "")">Delete Character</span>
+                        <span class="action-opt-sub">
+                            @(canDelete ? "Remove character without moving to Graveyard" : "Cannot delete the last remaining character")
+                        </span>
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- CONFIRMATION MODAL: MARK AS DEAD -->
+@if (PendingModal == ModalKind.MarkDead)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <h3 class="modal-title">Mark Character as Dead?</h3>
+            <p class="modal-body">
+                <strong>@active.FormattedTitle</strong> (Fame: @active.BaseFame.ToString("N0")) will be archived in the
+                <strong>Graveyard</strong>. All recorded drops, dungeon runs, and boss fights remain preserved.
+            </p>
+            <div class="modal-field">
+                <label class="modal-label">Killed By (optional)</label>
+                <input class="input" style="width: 100%;" placeholder="Unknown" @bind="ManualKilledBy" />
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmMarkDead">Move to Graveyard</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- CONFIRMATION MODAL: DELETE CHARACTER -->
+@if (PendingModal == ModalKind.Delete)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <h3 class="modal-title">Delete Character?</h3>
+            <p class="modal-body">
+                Permanently remove <strong>@active.FormattedTitle</strong> from active characters without archiving to the Graveyard?
+                Existing drop records in Loot History will not be deleted.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" @onclick="ConfirmDelete">Delete Character</button>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- MODAL: NEW CHARACTER -->
+@if (PendingModal == ModalKind.NewCharacter)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <h3 class="modal-title">New Character</h3>
+            <p class="modal-body">
+                Characters are normally created automatically when detected by the sniffer. Use this only if you want to prepare a slot manually.
+            </p>
+            <div class="modal-field">
+                <label class="modal-label">Alias (optional)</label>
+                <input class="input" style="width: 100%;" placeholder="e.g. O3 Rusher" @bind="NewCharName" />
+            </div>
+            <div class="modal-field">
+                <label class="modal-label">Class</label>
+                <select class="select" style="width: 100%;" @bind="NewCharClass">
+                    @foreach (var c in Enum.GetValues<RotmgClass>())
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+            <div class="modal-field">
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="NewCharSeasonal" />
+                    Seasonal (SSNL — @State.CurrentSeasonTag)
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-sm" @onclick="CloseModal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" @onclick="ConfirmCreateCharacter">Create Character</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private enum ModalKind { None, MarkDead, Delete, NewCharacter }
+
+    private static readonly string[] ExaltLabels = ["HP", "MP", "ATT", "DEF", "SPD", "DEX", "VIT", "WIS"];
+
+    private bool CharMenuOpen { get; set; }
+    private bool ActionMenuOpen { get; set; }
+    private ModalKind PendingModal { get; set; } = ModalKind.None;
+
+    private string ManualKilledBy { get; set; } = "";
+    private string NewCharName { get; set; } = "";
+    private RotmgClass NewCharClass { get; set; } = RotmgClass.Wizard;
+    private bool NewCharSeasonal { get; set; } = true;
+
+    private void ToggleCharDropdown()
+    {
+        ActionMenuOpen = false;
+        CharMenuOpen = !CharMenuOpen;
+    }
+
+    private void ToggleActionMenu()
+    {
+        CharMenuOpen = false;
+        ActionMenuOpen = !ActionMenuOpen;
+    }
+
+    private void CloseMenus()
+    {
+        CharMenuOpen = false;
+        ActionMenuOpen = false;
+    }
+
+    private void SelectCharacter(Guid id)
+    {
+        CharMenuOpen = false;
+        State.SelectCharacter(id);
+    }
+
+    private void OpenMarkDeadModal()
+    {
+        CloseMenus();
+        ManualKilledBy = "";
+        PendingModal = ModalKind.MarkDead;
+    }
+
+    private void OpenDeleteModal()
+    {
+        if (State.Data.ActiveCharacters.Count <= 1) return;
+        CloseMenus();
+        PendingModal = ModalKind.Delete;
+    }
+
+    private void OpenNewCharModal()
+    {
+        CloseMenus();
+        NewCharName = "";
+        NewCharClass = RotmgClass.Wizard;
+        NewCharSeasonal = true;
+        PendingModal = ModalKind.NewCharacter;
+    }
+
+    private void CloseModal() => PendingModal = ModalKind.None;
+
+    private void ConfirmMarkDead()
+    {
+        string killer = string.IsNullOrWhiteSpace(ManualKilledBy) ? "Unknown" : ManualKilledBy.Trim();
+        State.KillActiveCharacter(killer, State.CurrentDungeonName, State.ActiveCharacter.BaseFame);
+        PendingModal = ModalKind.None;
+    }
+
+    private void ConfirmDelete()
+    {
+        State.DeleteActiveCharacter(State.ActiveCharacter.Id);
+        PendingModal = ModalKind.None;
+    }
+
+    private void ConfirmCreateCharacter()
+    {
+        State.AddNewCharacter(NewCharName, NewCharClass, NewCharSeasonal);
+        PendingModal = ModalKind.None;
+    }
+
+    private static string FormatExaltTooltip(int[] exalts) =>
+        $"HP +{exalts[0]} | MP +{exalts[1]} | ATT +{exalts[2]} | DEF +{exalts[3]} | SPD +{exalts[4]} | DEX +{exalts[5]} | VIT +{exalts[6]} | WIS +{exalts[7]}";
+}

@@ -17,7 +17,7 @@
 </div>
 
 <div class="drops-grid">
-    @foreach (var dropType in Enum.GetValues<DropType>())
+    @foreach (var dropType in DisplayDropTypes)
     {
         int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
         <div class="drop-card">
@@ -26,10 +26,6 @@
                 <span class="bag-dot @UiHelpers.GetDotClass(dropType)"></span>
             </div>
             <div class="drop-value">@val</div>
-            <div class="drop-actions">
-                <button class="btn" @onclick="() => State.ChangeDropCount(dropType, -1)">−</button>
-                <button class="btn" @onclick="() => State.ChangeDropCount(dropType, 1)">+</button>
-            </div>
         </div>
     }
 </div>
@@ -40,7 +36,7 @@
 </div>
 
 @{
-    var recentBagGroups = UiHelpers.GroupByBagInstance(State.Data.LootHistory.Where(l => l.BagType != DropType.Other).Take(12));
+    var recentBagGroups = UiHelpers.GroupByBagInstance(State.GetLootSnapshot(DataScope.AllCharacters).Where(l => l.BagType != DropType.Other).Take(12));
 }
 
 @if (recentBagGroups.Count == 0)
@@ -98,4 +94,8 @@ else
 @code {
     [Parameter] public EventCallback<string> OnSetTab { get; set; }
     [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
+
+    private static readonly DropType[] DisplayDropTypes = Enum.GetValues<DropType>()
+        .Where(t => t != DropType.Other && t != DropType.Tiered)
+        .ToArray();
 }

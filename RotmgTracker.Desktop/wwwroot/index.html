@@ -10,50 +10,6 @@
 <body>
 <div id="app">Loading RotMG Tracker...</div>
 
-<script>
-    window.__clickAt = 0;
-    window.__mutAt = 0;
-    window.__stalls = [];
-
-    document.addEventListener('click', function () {
-        window.__clickAt = performance.now();
-        window.__mutAt = 0;
-    }, true);
-
-    new MutationObserver(function () {
-        if (window.__clickAt && !window.__mutAt) window.__mutAt = performance.now();
-    }).observe(document.documentElement, { childList: true, subtree: true });
-
-    window.rotmgNextPaint = function () {
-        return new Promise(function (resolve) {
-            requestAnimationFrame(function () {
-                requestAnimationFrame(function () {
-                    var now = performance.now();
-                    resolve([
-                        Math.round((window.__mutAt || now) - window.__clickAt),
-                        Math.round(now - window.__clickAt)
-                    ]);
-                });
-            });
-        });
-    };
-
-    // tętno: zapisuje opóźnienia pętli zdarzeń JS większe niż 150 ms
-    (function beat() {
-        var t = performance.now();
-        setTimeout(function () {
-            var late = performance.now() - t - 50;
-            if (late > 150) window.__stalls.push(Math.round(late));
-            beat();
-        }, 50);
-    })();
-
-    window.rotmgTakeStalls = function () {
-        var s = window.__stalls;
-        window.__stalls = [];
-        return s;
-    };
-</script>
 <script src="_framework/blazor.webview.js"></script>
 </body>
 </html>

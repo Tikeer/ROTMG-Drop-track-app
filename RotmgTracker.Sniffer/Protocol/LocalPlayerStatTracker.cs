@@ -124,6 +124,25 @@ public sealed class LocalPlayerStatTracker
         return true;
     }
 
+    /// <summary>Zwraca bonusy exaltacji (stat 105..112) w kolejności [HP, MP, ATT, DEF, SPD, DEX, VIT, WIS].</summary>
+    public bool TryGetExaltBonuses(out int[] bonuses)
+    {
+        int[] ids = [ExaltHp, ExaltMp, ExaltAtt, ExaltDef, ExaltSpd, ExaltDex, ExaltVit, ExaltWis];
+        bool anySeen = false;
+        bonuses = new int[8];
+
+        for (int i = 0; i < ids.Length; i++)
+        {
+            if (_values.TryGetValue(ids[i], out int v))
+            {
+                bonuses[i] = Math.Max(0, v);
+                anySeen = true;
+            }
+        }
+
+        return anySeen;
+    }
+
     /// <summary>Tekst do logu diagnostycznego. Nazwy statow 105/107/108/110/111/112 sa niepotwierdzone.</summary>
     public string ExaltBonusesText()
     {

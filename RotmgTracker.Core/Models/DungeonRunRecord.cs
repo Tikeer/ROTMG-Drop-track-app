@@ -10,10 +10,12 @@ public class DungeonRunRecord
     public RotmgClass CharacterClass { get; set; } = RotmgClass.Wizard;
 
     public string DungeonName { get; set; } = string.Empty;
+    public int PortalId { get; set; } = 0;
+    public string BossName { get; set; } = string.Empty;
     public DungeonDifficultyTier DifficultyTier { get; set; } = DungeonDifficultyTier.Tier2_Godlands;
     public string ServerName { get; set; } = "EUWest";
 
     public bool IsSeasonal { get; set; } = true;
-    public string SeasonTag { get; set; } = "S1";
+    public string SeasonTag { get; set; } = "S31";
     public DateTime CompletedAt { get; set; } = DateTime.Now;
 }

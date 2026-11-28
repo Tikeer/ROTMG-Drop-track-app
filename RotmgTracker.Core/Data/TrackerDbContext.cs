@@ -60,6 +60,12 @@ public class TrackerDbContext : DbContext
                 v => JsonSerializer.Serialize(v, jsonOptions),
                 v => JsonSerializer.Deserialize<int[]>(v, jsonOptions) ?? new int[4]);
 
+        modelBuilder.Entity<CharacterSession>()
+            .Property(c => c.ExaltBonuses)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, jsonOptions),
+                v => JsonSerializer.Deserialize<int[]>(v, jsonOptions) ?? new int[8]);
+
         modelBuilder.Entity<CombatSessionRecord>()
             .Property(c => c.Participants)
             .HasConversion(

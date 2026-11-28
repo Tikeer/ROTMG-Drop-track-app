@@ -70,6 +70,8 @@ public class RotmgStreamProcessor
     private (float X, float Y, DateTime AtUtc, Guid? SessionId, EnemyMetadata Meta)? _lastConfirmedKill;
     private bool _instanceKillConfirmed;
     private string? _completionDungeon;
+    private string? _completionBossName;
+    private int _completionPortalId;
     private string? _activeFlow;
     private double _completionGraves;
     private bool? _localSeasonal;
@@ -422,15 +424,21 @@ public class RotmgStreamProcessor
         if (!_instanceKillConfirmed) return;
 
         string? name = _completionDungeon;
+        string bossName = _completionBossName ?? string.Empty;
+        int portalId = _completionPortalId;
         double graves = _completionGraves;
         _instanceKillConfirmed = false;
         _completionDungeon = null;
+        _completionBossName = null;
+        _completionPortalId = 0;
 
         if (string.IsNullOrWhiteSpace(name) || graves < 0.5) return;
-        if (_gameData.ResolvePortalByDungeonName(name) == null) return;
+        var portal = _gameData.ResolvePortalByDungeonName(name);
+        if (portal == null) return;
 
-        _state.RecordDungeonCompletion(name, RarityScoreEngine.GraveCountToTier(graves));
-        Capture?.Note($"DUNGEON_COMPLETED: {name}, graves={graves:F1}");
+        int resolvedPortalId = portal.ObjectType > 0 ? portal.ObjectType : portalId;
+        _state.RecordDungeonCompletion(name, RarityScoreEngine.GraveCountToTier(graves), resolvedPortalId, bossName);
+        Capture?.Note($"DUNGEON_COMPLETED: {name}, boss=\"{bossName}\", portal=0x{resolvedPortalId:X4}, graves={graves:F1}");
     }
     
     private void AddKillCandidate(int objectId, TrackedMapEnemy enemy)
@@ -542,6 +550,8 @@ public class RotmgStreamProcessor
             {
                 _instanceKillConfirmed = true;
                 _completionDungeon = _state.CurrentDungeonName;
+                _completionBossName = main.DisplayName;
+                _completionPortalId = _state.CurrentDungeonPortalType;
                 _completionGraves = graves;
             }
 
@@ -902,8 +912,19 @@ public class RotmgStreamProcessor
             }
         }
 
+        int[]? exaltBonuses = null;
+        if (_localStats.TryGetExaltBonuses(out var currentExalts))
+        {
+            var prevExalts = _state.ActiveCharacter.ExaltBonuses;
+            if (prevExalts.Length != 8 || !prevExalts.SequenceEqual(currentExalts))
+            {
+                exaltBonuses = currentExalts;
+                changed = true;
+            }
+        }
+
         if (changed)
-            _state.UpdateActiveCharacterStats(maxedStats, baseFame, equip, skinId);
+            _state.UpdateActiveCharacterStats(maxedStats, baseFame, equip, skinId, exaltBonuses);
     }
 
     private void ParseDamage(ref RotmgPacketReader reader)

@@ -2,9 +2,8 @@
 @inject TrackerStateService State
 @inject RotmgSnifferService Sniffer
 @inject GameDataService GameData
-@using Microsoft.JSInterop
 @inject AppStartup Startup
-@inject IJSRuntime JS
+@inject UiSettings UiSettings
 
 @if (Startup.Error != null)
 {
@@ -33,16 +32,11 @@ else
 
         @foreach (var nav in NavItems)
         {
-            string badge = GetNavBadge(nav.Key);
             <button class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
                     title="@nav.Label"
                     @onclick="() => SetTab(nav.Key)">
                 <span class="nav-icon">@nav.Icon</span>
                 <span class="nav-label">@nav.Label</span>
-                @if (!string.IsNullOrEmpty(badge))
-                {
-                    <span class="nav-badge">@badge</span>
-                }
             </button>
         }
     </aside>
@@ -50,37 +44,35 @@ else
     <!-- MAIN CONTENT -->
     <main class="main-workspace">
 
-        <!-- PASSIVE SNIFFER STATUS BAR -->
-        <div class="char-bar" style="padding: 10px 16px;">
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <span style="width: 10px; height: 10px; border-radius: 50%; background: @(Sniffer.IsListening ? "var(--accent-green)" : "#ef4444"); display: inline-block;"></span>
-                <span style="font-size: 0.85rem; color: var(--text-muted);">@Sniffer.StatusMessage</span>
-
-                <span class="badge-nossnl" title="@GameData.ExtractionStatus">
-                    Items DB: @GameData.GetAllKnownItems().Count (✨ @GameData.GetAllKnownItems().Count(i => i.IsShiny) Shinies) • Portals: @GameData.GetAllKnownDungeons().Count • Bosses: @GameData.GetAllKnownBosses().Count • Marks: @GameData.GetAllKnownMarks().Count
+        <!-- SLIM STATUS BAR (KAFELEK 1) -->
+        <div class="status-bar">
+            <div class="status-bar-left">
+                <span class="status-diode @(Sniffer.IsListening ? "online" : "offline")" title="@Sniffer.StatusMessage"></span>
+                <span class="status-bar-text" title="@Sniffer.StatusMessage">
+                    @(Sniffer.IsListening ? "Sniffer Online" : "Sniffer Offline")
                 </span>
 
-                @if (!string.IsNullOrEmpty(State.LinkedAccountName))
+                @if (Sniffer.CaptureEnabled)
                 {
-                    <span class="badge-ssnl" title="Click to unlink account" style="cursor: pointer;" @onclick="State.UnlinkAccount">
-                        Account: @State.LinkedAccountName ✕
-                    </span>
+                    <span class="status-rec" title="@Sniffer.Capture.FilePath">REC</span>
                 }
+
+                <span class="status-pill" title="Current in-game location">
+                    @State.CurrentDungeonName@(State.CurrentDungeonGraves > 0 ? $" ({State.CurrentDungeonGraves:0.#}/10)" : "")
+                </span>
             </div>
 
-            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                <button class="btn btn-sm" @onclick="ScanGameFiles" title="@GameData.ExtractionStatus">
-                    🔄 Scan Game Files
-                </button>
-                <button class="btn btn-sm" @onclick="ToggleSniffer">
-                    @(Sniffer.IsListening ? "Stop Sniffer" : "Start Sniffer")
-                </button>
-                <button class="btn btn-sm" title="Test Boss Damage Packets" @onclick="Sniffer.SimulateDungeonDpsFight">
-                    ⚡ Test Boss DPS
-                </button>
-                <button class="btn btn-sm" @onclick="ToggleCapture" title="@Sniffer.Capture.FilePath">
-                    @(Sniffer.CaptureEnabled ? "⏹ Stop capture" : "⏺ Start capture")
-                </button>
+            <div class="status-bar-right">
+                @if (!string.IsNullOrEmpty(State.LinkedAccountName))
+                {
+                    <span class="status-account">@State.LinkedAccountName</span>
+                }
+                else
+                {
+                    <span class="status-bar-muted">No account linked</span>
+                }
+
+                <button class="btn btn-sm" @onclick='() => SetTab("settings")'>Settings</button>
             </div>
         </div>
 
@@ -99,70 +91,10 @@ else
             </div>
         }
 
-        <!-- GLOBAL CHARACTER & SEASON BAR -->
-        <div class="char-bar">
-            <div class="char-selector-group">
-                <select class="select" style="width: 85px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged" title="Current season (applies to newly created characters)">
-                    @foreach (var s in SeasonChoices())
-                    {
-                        <option value="@s">@s</option>
-                    }
-                </select>
-                
-                <span class="@(State.ActiveCharacter.IsSeasonal ? "badge-ssnl" : "badge-nossnl")"
-                      title="Click to toggle Seasonal / Regular"
-                      @onclick="State.ToggleSeasonal">
-                    @(State.ActiveCharacter.IsSeasonal ? $"SSNL ({State.ActiveCharacter.SeasonTag})" : "NOSSNL")
-                </span>
+        <!-- CHARACTER BAR (KAFELEK 2) -->
+        <CharacterBar />
 
-                <!-- X/8 MAXED STATS SELECTOR & BASE FAME -->
-                <div style="display: flex; align-items: center; gap: 6px; background: var(--bg-input); padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border-color);">
-                    <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: 6px;">Fame:</span>
-                    <input class="input" type="number" style="width: 80px; padding: 2px 6px; font-weight: 700;"
-                           value="@State.ActiveCharacter.BaseFame"
-                           @onchange="OnBaseFameChanged" />
-                </div>
-
-                @if (!IsAddingCharacter)
-                {
-                    <button class="btn btn-primary btn-sm" @onclick="() => IsAddingCharacter = true">+ New Character</button>
-                }
-            </div>
-
-            <div class="char-selector-group">
-                @if (State.Data.ActiveCharacters.Count > 1)
-                {
-                    <button class="btn btn-sm" title="Delete character without moving to graveyard"
-                            @onclick="() => State.DeleteActiveCharacter(State.ActiveCharacter.Id)">
-                        🗑️
-                    </button>
-                }
-                <button class="btn btn-danger btn-sm" @onclick="State.ArchiveAndResetCharacter">
-                    💀 RIP (Move to Graveyard)
-                </button>
-            </div>
-        </div>
-        
-        <CharacterTiles />
-        <DailyQuestsPanel OnSetTab="SetTab" />
-
-        @if (IsAddingCharacter)
-        {
-            <div class="new-char-panel">
-                <input class="input" placeholder="Character alias (e.g. O3 Rusher)" @bind="NewCharName" />
-                <select class="select" @bind="NewCharClass">
-                    @foreach (var c in Enum.GetValues<RotmgClass>())
-                    {
-                        <option value="@c">@c</option>
-                    }
-                </select>
-                <label class="checkbox-label">
-                    <input type="checkbox" @bind="NewCharSeasonal" /> Seasonal (SSNL)
-                </label>
-                <button class="btn btn-primary btn-sm" @onclick="CreateCharacter">Create</button>
-                <button class="btn btn-sm" @onclick="() => IsAddingCharacter = false">Cancel</button>
-            </div>
-        }
+        <DailyQuestsPanel />
 
         <!-- ==================== TAB 1: DASHBOARD ==================== -->
         @if (ActiveTab == "dashboard")
@@ -170,49 +102,37 @@ else
             <DashboardPanel OnSetTab="SetTab" OnOpenFight="OpenLinkedCombatSession" />
         }
 
-        <!-- ==================== TAB 2: SHOWCASE & TROPHY CASE ==================== -->
-        @if (ActiveTab == "showcase")
-        {
-            <ShowcasePanel />
-        }
-
-        <!-- ==================== TAB 3: LOOT HISTORY ==================== -->
+        <!-- ==================== TAB 2: LOOT HISTORY ==================== -->
         @if (ActiveTab == "loot")
         {
             <LootPanel OnOpenFight="OpenLinkedCombatSession" />
         }
 
-        <!-- ==================== TAB 4: LIVE DPS & COMBAT HISTORY ==================== -->
+        <!-- ==================== TAB 3: LIVE DPS & COMBAT HISTORY ==================== -->
         @if (ActiveTab == "dps")
         {
             <DpsPanel @bind-HighlightedSessionId="HighlightedCombatSessionId" />
         }
 
-        <!-- ==================== TAB 5: COUNTERS & DUNGEONS COMPLETED ==================== -->
+        <!-- ==================== DEBUG: COUNTERS & DUNGEONS COMPLETED ==================== -->
         @if (ActiveTab == "counters")
         {
             <CountersPanel />
         }
 
-        <!-- ==================== TAB 6: ITEM COLLECTION ==================== -->
+        <!-- ==================== TAB 4: ITEM COLLECTION ==================== -->
         @if (ActiveTab == "collection")
         {
             <CollectionPanel />
         }
 
-        <!-- ==================== TAB 7: PROFILE (dream set, top drops, best bag) ==================== -->
+        <!-- ==================== TAB 5: PROFILE ==================== -->
         @if (ActiveTab == "profile")
         {
             <ProfilePanel />
         }
 
-        <!-- ==================== TAB 8: AUTOMATED TINKERER QUESTS & OPENINGS ==================== -->
-        @if (ActiveTab == "quests")
-        {
-            <QuestsPanel />
-        }
-
-        <!-- ==================== TAB 9: GRAVEYARD ==================== -->
+        <!-- ==================== TAB 6: GRAVEYARD ==================== -->
         @if (ActiveTab == "graveyard")
         {
             <GraveyardPanel />
@@ -222,6 +142,11 @@ else
         {
             <DataSafetyPanel />
         }
+
+        @if (ActiveTab == "settings")
+        {
+            <SettingsPanel OnSetTab="SetTab" />
+        }
     </main>
 </div>
 
@@ -229,129 +154,42 @@ else
 
 @code {
     private string ActiveTab { get; set; } = "dashboard";
-
-    private bool IsAddingCharacter { get; set; }
-    private string NewCharName { get; set; } = "";
-    private RotmgClass NewCharClass { get; set; } = RotmgClass.Wizard;
-    private bool NewCharSeasonal { get; set; } = true;
-
     private Guid? HighlightedCombatSessionId { get; set; }
-    
-    
-    
-    private void ToggleCapture() { Sniffer.ToggleCapture(); StateHasChanged(); }
-    
     private bool SidebarCollapsed { get; set; } = true;
 
     private static readonly (string Key, string Icon, string Label)[] NavItems =
     {
-        ("dashboard",  "📊", "Dashboard (X/8)"),
-        ("showcase",   "🏆", "Showcase & Trophy Case"),
+        ("dashboard",  "📊", "Dashboard"),
         ("loot",       "💎", "Loot History"),
         ("dps",        "⚔️", "Live DPS & Fights"),
         ("collection", "📖", "Item Collection"),
         ("profile",    "👤", "Profile"),
-        ("quests",     "📜", "Quests & Openings"),
         ("graveyard",  "🪦", "Graveyard"),
-        ("data",       "🛡️", "Backup & Sync")
+        ("data",       "🛡️", "Backup & Sync"),
+        ("settings",   "⚙️", "Settings")
     };
 
     private void ToggleSidebar() => SidebarCollapsed = !SidebarCollapsed;
-
-    private string GetNavBadge(string key) => string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         State.OnStateChanged += HandleExternalStateChanged;
         Startup.Changed += HandleExternalStateChanged;
+        UiSettings.Changed += HandleExternalStateChanged;
 
         await Startup.StartAsync();
     }
 
-    private int _notifyCount;
-
     private void HandleExternalStateChanged()
     {
-        Interlocked.Increment(ref _notifyCount);
         InvokeAsync(StateHasChanged);
     }
 
-    private System.Diagnostics.Stopwatch? _tabWatch;
-    private string _tabWatchName = "";
-
     private void SetTab(string tab)
     {
-        if (tab != ActiveTab)
-        {
-            _tabWatch = System.Diagnostics.Stopwatch.StartNew();
-            _tabWatchName = tab;
-        }
-
         ActiveTab = tab;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        var watch = _tabWatch;
-        if (watch == null) return;
-
-        _tabWatch = null;
-        string name = _tabWatchName;
-
-        try
-        {
-            long netMs = watch.ElapsedMilliseconds;
-            int notifies = Interlocked.Exchange(ref _notifyCount, 0);
-            int[] r = await JS.InvokeAsync<int[]>("rotmgNextPaint");
-            int[] stalls = await JS.InvokeAsync<int[]>("rotmgTakeStalls");
-            UiTiming.Log($"tab '{name}': .NET render {netMs} ms, click->DOM change {r[0]} ms, click->painted {r[1]} ms, state notifies {notifies}, JS stalls [{string.Join(",", stalls)}]");
-        }
-        catch { }
-    }
-
-    private void ToggleSniffer()
-    {
-        if (Sniffer.IsListening) Sniffer.StopListening();
-        else Sniffer.StartListening();
-    }
-
-    private void ScanGameFiles()
-    {
-        GameData.TryAutoExtractFromInstalledGame();
-        StateHasChanged();
-    }
-
-    private void OnSeasonChanged(ChangeEventArgs e)
-    {
-        if (e.Value is string s)
-            State.SetCurrentSeason(s);
-    }
-
-    private List<string> SeasonChoices()
-    {
-        int cur = int.TryParse(State.CurrentSeasonTag.AsSpan(1), out int n) ? n : 31;
-        int first = Math.Min(cur, 31);
-        int last = Math.Max(cur, 31) + 3;
-
-        var list = new List<string>();
-        for (int i = first; i <= last; i++)
-            list.Add($"S{i}");
-        return list;
-    }
-
-    private void OnBaseFameChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out int fame))
-            State.UpdateActiveCharacterStats(State.ActiveCharacter.MaxedStats, fame);
-    }
-
-    private void CreateCharacter()
-    {
-        State.AddNewCharacter(NewCharName, NewCharClass, NewCharSeasonal);
-        NewCharName = "";
-        IsAddingCharacter = false;
-    }
-    
     private void OpenLinkedCombatSession(Guid sessionId)
     {
         HighlightedCombatSessionId = sessionId;
@@ -362,5 +200,6 @@ else
     {
         State.OnStateChanged -= HandleExternalStateChanged;
         Startup.Changed -= HandleExternalStateChanged;
+        UiSettings.Changed -= HandleExternalStateChanged;
     }
 }

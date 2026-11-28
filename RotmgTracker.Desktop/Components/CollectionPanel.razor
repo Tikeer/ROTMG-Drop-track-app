@@ -52,26 +52,26 @@
     _loot = State.GetLootSnapshot(_scope);
     var filteredCollection = GetFilteredCollectionItems().ToList();
     var ownedCountsById = _loot
+        .Where(l => l.ItemId > 0)
         .GroupBy(l => l.ItemId)
         .ToDictionary(g => g.Key, g => g.Count());
-    var ownedCountsByName = _loot
-        .GroupBy(l => l.ItemName, StringComparer.OrdinalIgnoreCase)
-        .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
 
-    int ownedInView = filteredCollection.Count(i =>
-        ownedCountsById.ContainsKey(i.ItemId) || ownedCountsByName.ContainsKey(i.Name));
+    int ownedInView = filteredCollection.Count(i => ownedCountsById.ContainsKey(i.ItemId));
+    var overallProgress = UiHelpers.ComputeCollectionProgress(
+        GameData.GetAllKnownItems(), _loot, CollectionIncludeTiered, CollectionMinTier);
 }
 
 <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">
     Showing <strong>@filteredCollection.Count</strong> items • Collected in this view:
     <strong style="color: var(--accent-green);">@ownedInView / @filteredCollection.Count</strong>
     (@(filteredCollection.Count > 0 ? Math.Round((double)ownedInView / filteredCollection.Count * 100.0, 1) : 0)%)
+    • Overall: <strong>@overallProgress.Owned / @overallProgress.Total</strong> (@overallProgress.Percent%)
 </div>
 
 <div class="drops-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));">
     @foreach (var item in filteredCollection.Take(120))
     {
-        int count = ownedCountsById.GetValueOrDefault(item.ItemId, ownedCountsByName.GetValueOrDefault(item.Name, 0));
+        int count = ownedCountsById.GetValueOrDefault(item.ItemId, 0);
         bool isOwned = count > 0;
 
         <div class="drop-card" style="opacity: @(isOwned ? "1.0" : "0.55"); border-color: @(isOwned ? "var(--accent-green)" : "var(--border-color)");">
@@ -145,13 +145,15 @@
 
         if (CollectionOwnershipFilter != "ALL")
         {
-            var ownedIds = _loot.Select(l => l.ItemId).ToHashSet();
-            var ownedNames = _loot.Select(l => l.ItemName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var ownedIds = _loot
+                .Where(l => l.ItemId > 0)
+                .Select(l => l.ItemId)
+                .ToHashSet();
 
             if (CollectionOwnershipFilter == "OWNED")
-                items = items.Where(i => ownedIds.Contains(i.ItemId) || ownedNames.Contains(i.Name));
+                items = items.Where(i => ownedIds.Contains(i.ItemId));
             else if (CollectionOwnershipFilter == "MISSING")
-                items = items.Where(i => !ownedIds.Contains(i.ItemId) && !ownedNames.Contains(i.Name));
+                items = items.Where(i => !ownedIds.Contains(i.ItemId));
         }
 
         return items.OrderByDescending(i => i.IsShiny).ThenBy(i => i.Name);

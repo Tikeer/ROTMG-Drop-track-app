@@ -5,7 +5,7 @@
 </div>
 
 @{
-    var topDrops = State.Data.LootHistory
+    var topDrops = State.GetLootSnapshot(DataScope.AllCharacters)
         .Where(l => l.BagType != DropType.Other)
         .OrderByDescending(l => l.RarityScore)
         .Take(10)
