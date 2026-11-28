@@ -75,6 +75,8 @@ public record SkinSpriteMetadata(
 
 public record SpriteRef(string TextureFile, int TextureIndex);
 
+public record EnchantmentMetadata(int Id, string Name, string Description);
+
 public class GameDataService
 {
     private sealed record ForgeXmlEntry(
@@ -90,6 +92,7 @@ public class GameDataService
     private readonly string _markCatalogPath;
     private readonly string _lootOnlyCatalogPath;
     private readonly string _visualCatalogPath;
+    private readonly string _enchantCatalogPath;
     private readonly object _catalogLock = new();
 
     private readonly Dictionary<int, ItemMetadata> _items = new();
@@ -97,6 +100,7 @@ public class GameDataService
     private readonly Dictionary<string, PortalMetadata> _portalsByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, PortalMetadata> _portalsByType = new();
     private readonly Dictionary<int, MarkMetadata> _marks = new();
+    private readonly Dictionary<int, EnchantmentMetadata> _enchantments = new();
     private readonly Dictionary<int, ItemMetadata> _lootOnlyItems = new();
     private readonly Dictionary<int, RotmgClass> _playerClasses = new();
     private readonly Dictionary<int, BagSpriteMetadata> _bagSprites = new();
@@ -189,6 +193,7 @@ public class GameDataService
         _markCatalogPath = Path.Combine(_appDataDir, "mark_catalog_v4.json");
         _lootOnlyCatalogPath = Path.Combine(_appDataDir, "loot_only_catalog_v1.json");
         _visualCatalogPath = Path.Combine(_appDataDir, "visual_catalog_v1.json");
+        _enchantCatalogPath = Path.Combine(_appDataDir, "enchant_catalog_v1.json");
     }
 
     private bool _initialized;
@@ -201,11 +206,32 @@ public class GameDataService
 
         LoadCachedCatalogs();
 
-        // Brak pliku loot_only_catalog_v1.json lub visual_catalog_v1.json wymusza jednorazowy rescan przy pierwszym starcie
-        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0 || _lootOnlyItems.Count == 0 || _classSprites.Count == 0 || _bagSprites.Count == 0)
+        // Brak któregokolwiek katalogu (w tym enchant_catalog_v1.json) wymusza jednorazowy rescan przy pierwszym starcie
+        if (_items.Count == 0 || _enemies.Count == 0 || _portalsByName.Count == 0 || _marks.Count == 0 || _lootOnlyItems.Count == 0 || _classSprites.Count == 0 || _bagSprites.Count == 0 || _enchantments.Count == 0)
         {
             TryAutoExtractFromInstalledGame();
         }
+    }
+
+    public bool TryGetEnchantment(int enchantId, out EnchantmentMetadata enchantment) =>
+        _enchantments.TryGetValue(enchantId, out enchantment!);
+
+    public List<EnchantmentMetadata> ResolveEnchantments(string? enchantmentsCsv)
+    {
+        var result = new List<EnchantmentMetadata>();
+        if (string.IsNullOrWhiteSpace(enchantmentsCsv)) return result;
+
+        foreach (var part in enchantmentsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (int.TryParse(part, out int id))
+            {
+                if (_enchantments.TryGetValue(id, out var meta))
+                    result.Add(meta);
+                else
+                    result.Add(new EnchantmentMetadata(id, $"Enchant #{id}", string.Empty));
+            }
+        }
+        return result;
     }
 
     private IReadOnlyCollection<ItemMetadata>? _itemsCache;
@@ -320,8 +346,9 @@ public class GameDataService
             foreach (var c in _classSprites.Values) Add(c.TextureFile, c.TextureIndex);
             foreach (var s in _skinSprites.Values) Add(s.TextureFile, s.TextureIndex);
 
-            // Always include standard dark-grey Nexus Realm Portal (lofiEnvironment:0x7b)
+            // Always include standard dark-grey Nexus Realm Portal (lofiEnvironment:0x7b) and 8/8 Gravestone (lofiChar216x16:0x16)
             Add("lofiEnvironment", 0x7b);
+            Add("lofiChar216x16", 0x16);
 
             return list;
         }
@@ -454,6 +481,9 @@ public class GameDataService
                 searchIndex = endIdx;
             }
 
+            // Extract <Enchantments>...</Enchantments> blocks for full enchant name/description lookup
+            var extractedEnchants = ExtractEnchantmentsFromRawAssets(rawBytes);
+
             lock (_catalogLock)
             {
                 _items.Clear();
@@ -466,6 +496,9 @@ public class GameDataService
                 _classSprites.Clear();
                 _skinSprites.Clear();
                 _bossReasons.Clear();
+                _enchantments.Clear();
+                foreach (var en in extractedEnchants)
+                    _enchantments[en.Id] = en;
 
                 var forgeMap = new Dictionary<int, ForgeXmlEntry>();
                 var xmlGraveMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
@@ -1111,6 +1144,13 @@ public class GameDataService
             }
         }
 
+        if (File.Exists(_enchantCatalogPath))
+        {
+            var loadedEnch = JsonSerializer.Deserialize<List<EnchantmentMetadata>>(File.ReadAllText(_enchantCatalogPath));
+            if (loadedEnch != null)
+                foreach (var e in loadedEnch) _enchantments[e.Id] = e;
+        }
+
         if (_items.Count > 0)
         {
             int bossCount = _enemies.Values.Count(e => e.IsBoss);
@@ -1139,9 +1179,60 @@ public class GameDataService
                 Classes = _classSprites.Values.ToList(),
                 Skins = _skinSprites.Values.ToList()
             }, options));
+            File.WriteAllText(_enchantCatalogPath, JsonSerializer.Serialize(_enchantments.Values.OrderBy(e => e.Id).ToList(), options));
             File.WriteAllLines(Path.Combine(_appDataDir, "boss_reasons.txt"), _bossReasons.OrderBy(x => x));
         }
         catch { }
+    }
+
+    private static List<EnchantmentMetadata> ExtractEnchantmentsFromRawAssets(byte[] rawBytes)
+    {
+        var result = new Dictionary<int, EnchantmentMetadata>();
+        byte[] startPat = "<Enchantments>"u8.ToArray();
+        byte[] endPat = "</Enchantments>"u8.ToArray();
+        int searchIdx = 0;
+
+        while (searchIdx < rawBytes.Length)
+        {
+            int s = rawBytes.AsSpan(searchIdx).IndexOf(startPat);
+            if (s < 0) break;
+            s += searchIdx;
+
+            int e = rawBytes.AsSpan(s).IndexOf(endPat);
+            if (e < 0) break;
+            e += s + endPat.Length;
+
+            int len = e - s;
+            if (len is > 20 and < 10_000_000)
+            {
+                string chunk = Encoding.UTF8.GetString(rawBytes, s, len);
+                string sanitized = Regex.Replace(chunk, @"&(?!(?:amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)", "&amp;");
+                try
+                {
+                    var doc = XDocument.Parse(sanitized);
+                    if (doc.Root != null)
+                    {
+                        foreach (var el in doc.Root.Elements("Enchantment"))
+                        {
+                            string? typeHex = el.Attribute("type")?.Value;
+                            if (string.IsNullOrWhiteSpace(typeHex) || !TryParseHexOrDec(typeHex, out int id))
+                                continue;
+
+                            string name = el.Element("DisplayId")?.Value?.Trim()
+                                          ?? el.Attribute("id")?.Value?.Trim()
+                                          ?? $"Enchant #{id}";
+                            string desc = el.Element("Description")?.Value?.Trim() ?? string.Empty;
+                            result[id] = new EnchantmentMetadata(id, name, desc);
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            searchIdx = e;
+        }
+
+        return result.Values.ToList();
     }
 
     private sealed class VisualCatalogCache

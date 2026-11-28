@@ -57,7 +57,10 @@ public static class UnityAssetsReader
         "material_legendary",
         "material_mythical",
         "fame_icon",
-        "gold_icon"
+        "gold_icon",
+        "StarIcon",
+        "Star",
+        "QuestTextStar"
     };
 
     /// <summary>

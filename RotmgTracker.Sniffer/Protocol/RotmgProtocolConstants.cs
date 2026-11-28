@@ -28,6 +28,8 @@ public static class RotmgProtocolConstants
     public const int StatCurrFame = 57;   // Aktualny Base Fame postaci
     public const int StatUniqueData = 80; // String: dane enchantów / rzadkości przedmiotu
     public const int StatSkinId = 25;
+    public const int StatStars = 30;      // Liczba gwiazdek konta (rank stars)
+    public const int StatCredits = 35;    // Ilość Realm Gold na koncie
 
     // Które statystyki w protokole RotMG są przesyłane jako UTF String zamiast CompressedInt
     public static bool IsStringStat(int statType) =>

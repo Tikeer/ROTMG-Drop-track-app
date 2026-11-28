@@ -1,4 +1,5 @@
 @* Authentic RotMG item slot tile with in-game RarityIcon_1..4 overlay, shiny_item_icon sparkle, and tooltip. *@
+@inject GameDataService GameData
 
 @{
     int innerSize = Math.Max(16, Size - 8);
@@ -14,6 +15,9 @@
     };
     string? nativeTitle = LightweightTooltip && !string.IsNullOrWhiteSpace(ItemName)
         ? BuildNativeTooltip()
+        : null;
+    var resolvedEnchants = ShowTooltip && !LightweightTooltip && !string.IsNullOrWhiteSpace(Enchantments)
+        ? GameData.ResolveEnchantments(Enchantments)
         : null;
 }
 
@@ -74,6 +78,21 @@
             {
                 <div class="rotmg-tooltip-score">Rarity Score: <strong>@Math.Round(RarityScore) pts</strong></div>
             }
+            @if (resolvedEnchants is { Count: > 0 })
+            {
+                <div class="rotmg-tooltip-enchants">
+                    @foreach (var ench in resolvedEnchants)
+                    {
+                        <div class="rotmg-tooltip-ench-row">
+                            <span class="rotmg-ench-name">@ench.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(ench.Description))
+                            {
+                                <span class="rotmg-ench-desc">@ench.Description</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
             @if (!string.IsNullOrWhiteSpace(ExtraMeta))
             {
                 <div class="rotmg-tooltip-sub">@ExtraMeta</div>
@@ -93,6 +112,7 @@
     [Parameter] public bool IsShiny { get; set; }
     [Parameter] public DropType? DropQuality { get; set; }
     [Parameter] public double RarityScore { get; set; }
+    [Parameter] public string? Enchantments { get; set; }
     [Parameter] public string? ExtraMeta { get; set; }
     [Parameter] public bool ShowTooltip { get; set; } = true;
     /// <summary>When true, uses native title attribute instead of nested tooltip DOM nodes (huge perf win for dense grids).</summary>

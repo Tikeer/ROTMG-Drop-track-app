@@ -1,19 +1,27 @@
 @inherits StateAwareComponent
 
 @{
-    var topDrops = State.GetLootSnapshot(Scope)
+    var allTop = State.GetLootSnapshot(Scope)
         .Where(l => l.BagType != DropType.Other)
         .OrderByDescending(l => l.RarityScore)
         .Take(10)
         .ToList();
+    int limit = _showTen ? 10 : 5;
+    var topDrops = allTop.Take(limit).ToList();
     int rank = 1;
 }
 
 <div class="profile-col-header">
     <div>
-        <h3 class="profile-col-title">Top 10 Drops</h3>
+        <h3 class="profile-col-title">Top @limit Drops</h3>
         <span class="profile-col-sub">Ranked by Rarity Score</span>
     </div>
+    @if (allTop.Count > 5)
+    {
+        <button type="button" class="btn btn-sm" @onclick="() => _showTen = !_showTen">
+            @(_showTen ? "Show Top 5" : "Show Top 10")
+        </button>
+    }
 </div>
 
 @if (topDrops.Count == 0)
@@ -36,6 +44,7 @@ else
                             IsShiny="drop.IsShiny"
                             DropQuality="drop.BagType"
                             RarityScore="drop.RarityScore"
+                            Enchantments="@drop.Enchantments"
                             ExtraMeta="@($"{drop.DungeonName} • {drop.DroppedAt:yyyy-MM-dd HH:mm}")"
                             Size="36" />
 
@@ -70,4 +79,6 @@ else
 
 @code {
     [Parameter] public DataScope Scope { get; set; } = DataScope.ActiveCharacter;
+
+    private bool _showTen;
 }

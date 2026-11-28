@@ -165,8 +165,11 @@ html, body {
 
 .nav-icon {
     font-size: 1.05rem;
-    width: 20px;
-    text-align: center;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
 }
 
@@ -3364,3 +3367,163 @@ input, select { user-select: text; }
 }
 .crt-rarity-chip.is-collected.crt-r-divine .crt-rarity-name,
 .crt-rarity-chip.is-collected.crt-r-divine .crt-rarity-cnt { color: #fbbf24; }
+
+/* ===== Custom DarkSelect Dropdown (replaces native macOS <select>) ===== */
+.dark-select {
+    display: inline-block;
+}
+
+.dark-select-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.14s, background 0.14s;
+    width: 100%;
+    text-align: left;
+}
+
+.dark-select-trigger.is-compact {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+}
+
+.dark-select-trigger:hover {
+    border-color: var(--border-hover);
+    background: #232838;
+}
+
+.dark-select-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dark-select-menu {
+    min-width: 185px;
+    max-height: 310px;
+    overflow-y: auto;
+    padding: 5px;
+    gap: 2px;
+}
+
+.dark-select-option {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    border-radius: 7px;
+    font: inherit;
+    font-size: 0.83rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dark-select-option:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}
+
+.dark-select-option.selected {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: var(--accent-white);
+}
+
+.dark-select-opt-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===== Draggable Stat Pills in CharacterBar ===== */
+.char-stat-draggable {
+    cursor: grab;
+    transition: border-color 0.14s, opacity 0.14s, background 0.14s;
+}
+
+.char-stat-draggable:active {
+    cursor: grabbing;
+}
+
+.char-stat-draggable.is-dragging {
+    opacity: 0.45;
+}
+
+.char-stat-draggable.is-drag-over {
+    border-color: var(--accent-white);
+    background: rgba(56, 189, 248, 0.14);
+}
+
+/* ===== Enchantments List inside ItemSprite Tooltip ===== */
+.rotmg-tooltip-enchants {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    white-space: normal;
+    min-width: 210px;
+    max-width: 280px;
+}
+
+.rotmg-tooltip-ench-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.rotmg-ench-name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #c084fc;
+}
+
+.rotmg-ench-desc {
+    font-size: 0.69rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+/* ===== Dedicated Tiered Equipment Tile in Trophy Hall ===== */
+.tiered-hall-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 11px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.tiered-hall-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.tiered-group-badge {
+    justify-content: space-between;
+    min-width: 195px;
+    max-width: 215px;
+    border-color: rgba(56, 189, 248, 0.28);
+}

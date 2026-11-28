@@ -1,10 +1,13 @@
 @inherits StateAwareComponent
+@inject UiSettings UiSettings
 
 @{
     var active = State.ActiveCharacter;
     bool isMaxed = active.MaxedStats >= 8;
     bool canDelete = State.Data.ActiveCharacters.Count > 1;
     var exalts = active.ExaltBonuses is { Length: 8 } ? active.ExaltBonuses : new int[8];
+    var pillOrder = UiSettings.CharacterBarOrder;
+    string starColor = GetRankStarColor(State.AccountStars);
 }
 
 <div class="char-bar-v2">
@@ -71,32 +74,100 @@
             @(active.IsSeasonal ? $"SSNL ({active.SeasonTag})" : "NOSSNL")
         </span>
 
-        <!-- READ-ONLY FAME PILL (D11) -->
-        <div class="stat-pill" title="Base fame (read-only, synced passively from sniffer)">
-            <span class="stat-pill-label">Fame</span>
-            <span class="stat-pill-value">@active.BaseFame.ToString("N0")</span>
-        </div>
+        <!-- DRAGGABLE / REORDERABLE STAT PILLS (Fame, Exalt, Stars, Gold) -->
+        @foreach (var key in pillOrder)
+        {
+            bool isOver = _dragOverKey == key && _draggingKey != null && _draggingKey != key;
+            bool isDragging = _draggingKey == key;
 
-        <!-- READ-ONLY EXALTATIONS (STATS 105-112) -->
-        <div class="stat-pill exalt-pill" title="@FormatExaltTooltip(exalts)">
-            <span class="stat-pill-label">Exalt</span>
-            <span class="stat-pill-value @(active.TotalExaltations > 0 ? "exalt-active" : "")">
-                @active.TotalExaltations/40
-            </span>
-            <div class="exalt-popover">
-                <div class="exalt-popover-title">Exaltation Bonuses (Stats 105–112)</div>
-                <div class="exalt-grid">
-                    @for (int i = 0; i < ExaltLabels.Length; i++)
-                    {
-                        int val = exalts[i];
-                        <div class="exalt-cell @(val > 0 ? "has-bonus" : "")">
-                            <span class="exalt-stat">@ExaltLabels[i]</span>
-                            <span class="exalt-val">+@val</span>
+            @switch (key)
+            {
+                case "fame":
+                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
+                         draggable="true"
+                         @ondragstart="() => OnDragStart(key)"
+                         @ondragover:preventDefault="true"
+                         @ondragenter="() => OnDragEnter(key)"
+                         @ondrop="() => OnDrop(key)"
+                         @ondragend="OnDragEnd"
+                         title="Base fame (read-only, synced passively from sniffer • Drag to reorder)">
+                        <GameSprite UiSpriteName="fame_icon" Size="15" />
+                        <span class="stat-pill-label">Fame</span>
+                        <span class="stat-pill-value">@active.BaseFame.ToString("N0")</span>
+                    </div>
+                    break;
+
+                case "exalt":
+                    <div class="stat-pill exalt-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
+                         draggable="true"
+                         @ondragstart="() => OnDragStart(key)"
+                         @ondragover:preventDefault="true"
+                         @ondragenter="() => OnDragEnter(key)"
+                         @ondrop="() => OnDrop(key)"
+                         @ondragend="OnDragEnd"
+                         title="@FormatExaltTooltip(exalts) • Drag to reorder">
+                        <span class="stat-pill-label">Exalt</span>
+                        <span class="stat-pill-value @(active.TotalExaltations > 0 ? "exalt-active" : "")">
+                            @active.TotalExaltations/40
+                        </span>
+                        <div class="exalt-popover">
+                            <div class="exalt-popover-title">Exaltation Bonuses (Stats 105–112)</div>
+                            <div class="exalt-grid">
+                                @for (int i = 0; i < ExaltLabels.Length; i++)
+                                {
+                                    int val = exalts[i];
+                                    <div class="exalt-cell @(val > 0 ? "has-bonus" : "")">
+                                        <span class="exalt-stat">@ExaltLabels[i]</span>
+                                        <span class="exalt-val">+@val</span>
+                                    </div>
+                                }
+                            </div>
                         </div>
-                    }
-                </div>
-            </div>
-        </div>
+                    </div>
+                    break;
+
+                case "stars":
+                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
+                         draggable="true"
+                         @ondragstart="() => OnDragStart(key)"
+                         @ondragover:preventDefault="true"
+                         @ondragenter="() => OnDragEnter(key)"
+                         @ondrop="() => OnDrop(key)"
+                         @ondragend="OnDragEnd"
+                         title="Account rank stars (stat 30, synced passively • Drag to reorder)">
+                        @if (Sprites.TryGetUiSprite("StarIcon", out _))
+                        {
+                            <GameSprite UiSpriteName="StarIcon" Size="15" />
+                        }
+                        else if (Sprites.TryGetUiSprite("Star", out _))
+                        {
+                            <GameSprite UiSpriteName="Star" Size="15" />
+                        }
+                        else
+                        {
+                            <span style="color: @starColor; display: inline-flex;"><UiIcon Name="star" Size="14" /></span>
+                        }
+                        <span class="stat-pill-label">Stars</span>
+                        <span class="stat-pill-value" style="color: @starColor;">@State.AccountStars</span>
+                    </div>
+                    break;
+
+                case "gold":
+                    <div class="stat-pill char-stat-draggable @(isDragging ? "is-dragging" : "") @(isOver ? "is-drag-over" : "")"
+                         draggable="true"
+                         @ondragstart="() => OnDragStart(key)"
+                         @ondragover:preventDefault="true"
+                         @ondragenter="() => OnDragEnter(key)"
+                         @ondrop="() => OnDrop(key)"
+                         @ondragend="OnDragEnd"
+                         title="Realm Gold (stat 35, synced passively • Drag to reorder)">
+                        <GameSprite UiSpriteName="gold_icon" Size="15" />
+                        <span class="stat-pill-label">Gold</span>
+                        <span class="stat-pill-value" style="color: #fbbf24;">@State.AccountGold.ToString("N0")</span>
+                    </div>
+                    break;
+            }
+        }
     </div>
 
     <!-- CHARACTER ACTIONS MENU (D9) -->
@@ -173,7 +244,7 @@
 @if (PendingModal == ModalKind.NewCharacter)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
-        <div class="modal-card" @onclick:stopPropagation="true">
+        <div class="modal-card dream-modal-card" @onclick:stopPropagation="true">
             <h3 class="modal-title">New Character</h3>
             <p class="modal-body">
                 Characters are normally created automatically when detected by the sniffer. Use this only if you want to prepare a slot manually.
@@ -184,12 +255,11 @@
             </div>
             <div class="modal-field">
                 <label class="modal-label">Class</label>
-                <select class="select" style="width: 100%;" @bind="NewCharClass">
-                    @foreach (var c in Enum.GetValues<RotmgClass>())
-                    {
-                        <option value="@c">@c</option>
-                    }
-                </select>
+                <DarkSelect Value="@NewCharClass.ToString()"
+                            ValueChanged="OnNewCharClassChanged"
+                            Options="@ClassOptions"
+                            MinWidth="100%"
+                            Title="Choose character class" />
             </div>
             <div class="modal-field">
                 <label class="checkbox-label">
@@ -209,15 +279,62 @@
     private enum ModalKind { None, MarkDead, Delete, NewCharacter }
 
     private static readonly string[] ExaltLabels = ["HP", "MP", "ATT", "DEF", "SPD", "DEX", "VIT", "WIS"];
+    private static readonly List<DarkSelectOption> ClassOptions = Enum.GetValues<RotmgClass>()
+        .Select(c => new DarkSelectOption(c.ToString(), c.ToString(), ClassSprite: c))
+        .ToList();
 
     private bool CharMenuOpen { get; set; }
     private bool ActionMenuOpen { get; set; }
     private ModalKind PendingModal { get; set; } = ModalKind.None;
 
+    private string? _draggingKey;
+    private string? _dragOverKey;
+
     private string ManualKilledBy { get; set; } = "";
     private string NewCharName { get; set; } = "";
     private RotmgClass NewCharClass { get; set; } = RotmgClass.Wizard;
     private bool NewCharSeasonal { get; set; } = true;
+
+    private void OnDragStart(string key) => _draggingKey = key;
+
+    private void OnDragEnter(string key)
+    {
+        if (_draggingKey != null && _draggingKey != key)
+            _dragOverKey = key;
+    }
+
+    private void OnDrop(string targetKey)
+    {
+        if (_draggingKey == null || _draggingKey == targetKey)
+        {
+            OnDragEnd();
+            return;
+        }
+
+        var order = UiSettings.CharacterBarOrder.ToList();
+        int fromIdx = order.IndexOf(_draggingKey);
+        int toIdx = order.IndexOf(targetKey);
+        if (fromIdx >= 0 && toIdx >= 0)
+        {
+            order.RemoveAt(fromIdx);
+            order.Insert(toIdx, _draggingKey);
+            UiSettings.SetCharacterBarOrder(order);
+        }
+
+        OnDragEnd();
+    }
+
+    private void OnDragEnd()
+    {
+        _draggingKey = null;
+        _dragOverKey = null;
+    }
+
+    private void OnNewCharClassChanged(string val)
+    {
+        if (Enum.TryParse<RotmgClass>(val, out var cls))
+            NewCharClass = cls;
+    }
 
     private void ToggleCharDropdown()
     {
@@ -289,4 +406,14 @@
 
     private static string FormatExaltTooltip(int[] exalts) =>
         $"HP +{exalts[0]} | MP +{exalts[1]} | ATT +{exalts[2]} | DEF +{exalts[3]} | SPD +{exalts[4]} | DEX +{exalts[5]} | VIT +{exalts[6]} | WIS +{exalts[7]}";
+
+    private static string GetRankStarColor(int stars) => stars switch
+    {
+        >= 95 => "#f4f4f5", // White Star
+        >= 76 => "#facc15", // Yellow Star
+        >= 57 => "#fb923c", // Orange Star
+        >= 38 => "#ef4444", // Red Star
+        >= 19 => "#3b82f6", // Dark Blue Star
+        _ => "#38bdf8"      // Light Blue Star
+    };
 }

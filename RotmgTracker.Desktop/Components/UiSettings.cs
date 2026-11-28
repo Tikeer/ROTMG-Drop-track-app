@@ -6,11 +6,13 @@ namespace RotmgTrackerV1.Core.Services;
 public class UiSettings
 {
     private const string FileName = "ui_settings.json";
+    public static readonly string[] DefaultCharacterBarOrder = ["fame", "exalt", "stars", "gold"];
 
     private readonly object _sync = new();
     private readonly string _path;
     private bool _showLegacyOpenings;
     private bool _debugMode;
+    private List<string> _characterBarOrder = new(DefaultCharacterBarOrder);
 
     public event Action? Changed;
 
@@ -24,7 +26,6 @@ public class UiSettings
         Load();
     }
 
-    /// <summary>Chest Openings (manual counters) are hidden by default; legacy feature.</summary>
     public bool ShowLegacyOpenings
     {
         get { lock (_sync) return _showLegacyOpenings; }
@@ -44,7 +45,6 @@ public class UiSettings
         }
     }
 
-    /// <summary>Enables developer/debug actions (e.g. Test Boss DPS, manual fight archive, debug panel).</summary>
     public bool DebugMode
     {
         get { lock (_sync) return _debugMode; }
@@ -64,6 +64,46 @@ public class UiSettings
         }
     }
 
+    public IReadOnlyList<string> CharacterBarOrder
+    {
+        get { lock (_sync) return _characterBarOrder.ToList(); }
+    }
+
+    public void SetCharacterBarOrder(IEnumerable<string> order)
+    {
+        var normalized = NormalizeOrder(order);
+        bool changed = false;
+        lock (_sync)
+        {
+            if (!_characterBarOrder.SequenceEqual(normalized))
+            {
+                _characterBarOrder = normalized;
+                Save();
+                changed = true;
+            }
+        }
+        if (changed) Changed?.Invoke();
+    }
+
+    private static List<string> NormalizeOrder(IEnumerable<string>? raw)
+    {
+        var result = new List<string>();
+        if (raw != null)
+        {
+            foreach (var item in raw)
+            {
+                if (DefaultCharacterBarOrder.Contains(item) && !result.Contains(item))
+                    result.Add(item);
+            }
+        }
+        foreach (var def in DefaultCharacterBarOrder)
+        {
+            if (!result.Contains(def))
+                result.Add(def);
+        }
+        return result;
+    }
+
     private void Load()
     {
         try
@@ -75,20 +115,22 @@ public class UiSettings
 
             if (root.TryGetProperty("ShowLegacyOpenings", out var v) &&
                 (v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.False))
-            {
                 _showLegacyOpenings = v.GetBoolean();
-            }
 
             if (root.TryGetProperty("DebugMode", out var d) &&
                 (d.ValueKind == JsonValueKind.True || d.ValueKind == JsonValueKind.False))
-            {
                 _debugMode = d.GetBoolean();
+
+            if (root.TryGetProperty("CharacterBarOrder", out var ord) && ord.ValueKind == JsonValueKind.Array)
+            {
+                var list = ord.EnumerateArray()
+                    .Where(x => x.ValueKind == JsonValueKind.String)
+                    .Select(x => x.GetString()!)
+                    .ToList();
+                _characterBarOrder = NormalizeOrder(list);
             }
         }
-        catch
-        {
-            // Corrupted file: fall back to defaults.
-        }
+        catch { }
     }
 
     private void Save()
@@ -99,14 +141,12 @@ public class UiSettings
                 new
                 {
                     ShowLegacyOpenings = _showLegacyOpenings,
-                    DebugMode = _debugMode
+                    DebugMode = _debugMode,
+                    CharacterBarOrder = _characterBarOrder
                 },
                 new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_path, json);
         }
-        catch
-        {
-            // Not critical: flags just won't persist.
-        }
+        catch { }
     }
 }

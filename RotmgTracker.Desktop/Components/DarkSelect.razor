@@ -1,0 +1,97 @@
+@* Custom dark dropdown replacing native macOS <select> controls across the app (matching RaritySelect style). *@
+
+@{
+    var current = Options.FirstOrDefault(o => string.Equals(o.Value, Value, StringComparison.Ordinal))
+                  ?? Options.FirstOrDefault();
+}
+
+<div class="custom-dropdown dark-select">
+    <button type="button"
+            class="dark-select-trigger @(Compact ? "is-compact" : "")"
+            style="min-width: @MinWidth;"
+            title="@Title"
+            @onclick="Toggle">
+        @if (current != null)
+        {
+            @if (current.ClassSprite.HasValue)
+            {
+                <GameSprite Class="current.ClassSprite.Value" Size="16" />
+            }
+            else if (current.BagObjectType.HasValue)
+            {
+                <GameSprite BagObjectType="current.BagObjectType.Value" FallbackBagType="current.FallbackBag" Size="16" />
+            }
+            else if (!string.IsNullOrWhiteSpace(current.DungeonName))
+            {
+                <GameSprite DungeonName="@current.DungeonName" Size="16" />
+            }
+
+            <span class="dark-select-label" style="@(current.Color != null ? $"color:{current.Color};" : "")">@current.Label</span>
+        }
+        else
+        {
+            <span class="dark-select-label">@Placeholder</span>
+        }
+        <span class="custom-dropdown-caret">▾</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="dropdown-backdrop" @onclick="Close"></div>
+        <div class="custom-dropdown-menu dark-select-menu @(AlignRight ? "align-right" : "")">
+            @foreach (var opt in Options)
+            {
+                bool isSelected = string.Equals(opt.Value, Value, StringComparison.Ordinal);
+                <button type="button"
+                        class="dark-select-option @(isSelected ? "selected" : "")"
+                        @onclick="() => SelectAsync(opt.Value)">
+                    @if (opt.ClassSprite.HasValue)
+                    {
+                        <GameSprite Class="opt.ClassSprite.Value" Size="16" />
+                    }
+                    else if (opt.BagObjectType.HasValue)
+                    {
+                        <GameSprite BagObjectType="opt.BagObjectType.Value" FallbackBagType="opt.FallbackBag" Size="16" />
+                    }
+                    else if (!string.IsNullOrWhiteSpace(opt.DungeonName))
+                    {
+                        <GameSprite DungeonName="@opt.DungeonName" Size="16" />
+                    }
+
+                    <span class="dark-select-opt-label" style="@(opt.Color != null ? $"color:{opt.Color};" : "")">@opt.Label</span>
+
+                    @if (!string.IsNullOrWhiteSpace(opt.SubLabel))
+                    {
+                        <span class="rarity-opt-slots">@opt.SubLabel</span>
+                    }
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter, EditorRequired] public IReadOnlyList<DarkSelectOption> Options { get; set; } = Array.Empty<DarkSelectOption>();
+    [Parameter] public string Placeholder { get; set; } = "Select...";
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string MinWidth { get; set; } = "130px";
+    [Parameter] public bool AlignRight { get; set; }
+    [Parameter] public bool Compact { get; set; }
+
+    private bool _open;
+
+    private void Toggle() => _open = !_open;
+    private void Close() => _open = false;
+
+    private async Task SelectAsync(string val)
+    {
+        _open = false;
+        if (!string.Equals(Value, val, StringComparison.Ordinal))
+        {
+            Value = val;
+            await ValueChanged.InvokeAsync(val);
+        }
+    }
+}

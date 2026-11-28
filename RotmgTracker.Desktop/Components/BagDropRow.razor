@@ -60,6 +60,7 @@
                         IsShiny="item.IsShiny"
                         DropQuality="item.BagType"
                         RarityScore="item.RarityScore"
+                        Enchantments="@item.Enchantments"
                         Size="@(Compact ? 38 : 42)"
                         OnRemove="AllowRemove ? EventCallback.Factory.Create(this, () => OnRemoveItem.InvokeAsync(capturedId)) : default" />
         }

@@ -35,6 +35,8 @@ public partial class TrackerStateService
     public TrackerSaveData Data { get; private set; } = new();
 
     public string LinkedAccountName { get; private set; } = string.Empty;
+    public int AccountStars { get; private set; }
+    public int AccountGold { get; private set; }
     public const string DefaultSeasonTag = "S31";
     private bool _seasonTagsMigrated;
 
@@ -131,6 +133,35 @@ public partial class TrackerStateService
         var accountSetting = db.Settings.FirstOrDefault(s => s.Key == "LinkedAccountName");
         if (accountSetting != null)
             LinkedAccountName = accountSetting.Value;
+
+        var starsSetting = db.Settings.FirstOrDefault(s => s.Key == "AccountStars");
+        if (starsSetting != null && int.TryParse(starsSetting.Value, out int parsedStars))
+            AccountStars = Math.Max(0, parsedStars);
+
+        var goldSetting = db.Settings.FirstOrDefault(s => s.Key == "AccountGold");
+        if (goldSetting != null && int.TryParse(goldSetting.Value, out int parsedGold))
+            AccountGold = Math.Max(0, parsedGold);
+
+        var equipMetaSetting = db.Settings.FirstOrDefault(s => s.Key == "CharacterEquipMeta");
+        if (equipMetaSetting != null && !string.IsNullOrWhiteSpace(equipMetaSetting.Value))
+        {
+            try
+            {
+                var metaMap = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, CharacterEquipMetaDto>>(equipMetaSetting.Value);
+                if (metaMap != null)
+                {
+                    foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
+                    {
+                        if (metaMap.TryGetValue(ch.Id.ToString(), out var m))
+                        {
+                            if (m.Rarities is { Length: 4 }) ch.EquipmentRarities = m.Rarities;
+                            if (m.Enchants is { Length: 4 }) ch.EquipmentEnchants = m.Enchants;
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
 
         var seasonSetting = db.Settings.FirstOrDefault(s => s.Key == "CurrentSeasonTag");
         if (seasonSetting != null && IsValidSeasonTag(seasonSetting.Value))
@@ -668,7 +699,16 @@ public partial class TrackerStateService
             AddNewCharacter($"{charClass}", charClass, isSeasonal, rotmgCharId);
     }
 
-    public void UpdateActiveCharacterStats(int maxedStats, int baseFame, int[]? equipment = null, int skinId = 0, int[]? exaltBonuses = null)
+    public void UpdateActiveCharacterStats(
+        int maxedStats,
+        int baseFame,
+        int[]? equipment = null,
+        int skinId = 0,
+        int[]? exaltBonuses = null,
+        int[]? equipmentRarities = null,
+        string[]? equipmentEnchants = null,
+        int? accountStars = null,
+        int? accountGold = null)
     {
         using var guard = LockState();
 
@@ -681,6 +721,14 @@ public partial class TrackerStateService
             current.SkinId = skinId;
         if (exaltBonuses is { Length: 8 })
             current.ExaltBonuses = exaltBonuses;
+        if (equipmentRarities is { Length: 4 })
+            current.EquipmentRarities = equipmentRarities;
+        if (equipmentEnchants is { Length: 4 })
+            current.EquipmentEnchants = equipmentEnchants;
+        if (accountStars.HasValue && accountStars.Value >= 0)
+            AccountStars = accountStars.Value;
+        if (accountGold.HasValue && accountGold.Value >= 0)
+            AccountGold = accountGold.Value;
 
         SaveAsync();
         NotifyStateChanged();
@@ -1139,6 +1187,9 @@ public partial class TrackerStateService
         string currentSeasonTag;
         bool seasonTagsMigrated;
         bool legacyCountersRestored;
+        int accountStars;
+        int accountGold;
+        string equipMetaJson;
 
         // Krótki lock: tylko migawka stanu. Postacie kopiowane głęboko (sniffer zmienia ich słowniki),
         // reszta to listy referencji - zmiana rekordu w trakcie zapisu wywoła kolejny SaveAsync.
@@ -1156,6 +1207,16 @@ public partial class TrackerStateService
             currentSeasonTag = CurrentSeasonTag;
             seasonTagsMigrated = _seasonTagsMigrated;
             legacyCountersRestored = _legacyCountersRestored;
+            accountStars = AccountStars;
+            accountGold = AccountGold;
+
+            var equipMeta = new Dictionary<string, CharacterEquipMetaDto>();
+            foreach (var ch in characters)
+            {
+                if (ch.EquipmentRarities.Any(r => r > 0) || ch.EquipmentEnchants.Any(e => !string.IsNullOrEmpty(e)))
+                    equipMeta[ch.Id.ToString()] = new CharacterEquipMetaDto(ch.EquipmentRarities, ch.EquipmentEnchants);
+            }
+            equipMetaJson = equipMeta.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(equipMeta) : string.Empty;
         }
 
         // Zapisy do bazy wykluczają się wzajemnie (SaveAsync, Backup, Import), ale nie blokują renderu
@@ -1184,6 +1245,10 @@ public partial class TrackerStateService
             db.Settings.Add(new AppSetting { Key = "ActiveCharacterId", Value = activeCharacterId });
             db.Settings.Add(new AppSetting { Key = "LinkedAccountName", Value = linkedAccountName });
             db.Settings.Add(new AppSetting { Key = "CurrentSeasonTag", Value = currentSeasonTag });
+            db.Settings.Add(new AppSetting { Key = "AccountStars", Value = accountStars.ToString() });
+            db.Settings.Add(new AppSetting { Key = "AccountGold", Value = accountGold.ToString() });
+            if (!string.IsNullOrEmpty(equipMetaJson))
+                db.Settings.Add(new AppSetting { Key = "CharacterEquipMeta", Value = equipMetaJson });
             if (seasonTagsMigrated)
                 db.Settings.Add(new AppSetting { Key = "SeasonTagsMigrated", Value = "1" });
             if (legacyCountersRestored)
@@ -1196,4 +1261,6 @@ public partial class TrackerStateService
         // Poza lockami (nie blokuje sniffera ani renderu): kopie zapasowe - dzienna i godzinna "latest"
         DatabaseBackup.Run(_dbFilePath);
     }
+
+    private sealed record CharacterEquipMetaDto(int[] Rarities, string[] Enchants);
 }

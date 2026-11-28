@@ -3,10 +3,28 @@
 @inject GameDataService GameData
 @inject UiSettings UiSettings
 
-<div class="section-header">
+<div class="section-header" style="margin-bottom: 10px;">
     <h2>Settings</h2>
+    <div class="profile-scope-toggle" role="group" aria-label="Settings section">
+        <button type="button"
+                class="scope-toggle-btn @(_subTab == "general" ? "active" : "")"
+                @onclick='() => _subTab = "general"'>
+            General &amp; Sniffer
+        </button>
+        <button type="button"
+                class="scope-toggle-btn @(_subTab == "backup" ? "active" : "")"
+                @onclick='() => _subTab = "backup"'>
+            Backup &amp; Sync
+        </button>
+    </div>
 </div>
 
+@if (_subTab == "backup")
+{
+    <DataSafetyPanel />
+}
+else
+{
 <div class="settings-grid">
     <!-- GENERAL & SEASON -->
     <div class="settings-card">
@@ -17,12 +35,12 @@
                 <div class="settings-row-label">Current Season</div>
                 <div class="settings-row-desc">Applied automatically to newly created seasonal characters. Existing characters keep their original season tag.</div>
             </div>
-            <select class="select" style="width: 110px;" value="@State.CurrentSeasonTag" @onchange="OnSeasonChanged">
-                @foreach (var s in SeasonChoices())
-                {
-                    <option value="@s">@s</option>
-                }
-            </select>
+            <DarkSelect Value="@State.CurrentSeasonTag"
+                        ValueChanged="OnSeasonValueChanged"
+                        Options="@SeasonOptions()"
+                        MinWidth="104px"
+                        AlignRight="true"
+                        Title="Default season for new characters" />
         </div>
 
         <div class="settings-row">
@@ -183,29 +201,34 @@
         }
     </div>
 </div>
+}
 
 @code {
     [Parameter] public EventCallback<string> OnSetTab { get; set; }
 
+    private string _subTab = "general";
     private bool IsScanning => GameData.IsRescanning || _rescanInProgress;
     private bool _rescanInProgress;
     private string RescanMessage { get; set; } = string.Empty;
 
-    private void OnSeasonChanged(ChangeEventArgs e)
+    private void OnSeasonValueChanged(string season)
     {
-        if (e.Value is string s)
-            State.SetCurrentSeason(s);
+        if (!string.IsNullOrWhiteSpace(season))
+            State.SetCurrentSeason(season);
     }
 
-    private List<string> SeasonChoices()
+    private List<DarkSelectOption> SeasonOptions()
     {
         int cur = int.TryParse(State.CurrentSeasonTag.AsSpan(1), out int n) ? n : 31;
         int first = Math.Min(cur, 31);
         int last = Math.Max(cur, 31) + 3;
 
-        var list = new List<string>();
+        var list = new List<DarkSelectOption>();
         for (int i = first; i <= last; i++)
-            list.Add($"S{i}");
+        {
+            string tag = $"S{i}";
+            list.Add(new DarkSelectOption(tag, tag));
+        }
         return list;
     }
 

@@ -10,6 +10,8 @@ public class CharacterSession
     {
         var copy = (CharacterSession)MemberwiseClone();
         copy.EquipmentIds = (int[])EquipmentIds.Clone();
+        copy.EquipmentRarities = (int[])EquipmentRarities.Clone();
+        copy.EquipmentEnchants = (string[])EquipmentEnchants.Clone();
         copy.ExaltBonuses = (int[])ExaltBonuses.Clone();
         copy.Drops = new Dictionary<DropType, int>(Drops);
         copy.LegacyDrops = new Dictionary<DropType, int>(LegacyDrops);
@@ -41,6 +43,10 @@ public class CharacterSession
 
     // 4 sloty założonego ekwipunku: [Weapon, Ability, Armor, Ring]
     public int[] EquipmentIds { get; set; } = new int[4];
+
+    // Rarity (0..4) oraz CSV ID enchantów dla 4 slotów ekwipunku (odczytane ze stata 80, zapisywane w Settings)
+    public int[] EquipmentRarities { get; set; } = new int[4];
+    public string[] EquipmentEnchants { get; set; } = ["", "", "", ""];
 
     // Bonusy z exaltacji (staty 105..112): [HP, MP, ATT, DEF, SPD, DEX, VIT, WIS]
     public int[] ExaltBonuses { get; set; } = new int[8];

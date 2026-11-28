@@ -1,8 +1,26 @@
-@* Shared filter bar used by both Live Feed (DashboardPanel) and Loot History (LootPanel). *@
+@* Shared filter bar used by both Live Feed (DashboardPanel) and Loot History (LootPanel) — 100% custom dark dropdowns. *@
 
 @{
-    var dungeonOptions = GetDungeonOptions();
-    var bossOptions = GetBossOptions();
+    var scopeOptions = new List<DarkSelectOption>
+    {
+        new("ALL", "All characters"),
+        new("ACTIVE", $"Active: {ActiveCharacterTitle}")
+    };
+
+    var dungeonOptions = new List<DarkSelectOption> { new("", "All Dungeons") };
+    foreach (var d in GetDungeonOptions())
+        dungeonOptions.Add(new DarkSelectOption(d, d, DungeonName: d));
+
+    var bossOptions = new List<DarkSelectOption> { new("", "All Bosses") };
+    foreach (var b in GetBossOptions())
+        bossOptions.Add(new DarkSelectOption(b, b));
+
+    var qualityOptions = new List<DarkSelectOption> { new("", "All Qualities") };
+    foreach (var dt in LootFilterState.FilterableQualities)
+    {
+        var rep = UiHelpers.GetRepresentativeBag(dt);
+        qualityOptions.Add(new DarkSelectOption(dt.ToString(), UiHelpers.FormatDropType(dt), BagObjectType: rep.ObjectType, FallbackBag: rep.FallbackBag));
+    }
 }
 
 <div class="quest-add-bar shared-filter-bar" style="flex-wrap: wrap; overflow: visible;">
@@ -12,40 +30,32 @@
            value="@Filter.SearchQuery"
            @oninput="OnSearchInput" />
 
-    <select class="select"
-            value="@(Filter.Scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")"
-            @onchange="OnScopeChanged"
-            title="Which characters' drops to show">
-        <option value="ALL">All characters</option>
-        <option value="ACTIVE">Active: @ActiveCharacterTitle</option>
-    </select>
+    <DarkSelect Value="@(Filter.Scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")"
+                ValueChanged="OnScopeChanged"
+                Options="@scopeOptions"
+                MinWidth="150px"
+                Title="Which characters' drops to show" />
 
-    <select class="select" value="@Filter.Dungeon" @onchange="OnDungeonChanged" title="Filter by dungeon">
-        <option value="">All Dungeons</option>
-        @foreach (var d in dungeonOptions)
-        {
-            <option value="@d">@d</option>
-        }
-    </select>
+    <DarkSelect Value="@Filter.Dungeon"
+                ValueChanged="OnDungeonChanged"
+                Options="@dungeonOptions"
+                MinWidth="148px"
+                Title="Filter by dungeon" />
 
-    @if (!string.IsNullOrEmpty(Filter.Dungeon) && bossOptions.Count > 0)
+    @if (!string.IsNullOrEmpty(Filter.Dungeon) && bossOptions.Count > 1)
     {
-        <select class="select" value="@Filter.Boss" @onchange="OnBossChanged" title="Filter by boss">
-            <option value="">All Bosses</option>
-            @foreach (var b in bossOptions)
-            {
-                <option value="@b">@b</option>
-            }
-        </select>
+        <DarkSelect Value="@Filter.Boss"
+                    ValueChanged="OnBossChanged"
+                    Options="@bossOptions"
+                    MinWidth="140px"
+                    Title="Filter by boss" />
     }
 
-    <select class="select" value="@(Filter.Quality?.ToString() ?? "")" @onchange="OnQualityChanged" title="Filter by drop quality">
-        <option value="">All Qualities</option>
-        @foreach (var dt in LootFilterState.FilterableQualities)
-        {
-            <option value="@dt">@UiHelpers.FormatDropType(dt)</option>
-        }
-    </select>
+    <DarkSelect Value="@(Filter.Quality?.ToString() ?? "")"
+                ValueChanged="OnQualityChanged"
+                Options="@qualityOptions"
+                MinWidth="145px"
+                Title="Filter by drop quality" />
 
     <RaritySelect AllowAll="true"
                   AllLabel="All Rarities"
@@ -60,12 +70,12 @@
 
     @if (ShowPageSize)
     {
-        <select class="select" value="@PageSize" @onchange="OnPageSizeChanged" title="Bags per page">
-            <option value="50">50 / page</option>
-            <option value="100">100 / page</option>
-            <option value="250">250 / page</option>
-            <option value="500">500 / page</option>
-        </select>
+        <DarkSelect Value="@PageSize.ToString()"
+                    ValueChanged="OnPageSizeChanged"
+                    Options="@PageSizeOptions"
+                    MinWidth="112px"
+                    AlignRight="true"
+                    Title="Bags per page" />
     }
 
     @if (Filter.HasActiveFilters)
@@ -77,6 +87,14 @@
 </div>
 
 @code {
+    private static readonly List<DarkSelectOption> PageSizeOptions =
+    [
+        new("50", "50 / page"),
+        new("100", "100 / page"),
+        new("250", "250 / page"),
+        new("500", "500 / page")
+    ];
+
     [Parameter, EditorRequired] public LootFilterState Filter { get; set; } = default!;
     [Parameter, EditorRequired] public IReadOnlyList<LootDropRecord> SourceLoot { get; set; } = Array.Empty<LootDropRecord>();
     [Parameter] public string ActiveCharacterTitle { get; set; } = "";
@@ -94,31 +112,30 @@
         return NotifyAsync();
     }
 
-    private Task OnScopeChanged(ChangeEventArgs e)
+    private Task OnScopeChanged(string val)
     {
-        Filter.Scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
+        Filter.Scope = val == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
         Filter.Dungeon = string.Empty;
         Filter.Boss = string.Empty;
         return NotifyAsync();
     }
 
-    private Task OnDungeonChanged(ChangeEventArgs e)
+    private Task OnDungeonChanged(string val)
     {
-        Filter.Dungeon = e.Value?.ToString() ?? string.Empty;
+        Filter.Dungeon = val;
         Filter.Boss = string.Empty;
         return NotifyAsync();
     }
 
-    private Task OnBossChanged(ChangeEventArgs e)
+    private Task OnBossChanged(string val)
     {
-        Filter.Boss = e.Value?.ToString() ?? string.Empty;
+        Filter.Boss = val;
         return NotifyAsync();
     }
 
-    private Task OnQualityChanged(ChangeEventArgs e)
+    private Task OnQualityChanged(string val)
     {
-        string raw = e.Value?.ToString() ?? string.Empty;
-        Filter.Quality = !string.IsNullOrWhiteSpace(raw) && Enum.TryParse<DropType>(raw, out var dt) ? dt : null;
+        Filter.Quality = !string.IsNullOrWhiteSpace(val) && Enum.TryParse<DropType>(val, out var dt) ? dt : null;
         return NotifyAsync();
     }
 
@@ -134,9 +151,9 @@
         return NotifyAsync();
     }
 
-    private async Task OnPageSizeChanged(ChangeEventArgs e)
+    private async Task OnPageSizeChanged(string val)
     {
-        if (int.TryParse(e.Value?.ToString(), out int size) && size > 0)
+        if (int.TryParse(val, out int size) && size > 0)
         {
             PageSize = size;
             await PageSizeChanged.InvokeAsync(size);

@@ -152,12 +152,11 @@
 
                 <div class="modal-field" style="flex: 1;">
                     <label class="modal-label">Reward</label>
-                    <select class="select" style="width: 100%;" @bind="_rewardName">
-                        <option value="Standard Quest Chest">Standard Quest Chest</option>
-                        <option value="Mighty Quest Chest">Mighty Quest Chest</option>
-                        <option value="Epic Quest Chest">Epic Quest Chest</option>
-                        <option value="Daily Event Chest">Daily Event Chest</option>
-                    </select>
+                    <DarkSelect Value="@_rewardName"
+                                ValueChanged="v => _rewardName = v"
+                                Options="@RewardOptions"
+                                MinWidth="100%"
+                                Title="Quest reward chest" />
                 </div>
             </div>
 
@@ -175,6 +174,14 @@
 }
 
 @code {
+    private static readonly List<DarkSelectOption> RewardOptions =
+    [
+        new("Standard Quest Chest", "Standard Quest Chest"),
+        new("Mighty Quest Chest", "Mighty Quest Chest"),
+        new("Epic Quest Chest", "Epic Quest Chest"),
+        new("Daily Event Chest", "Daily Event Chest")
+    ];
+
     private bool IsCollapsed { get; set; } = true;
     private bool _showAddModal;
     private bool _showMarkMenu;

@@ -15,37 +15,54 @@
     </div>
 </div>
 
-<div class="quest-add-bar" style="flex-wrap: wrap; gap: 8px;">
+@{
+    EnsureComputedView();
+
+    var scopeOptions = new List<DarkSelectOption>
+    {
+        new("ALL", "All characters"),
+        new("ACTIVE", $"Active: {State.ActiveCharacter.FormattedTitle}")
+    };
+
+    var categoryOptions = new List<DarkSelectOption>
+    {
+        new("ALL", "All Categories"),
+        new("LEGENDARY_WHITE", "Legendary Whites", BagObjectType: 0x050C, FallbackBag: BagType.WhiteBag),
+        new("EVENT_WHITE", "Realm Whites", BagObjectType: 0x050C, FallbackBag: BagType.WhiteBag),
+        new("REGULAR_WHITE", "Regular Whites", BagObjectType: 0x050C, FallbackBag: BagType.WhiteBag),
+        new("ST", "ST Sets", BagObjectType: 0x050F, FallbackBag: BagType.OrangeBag),
+        new("SHINY", $"Shiny Variants ({_shinyCatalogCount})", Color: "#f472b6", BagObjectType: 0x050C, FallbackBag: BagType.WhiteBag)
+    };
+}
+
+<div class="quest-add-bar" style="flex-wrap: wrap; gap: 8px; overflow: visible;">
     <input class="input" style="min-width: 210px; max-width: 250px;" placeholder="Search item, boss, or dungeon..." @bind="CollectionSearch" @bind:event="oninput" />
 
-    <select class="select" value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")" @onchange="OnScopeChanged" title="Whose drops & completions count">
-        <option value="ALL">All characters</option>
-        <option value="ACTIVE">Active: @State.ActiveCharacter.FormattedTitle</option>
-    </select>
+    <DarkSelect Value="@(_scope == DataScope.ActiveCharacter ? "ACTIVE" : "ALL")"
+                ValueChanged="OnScopeValueChanged"
+                Options="@scopeOptions"
+                MinWidth="148px"
+                Title="Whose drops & completions count" />
 
-    <select class="select" @bind="CollectionCategoryFilter">
-        <option value="ALL">All Categories</option>
-        <option value="LEGENDARY_WHITE">Legendary Whites</option>
-        <option value="EVENT_WHITE">Realm Whites</option>
-        <option value="REGULAR_WHITE">Regular Whites</option>
-        <option value="ST">ST Sets</option>
-        <option value="SHINY">Shiny Variants Only (@_shinyCatalogCount)</option>
-    </select>
+    <DarkSelect Value="@CollectionCategoryFilter"
+                ValueChanged="v => CollectionCategoryFilter = v"
+                Options="@categoryOptions"
+                MinWidth="156px"
+                Title="Filter by item category" />
 
-    <select class="select" @bind="CollectionOwnershipFilter">
-        <option value="ALL">Owned &amp; Missing</option>
-        <option value="OWNED">Owned Only</option>
-        <option value="MISSING">Missing Only</option>
-    </select>
+    <DarkSelect Value="@CollectionOwnershipFilter"
+                ValueChanged="v => CollectionOwnershipFilter = v"
+                Options="@OwnershipOptions"
+                MinWidth="142px"
+                Title="Filter by ownership" />
 
     @if (ViewMode == "TROPHY")
     {
-        <select class="select" @bind="SortMode" title="Sort dungeons">
-            <option value="GRAVES">Sort: Graves ↓</option>
-            <option value="PERCENT">Sort: Progress % ↓</option>
-            <option value="COMP">Sort: Completions ↓</option>
-            <option value="NAME">Sort: Name A–Z</option>
-        </select>
+        <DarkSelect Value="@SortMode"
+                    ValueChanged="v => SortMode = v"
+                    Options="@SortOptions"
+                    MinWidth="148px"
+                    Title="Sort dungeons" />
     }
 
     <label class="checkbox-label filter-check-pill" title="Show retired Legacy items">
@@ -67,29 +84,23 @@
     {
         <div class="tiered-split-group">
             <span class="tiered-split-lbl">W/A:</span>
-            <select class="select" style="padding: 5px 8px;" @bind="MinWeaponArmorTier" title="Minimum Weapon & Armor tier">
-                <option value="0">Off</option>
-                @for (int t = 1; t <= 14; t++)
-                {
-                    <option value="@t">T@(t)+</option>
-                }
-            </select>
+            <DarkSelect Value="@MinWeaponArmorTier.ToString()"
+                        ValueChanged="v => MinWeaponArmorTier = int.TryParse(v, out int n) ? n : 12"
+                        Options="@WeaponArmorTierOptions"
+                        MinWidth="76px"
+                        Compact="true"
+                        Title="Minimum Weapon & Armor tier" />
 
             <span class="tiered-split-lbl">Abil/Ring:</span>
-            <select class="select" style="padding: 5px 8px;" @bind="MinAbilityRingTier" title="Minimum Ability & Ring tier">
-                <option value="0">Off</option>
-                @for (int t = 1; t <= 7; t++)
-                {
-                    <option value="@t">T@(t)+</option>
-                }
-            </select>
+            <DarkSelect Value="@MinAbilityRingTier.ToString()"
+                        ValueChanged="v => MinAbilityRingTier = int.TryParse(v, out int n) ? n : 6"
+                        Options="@AbilityRingTierOptions"
+                        MinWidth="76px"
+                        Compact="true"
+                        Title="Minimum Ability & Ring tier" />
         </div>
     }
 </div>
-
-@{
-    EnsureComputedView();
-}
 
 <div class="collection-summary-bar">
     <div>
@@ -104,12 +115,71 @@
 
 @if (ViewMode == "TROPHY")
 {
-    if (_renderedRows.Count == 0 && _uncategorizedRow == null)
+    if (_renderedRows.Count == 0 && _tieredSection == null && _uncategorizedRow == null)
     {
         <div class="empty-state">No collection items match the current filters.</div>
     }
     else
     {
+        @if (_tieredSection != null)
+        {
+            <div class="tiered-hall-card" @onmouseleave="HideRichTooltip">
+                <div class="tiered-hall-head">
+                    <div class="inline-meta-item" style="gap: 10px;">
+                        <GameSprite BagObjectType="0x06AC" FallbackBagType="BagType.RedBag" Size="26" />
+                        <div>
+                            <strong style="font-size: 0.96rem; color: var(--text-primary);">Tiered Equipment</strong>
+                            <div style="font-size: 0.74rem; color: var(--text-muted);">
+                                Weapons &amp; Armors (@(MinWeaponArmorTier > 0 ? $"T{MinWeaponArmorTier}+" : "Off")) • Abilities &amp; Rings (@(MinAbilityRingTier > 0 ? $"T{MinAbilityRingTier}+" : "Off"))
+                            </div>
+                        </div>
+                    </div>
+                    <div class="th-col-pct" style="min-width: 140px;">
+                        <div class="trophy-pct-text">
+                            <strong>@_tieredSection.OwnedCount/@_tieredSection.TotalCount</strong>
+                            <span>@_tieredSection.PercentText</span>
+                        </div>
+                        <div class="trophy-mini-bar">
+                            <div class="trophy-mini-fill" style="width: @_tieredSection.BarWidth"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="trophy-boss-stack">
+                    @foreach (var grp in _tieredSection.Groups)
+                    {
+                        <div class="trophy-boss-line">
+                            <div class="trophy-boss-badge tiered-group-badge">
+                                <span class="trophy-boss-name">@grp.Label</span>
+                                <span class="rarity-opt-slots">@grp.OwnedCount/@grp.Tiles.Count</span>
+                            </div>
+                            <div class="trophy-boss-items">
+                                @foreach (var tile in grp.Tiles)
+                                {
+                                    <div class="@tile.CssClass"
+                                         @onmouseenter="e => ShowRichTooltip(tile, e)"
+                                         @onmouseleave="HideRichTooltip">
+                                        @if (!string.IsNullOrEmpty(tile.SpriteStyle))
+                                        {
+                                            <span class="game-sprite" style="@tile.SpriteStyle"></span>
+                                        }
+                                        @if (!string.IsNullOrEmpty(tile.RarityOverlayStyle))
+                                        {
+                                            <span class="trophy-rarity-mark"><span class="game-sprite" style="@tile.RarityOverlayStyle"></span></span>
+                                        }
+                                        @if (tile.CountTag != null)
+                                        {
+                                            <span class="trophy-count-tag">@tile.CountTag</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
         <div class="trophy-table-header">
             <div class="th-col-dungeon">Dungeon</div>
             <div class="th-col-graves">Graves</div>
@@ -529,6 +599,36 @@ else
     private readonly Dictionary<ItemRarity, string> _rarityOverlayStyles = new();
     private readonly Dictionary<ItemRarity, string> _rarityTooltipStyles = new();
 
+    private static readonly List<DarkSelectOption> OwnershipOptions =
+    [
+        new("ALL", "Owned & Missing"),
+        new("OWNED", "Owned Only", Color: "#4ade80"),
+        new("MISSING", "Missing Only", Color: "#a1a1aa")
+    ];
+
+    private static readonly List<DarkSelectOption> SortOptions =
+    [
+        new("GRAVES", "Sort: Graves ↓"),
+        new("PERCENT", "Sort: Progress % ↓"),
+        new("COMP", "Sort: Completions ↓"),
+        new("NAME", "Sort: Name A–Z")
+    ];
+
+    private static readonly List<DarkSelectOption> WeaponArmorTierOptions =
+        new[] { new DarkSelectOption("0", "Off") }
+            .Concat(Enumerable.Range(1, 14).Select(t => new DarkSelectOption(t.ToString(), $"T{t}+")))
+            .ToList();
+
+    private static readonly List<DarkSelectOption> AbilityRingTierOptions =
+        new[] { new DarkSelectOption("0", "Off") }
+            .Concat(Enumerable.Range(1, 7).Select(t => new DarkSelectOption(t.ToString(), $"T{t}+")))
+            .ToList();
+
+    private sealed record TieredGroupView(string Label, int OwnedCount, List<RenderedTile> Tiles);
+    private sealed record TieredSectionView(int OwnedCount, int TotalCount, string PercentText, string BarWidth, List<TieredGroupView> Groups);
+
+    private TieredSectionView? _tieredSection;
+
     private List<RenderedRow> _renderedRows = new();
     private TrophyHallDungeonRow? _uncategorizedRow;
     private List<List<RenderedTile>> _uncatChunks = new();
@@ -545,10 +645,10 @@ else
         ViewMode = mode;
     }
 
-    private void OnScopeChanged(ChangeEventArgs e)
+    private void OnScopeValueChanged(string val)
     {
         _hoveredTile = null;
-        _scope = e.Value?.ToString() == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
+        _scope = val == "ACTIVE" ? DataScope.ActiveCharacter : DataScope.AllCharacters;
     }
 
     private void ShowRichTooltip(RenderedTile tile, MouseEventArgs e)
@@ -623,11 +723,18 @@ else
             if (isDefaultUnfiltered && ItemSources.TryGetCachedDefaultTrophyHall(loot.Count, runs.Count, out var cached))
             {
                 rawRows = cached;
+                _tieredSection = null;
             }
             else
             {
                 var baseFilteredItems = GetFilteredCollectionItems(allKnown, loot, applySearch: false).ToList();
-                rawRows = ItemSources.BuildTrophyHall(baseFilteredItems, loot, runs, GameData);
+                var tieredItems = baseFilteredItems.Where(i => i.Tier > 0).ToList();
+                var nonTieredItems = baseFilteredItems.Where(i => i.Tier < 0).ToList();
+
+                // Build dedicated Tiered Equipment tile in Trophy Hall instead of dumping into Other / Uncategorized
+                _tieredSection = BuildTieredSection(tieredItems, ownedStatsById, CollectionSearch.Trim());
+
+                rawRows = ItemSources.BuildTrophyHall(nonTieredItems, loot, runs, GameData);
                 if (isDefaultUnfiltered)
                     ItemSources.UpdateCachedDefaultTrophyHall(loot.Count, runs.Count, rawRows);
             }
@@ -747,6 +854,13 @@ else
                     distinctShownIds.Add(e.Meta.ItemId);
             }
 
+            if (_tieredSection != null)
+            {
+                foreach (var grp in _tieredSection.Groups)
+                    foreach (var t in grp.Tiles)
+                        distinctShownIds.Add(t.Meta.ItemId);
+            }
+
             _shownItemCount = distinctShownIds.Count;
             _ownedInView = distinctShownIds.Count(id => ownedStatsById.ContainsKey(id));
             _flatChunks = new();
@@ -755,6 +869,7 @@ else
         {
             var baseFilteredItems = GetFilteredCollectionItems(allKnown, loot, applySearch: true).ToList();
             _renderedRows = new();
+            _tieredSection = null;
             _uncategorizedRow = null;
             _uncatChunks = new();
 
@@ -787,6 +902,73 @@ else
         }
 
         _viewPct = _shownItemCount > 0 ? Math.Round((double)_ownedInView / _shownItemCount * 100.0, 1) : 0.0;
+    }
+
+    private TieredSectionView? BuildTieredSection(
+        List<ItemMetadata> tieredItems,
+        Dictionary<int, OwnedStats> ownedStatsById,
+        string searchQuery)
+    {
+        if (tieredItems.Count == 0)
+            return null;
+
+        IEnumerable<ItemMetadata> items = tieredItems;
+        if (!string.IsNullOrWhiteSpace(searchQuery) &&
+            !"Tiered Equipment".Contains(searchQuery, StringComparison.OrdinalIgnoreCase))
+        {
+            items = items.Where(i => i.Name.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var list = items.ToList();
+        if (list.Count == 0)
+            return null;
+
+        var groups = new List<TieredGroupView>();
+
+        // Weapons & Armors grouped by Tier descending (T14 -> T1)
+        foreach (var g in list.Where(i => i.IsWeaponOrArmor).GroupBy(i => i.Tier).OrderByDescending(g => g.Key))
+        {
+            var tiles = g.OrderByDescending(i => ownedStatsById.ContainsKey(i.ItemId))
+                .ThenBy(i => i.SlotType)
+                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(i =>
+                {
+                    ownedStatsById.TryGetValue(i.ItemId, out var st);
+                    return BuildTile(i, st?.Count ?? 0, st?.BestRarity ?? ItemRarity.Common, st?.BestScore ?? 0,
+                        st?.RarityCounts ?? new int[5], $"Tier {g.Key} Drop", "Tiered Equipment", "", 30, "");
+                })
+                .ToList();
+            groups.Add(new TieredGroupView($"T{g.Key} Weapons & Armors", tiles.Count(t => t.OwnedCount > 0), tiles));
+        }
+
+        // Abilities & Rings grouped by Tier descending (T7 -> T1)
+        foreach (var g in list.Where(i => i.IsAbilityOrRing).GroupBy(i => i.Tier).OrderByDescending(g => g.Key))
+        {
+            var tiles = g.OrderByDescending(i => ownedStatsById.ContainsKey(i.ItemId))
+                .ThenBy(i => i.SlotType)
+                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(i =>
+                {
+                    ownedStatsById.TryGetValue(i.ItemId, out var st);
+                    return BuildTile(i, st?.Count ?? 0, st?.BestRarity ?? ItemRarity.Common, st?.BestScore ?? 0,
+                        st?.RarityCounts ?? new int[5], $"Tier {g.Key} Drop", "Tiered Equipment", "", 30, "");
+                })
+                .ToList();
+            groups.Add(new TieredGroupView($"T{g.Key} Abilities & Rings", tiles.Count(t => t.OwnedCount > 0), tiles));
+        }
+
+        if (groups.Count == 0)
+            return null;
+
+        int total = groups.Sum(g => g.Tiles.Count);
+        int owned = groups.Sum(g => g.OwnedCount);
+        double pct = total > 0 ? Math.Round((double)owned / total * 100.0, 1) : 0.0;
+        return new TieredSectionView(
+            owned,
+            total,
+            $"{pct:0.#}%",
+            $"{pct.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}%",
+            groups);
     }
 
     private RenderedTile BuildTile(

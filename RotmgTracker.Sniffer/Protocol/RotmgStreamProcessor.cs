@@ -870,6 +870,14 @@ public class RotmgStreamProcessor
         int baseFame = _state.ActiveCharacter.BaseFame;
         int skinId = _state.ActiveCharacter.SkinId;
         int[] equip = (int[])_state.ActiveCharacter.EquipmentIds.Clone();
+        int[] equipRarities = _state.ActiveCharacter.EquipmentRarities is { Length: 4 }
+            ? (int[])_state.ActiveCharacter.EquipmentRarities.Clone()
+            : new int[4];
+        string[] equipEnchants = _state.ActiveCharacter.EquipmentEnchants is { Length: 4 }
+            ? (string[])_state.ActiveCharacter.EquipmentEnchants.Clone()
+            : ["", "", "", ""];
+        int? accountStars = null;
+        int? accountGold = null;
         bool changed = false;
 
         int maxedStats = _state.ActiveCharacter.MaxedStats;
@@ -907,8 +915,49 @@ public class RotmgStreamProcessor
             }
             else if (s.StatType is >= RotmgProtocolConstants.StatInventory0 and <= RotmgProtocolConstants.StatInventory0 + 3)
             {
-                equip[s.StatType - RotmgProtocolConstants.StatInventory0] = s.IntValue;
-                changed = true;
+                int slot = s.StatType - RotmgProtocolConstants.StatInventory0;
+                if (equip[slot] != s.IntValue)
+                {
+                    equip[slot] = s.IntValue;
+                    if (s.IntValue <= 0)
+                    {
+                        equipRarities[slot] = 0;
+                        equipEnchants[slot] = string.Empty;
+                    }
+                    changed = true;
+                }
+            }
+            else if (s.StatType == RotmgProtocolConstants.StatStars && s.IntValue >= 0)
+            {
+                if (_state.AccountStars != s.IntValue)
+                {
+                    accountStars = s.IntValue;
+                    changed = true;
+                }
+            }
+            else if (s.StatType == RotmgProtocolConstants.StatCredits && s.IntValue >= 0)
+            {
+                if (_state.AccountGold != s.IntValue)
+                {
+                    accountGold = s.IntValue;
+                    changed = true;
+                }
+            }
+            else if (s.StatType == RotmgProtocolConstants.StatUniqueData && !string.IsNullOrEmpty(s.StringValue))
+            {
+                // Sloty 0..3 w stat 80 gracza odpowiadają założonemu ekwipunkowi [Weapon, Ability, Armor, Ring]
+                for (int slot = 0; slot < 4; slot++)
+                {
+                    var parsed = ItemDataParser.ParseSlot(s.StringValue, slot);
+                    int rVal = parsed != null ? (int)parsed.Rarity : 0;
+                    string enchCsv = parsed?.EnchantmentsText ?? string.Empty;
+                    if (equipRarities[slot] != rVal || !string.Equals(equipEnchants[slot], enchCsv, StringComparison.Ordinal))
+                    {
+                        equipRarities[slot] = rVal;
+                        equipEnchants[slot] = enchCsv;
+                        changed = true;
+                    }
+                }
             }
         }
 
@@ -924,7 +973,7 @@ public class RotmgStreamProcessor
         }
 
         if (changed)
-            _state.UpdateActiveCharacterStats(maxedStats, baseFame, equip, skinId, exaltBonuses);
+            _state.UpdateActiveCharacterStats(maxedStats, baseFame, equip, skinId, exaltBonuses, equipRarities, equipEnchants, accountStars, accountGold);
     }
 
     private void ParseDamage(ref RotmgPacketReader reader)

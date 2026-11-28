@@ -43,7 +43,32 @@ else
             <button class="nav-item @(ActiveTab == nav.Key ? "active" : "")"
                     title="@nav.Label"
                     @onclick="() => SetTab(nav.Key)">
-                <span class="nav-icon"><UiIcon Name="@nav.Icon" Size="17" /></span>
+                <span class="nav-icon">
+                    @switch (nav.Key)
+                    {
+                        case "dashboard":
+                            <GameSprite ItemId="0x0CE4" Size="20" />
+                            break;
+                        case "loot":
+                            <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="20" />
+                            break;
+                        case "dps":
+                            <GameSprite BossName="Oryx the Mad God 3" Size="20" />
+                            break;
+                        case "collection":
+                            <GameSprite ItemId="0x0913" Size="20" />
+                            break;
+                        case "profile":
+                            <GameSprite Class="State.ActiveCharacter.Class" SkinId="State.ActiveCharacter.SkinId" Size="20" />
+                            break;
+                        case "graveyard":
+                            <GameSprite TextureFile="lofiChar216x16" TextureIndex="0x16" Size="20" />
+                            break;
+                        default:
+                            <UiIcon Name="@nav.Icon" Size="17" />
+                            break;
+                    }
+                </span>
                 <span class="nav-label">@nav.Label</span>
             </button>
         }
@@ -148,11 +173,6 @@ else
             <GraveyardPanel />
         }
 
-        @if (ActiveTab == "data")
-        {
-            <DataSafetyPanel />
-        }
-
         @if (ActiveTab == "settings")
         {
             <SettingsPanel OnSetTab="SetTab" />
@@ -175,7 +195,6 @@ else
         ("collection", "collection", "Item Collection"),
         ("profile",    "profile",    "Profile"),
         ("graveyard",  "graveyard",  "Graveyard"),
-        ("data",       "shield",     "Backup & Sync"),
         ("settings",   "settings",   "Settings")
     };
 

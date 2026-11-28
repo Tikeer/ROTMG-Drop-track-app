@@ -66,21 +66,29 @@
         </div>
 
         <div class="profile-hero-middle">
-            <div class="profile-equip-strip" title="Equipped gear (from passive sniffer)">
+            <div class="profile-equip-strip" title="Equipped gear with rarity & enchantments (from passive sniffer)">
                 @for (int i = 0; i < 4; i++)
                 {
                     int eqId = i < ch.EquipmentIds.Length ? ch.EquipmentIds[i] : 0;
+                    ItemRarity eqRarity = i < ch.EquipmentRarities.Length
+                        ? (ItemRarity)Math.Clamp(ch.EquipmentRarities[i], 0, 4)
+                        : ItemRarity.Common;
+                    string eqEnchants = i < ch.EquipmentEnchants.Length ? ch.EquipmentEnchants[i] : string.Empty;
                     string slotLabel = equipSlotNames[i];
+
                     if (eqId > 0)
                     {
-                        string eqName = GameData.TryGetItem(eqId, out var eqMeta) ? eqMeta.Name : $"Item 0x{eqId:X4}";
-                        <div class="profile-equip-slot sprite-tip-host">
-                            <GameSprite ItemId="eqId" Size="30" />
-                            <div class="rotmg-tooltip rotmg-tooltip-sm">
-                                <div class="rotmg-tooltip-title">@eqName</div>
-                                <div class="rotmg-tooltip-sub">@slotLabel</div>
-                            </div>
-                        </div>
+                        bool hasMeta = GameData.TryGetItem(eqId, out var eqMeta);
+                        string eqName = hasMeta ? eqMeta.Name : $"Item 0x{eqId:X4}";
+                        bool eqShiny = hasMeta && eqMeta.IsShiny;
+                        <ItemSprite ItemId="eqId"
+                                    ItemName="@eqName"
+                                    Rarity="eqRarity"
+                                    IsShiny="eqShiny"
+                                    DropQuality="@(hasMeta ? eqMeta.Quality : null)"
+                                    Enchantments="@eqEnchants"
+                                    ExtraMeta="@slotLabel"
+                                    Size="40" />
                     }
                     else
                     {
