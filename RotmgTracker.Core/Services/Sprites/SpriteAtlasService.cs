@@ -11,8 +11,9 @@ public readonly record struct SpriteRect(int X, int Y, int W, int H);
 /// </summary>
 public sealed class SpriteAtlasService
 {
-    private const int ManifestVersion = 1;
+    private const int ManifestVersion = 2;
     private const int Padding = 1;
+    private const string GuiAtlasSourceKey = "__GUI_ATLAS__";
 
     private readonly GameDataService _gameData;
     private readonly string _spritesDir;
@@ -168,15 +169,17 @@ public sealed class SpriteAtlasService
 
         var assetsIndex = UnityAssetsReader.ReadIndex(assetsPath);
         var resolved = UnityAssetsReader.ReadSpritesheetLookup(assetsPath, assetsIndex, neededKeys);
+        var guiSprites = UnityAssetsReader.ReadGuiAtlasSprites(assetsPath, assetsIndex, UnityAssetsReader.WantedGuiSprites);
 
-        if (resolved.Count == 0)
+        if (resolved.Count == 0 && guiSprites.Count == 0)
         {
             StatusMessage = "Could not resolve any sprites from resources.assets spritesheet";
             return false;
         }
 
         // Filter to entries whose target texture exists and bounds are valid
-        var packItems = new List<(string Key, UnityAssetsReader.SourceSpriteEntry Src, string TexName)>(resolved.Count);
+        // IsUnityBottomUpRect = true for GUI Atlas (y=0 is bottom of texture), false for spritesheet JSON (y=0 is top)
+        var packItems = new List<(string Key, UnityAssetsReader.SourceSpriteEntry Src, string TexName, bool IsUnityBottomUpRect)>(resolved.Count + guiSprites.Count);
         foreach (var (key, src) in resolved)
         {
             string? texName = UnityAssetsReader.AtlasIdToTextureName(src.AtlasId);
@@ -187,7 +190,12 @@ public sealed class SpriteAtlasService
                 src.X + src.W > texInfo.Width || src.Y + src.H > texInfo.Height)
                 continue;
 
-            packItems.Add((MakeKey(key.Sheet, key.Index), src, texName));
+            packItems.Add((MakeKey(key.Sheet, key.Index), src, texName, false));
+        }
+
+        foreach (var g in guiSprites)
+        {
+            packItems.Add((MakeUiKey(g.Name), new UnityAssetsReader.SourceSpriteEntry(0, g.X, g.Y, g.W, g.H), GuiAtlasSourceKey, true));
         }
 
         if (packItems.Count == 0)
@@ -204,7 +212,7 @@ public sealed class SpriteAtlasService
         });
 
         int atlasWidth = 1024;
-        var placements = new List<(string Key, UnityAssetsReader.SourceSpriteEntry Src, string TexName, SpriteRect Dest)>(packItems.Count);
+        var placements = new List<(string Key, UnityAssetsReader.SourceSpriteEntry Src, string TexName, bool IsUnityBottomUpRect, SpriteRect Dest)>(packItems.Count);
         int curX = Padding;
         int curY = Padding;
         int shelfHeight = 0;
@@ -221,7 +229,7 @@ public sealed class SpriteAtlasService
                 shelfHeight = 0;
             }
 
-            placements.Add((item.Key, item.Src, item.TexName, new SpriteRect(curX, curY, item.Src.W, item.Src.H)));
+            placements.Add((item.Key, item.Src, item.TexName, item.IsUnityBottomUpRect, new SpriteRect(curX, curY, item.Src.W, item.Src.H)));
             curX += item.Src.W + Padding;
             if (item.Src.H > shelfHeight)
                 shelfHeight = item.Src.H;
@@ -229,12 +237,41 @@ public sealed class SpriteAtlasService
 
         int atlasHeight = Math.Max(16, curY + shelfHeight + Padding);
         byte[] atlasRgba = new byte[atlasWidth * atlasHeight * 4];
+        int dstStride = atlasWidth * 4;
 
-        // Copy pixels one source texture at a time (keeps peak RAM <= 134 MB and finishes in ~200 ms)
+        // Copy pixels one source texture at a time (keeps peak RAM <= 134 MB and finishes in ~500 ms)
         using (var fs = new FileStream(assetsPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
         {
             foreach (var texGroup in placements.GroupBy(p => p.TexName, StringComparer.OrdinalIgnoreCase))
             {
+                if (texGroup.Key == GuiAtlasSourceKey)
+                {
+                    var guiTex = assetsIndex.GuiAtlasTexture;
+                    if (guiTex == null || string.IsNullOrWhiteSpace(guiTex.ExternalFileName)) continue;
+
+                    string dataDir = Path.GetDirectoryName(assetsPath) ?? string.Empty;
+                    string ressPath = Path.Combine(dataDir, guiTex.ExternalFileName);
+                    if (!File.Exists(ressPath)) continue;
+
+                    using var rfs = new FileStream(ressPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    int srcStride = guiTex.Width * 4;
+                    foreach (var p in texGroup)
+                    {
+                        int copyBytes = p.Src.W * 4;
+                        byte[] rowBuf = new byte[copyBytes];
+                        for (int dy = 0; dy < p.Src.H; dy++)
+                        {
+                            // GUI Atlas textureRect.y is already bottom-up; flip to top-down PNG row order
+                            int srcRow = p.Src.Y + (p.Src.H - 1 - dy);
+                            rfs.Position = guiTex.PixelDataOffset + (long)srcRow * srcStride + p.Src.X * 4L;
+                            rfs.ReadExactly(rowBuf);
+                            int dstOffset = (p.Dest.Y + dy) * dstStride + p.Dest.X * 4;
+                            Buffer.BlockCopy(rowBuf, 0, atlasRgba, dstOffset, copyBytes);
+                        }
+                    }
+                    continue;
+                }
+
                 if (!assetsIndex.Textures.TryGetValue(texGroup.Key, out var texInfo))
                     continue;
 
@@ -242,8 +279,7 @@ public sealed class SpriteAtlasService
                 fs.Position = texInfo.PixelDataOffset;
                 fs.ReadExactly(texBuffer);
 
-                int srcStride = texInfo.Width * 4;
-                int dstStride = atlasWidth * 4;
+                int mainSrcStride = texInfo.Width * 4;
 
                 foreach (var p in texGroup)
                 {
@@ -252,7 +288,7 @@ public sealed class SpriteAtlasService
                     {
                         // Unity Texture2D pixels are bottom-up; flip Y to standard top-down PNG
                         int srcRow = texInfo.Height - 1 - (p.Src.Y + dy);
-                        int srcOffset = srcRow * srcStride + p.Src.X * 4;
+                        int srcOffset = srcRow * mainSrcStride + p.Src.X * 4;
                         int dstOffset = (p.Dest.Y + dy) * dstStride + p.Dest.X * 4;
                         Buffer.BlockCopy(texBuffer, srcOffset, atlasRgba, dstOffset, copyBytes);
                     }
@@ -341,8 +377,41 @@ public sealed class SpriteAtlasService
         return false;
     }
 
+    public bool TryGetUiSprite(string? uiSpriteName, out SpriteRect rect)
+    {
+        if (!IsReady || string.IsNullOrWhiteSpace(uiSpriteName))
+        {
+            rect = default;
+            return false;
+        }
+
+        lock (_lock)
+        {
+            return _entries.TryGetValue(MakeUiKey(uiSpriteName), out rect);
+        }
+    }
+
+    public bool TryGetRarityIconSprite(ItemRarity rarity, out SpriteRect rect)
+    {
+        string? name = rarity switch
+        {
+            ItemRarity.Uncommon => "RarityIcon_1",
+            ItemRarity.Rare => "RarityIcon_2",
+            ItemRarity.Legendary => "RarityIcon_3",
+            ItemRarity.Divine => "RarityIcon_4",
+            _ => null
+        };
+        return TryGetUiSprite(name, out rect);
+    }
+
     public bool TryGetPortalSprite(string? dungeonName, int portalObjectType, out SpriteRect rect)
     {
+        if (!string.IsNullOrWhiteSpace(dungeonName) &&
+            dungeonName.Contains("Realm of the Mad God", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryGetSprite("lofiEnvironment2", 0x36, out rect);
+        }
+
         PortalMetadata? portal = portalObjectType > 0
             ? _gameData.ResolvePortalByObjectType(portalObjectType)
             : null;
@@ -387,6 +456,7 @@ public sealed class SpriteAtlasService
     }
 
     private static string MakeKey(string sheet, int index) => $"{sheet}:{index}";
+    private static string MakeUiKey(string uiSpriteName) => $"ui:{uiSpriteName}";
 
     private static int NextPowerOfTwo(int v)
     {

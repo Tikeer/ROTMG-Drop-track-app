@@ -4,7 +4,7 @@
     <h2>@State.ActiveCharacter.FormattedTitle — Drop Counters</h2>
     <div style="display: flex; gap: 10px; align-items: center;">
         <span class="badge-nossnl badge-readonly inline-meta-item">
-            <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="16" />
+            <GameSprite PortalObjectType="State.CurrentDungeonPortalType" DungeonName="@State.CurrentDungeonName" Size="18" />
             <span>@State.CurrentDungeonName</span>
             @if (State.CurrentDungeonGraves > 0)
             {
@@ -17,20 +17,69 @@
     </div>
 </div>
 
-<div class="drops-grid">
+<!-- COMPACT SPRITE + COUNT CARDS (tooltip on hover, no dots, no UT) -->
+<div class="counter-grid-compact">
     @foreach (var dropType in DisplayDropTypes)
     {
         int val = State.ActiveCharacter.Drops.GetValueOrDefault(dropType);
-        var repBag = UiHelpers.GetRepresentativeBag(dropType);
-        <div class="drop-card">
-            <div class="drop-card-header">
-                <span class="drop-title">@UiHelpers.FormatDropType(dropType)</span>
-                <div class="inline-meta-item">
-                    <GameSprite BagObjectType="repBag.ObjectType" FallbackBagType="repBag.FallbackBag" Size="20" Title="@UiHelpers.FormatDropType(dropType)" />
-                    <span class="bag-dot @UiHelpers.GetDotClass(dropType)"></span>
-                </div>
+        string label = UiHelpers.FormatDropType(dropType);
+
+        <div class="counter-card-compact sprite-tip-host">
+            <div class="counter-icon-box">
+                @switch (dropType)
+                {
+                    case DropType.RegularWhite:
+                        <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="34" />
+                        <span class="counter-sub-badge">
+                            <GameSprite UiSpriteName="material_rare" Size="18" />
+                        </span>
+                        break;
+
+                    case DropType.LegendaryWhite:
+                        <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="34" />
+                        <span class="counter-sub-badge">
+                            <GameSprite UiSpriteName="material_legendary" Size="18" />
+                        </span>
+                        break;
+
+                    case DropType.EventWhite:
+                        <GameSprite BagObjectType="0x050C" FallbackBagType="BagType.WhiteBag" Size="34" />
+                        <span class="counter-sub-badge">
+                            <GameSprite TextureFile="lofiEnvironment2" TextureIndex="0x36" Size="18" />
+                        </span>
+                        break;
+
+                    case DropType.ST:
+                        <GameSprite BagObjectType="0x050F" FallbackBagType="BagType.OrangeBag" Size="34" />
+                        break;
+
+                    case DropType.BPs:
+                        <GameSprite BagObjectType="0x050E" FallbackBagType="BagType.GoldBag" Size="34" />
+                        break;
+
+                    case DropType.Tops:
+                        <GameSprite BagObjectType="0x06AC" FallbackBagType="BagType.RedBag" Size="34" />
+                        break;
+
+                    case DropType.DivineGoodItem:
+                        <ItemSprite ItemId="2505" Rarity="ItemRarity.Divine" Size="40" ShowTooltip="false" />
+                        break;
+
+                    case DropType.Shiny:
+                        <ItemSprite ItemId="1210" IsShiny="true" Size="40" ShowTooltip="false" />
+                        break;
+
+                    case DropType.Shivine:
+                        <ItemSprite ItemId="1210" IsShiny="true" Rarity="ItemRarity.Divine" Size="40" ShowTooltip="false" />
+                        break;
+                }
             </div>
-            <div class="drop-value">@val</div>
+            <div class="counter-value-compact">@val</div>
+
+            <div class="rotmg-tooltip rotmg-tooltip-sm">
+                <div class="rotmg-tooltip-title">@label</div>
+                <div class="rotmg-tooltip-sub">@val recorded on @State.ActiveCharacter.Class #@State.ActiveCharacter.ClassSlotNumber</div>
+            </div>
         </div>
     }
 </div>
@@ -41,7 +90,7 @@
 </div>
 
 @{
-    var recentBagGroups = UiHelpers.GroupByBagInstance(State.GetLootSnapshot(DataScope.AllCharacters).Where(l => l.BagType != DropType.Other).Take(12));
+    var recentBagGroups = UiHelpers.GroupByBagInstance(State.GetLootSnapshot(DataScope.AllCharacters).Where(l => l.BagType != DropType.Other).Take(16));
 }
 
 @if (recentBagGroups.Count == 0)
@@ -54,52 +103,70 @@ else
         @foreach (var bagGroup in recentBagGroups)
         {
             var first = bagGroup[0];
-            <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
-                <div style="min-width: 145px; font-size: 0.78rem; color: var(--text-muted);">
+            var bestItem = bagGroup.OrderByDescending(i => i.RarityScore).First();
+            <div class="drop-log-row" style="border-left: 4px solid @UiHelpers.GetRarityBorderColor(bestItem.Rarity, bestItem.IsShiny);">
+                <div class="drop-log-time">
                     <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
                         <UiIcon Name="clock" Size="12" />
-                        <span>@first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                        <span>@first.DroppedAt.ToString("HH:mm:ss")</span>
                     </div>
-                    <div>Fame: <strong>@first.BaseFameAtDrop.ToString("N0")</strong> • @first.ServerName</div>
+                    <div>@first.DroppedAt.ToString("yyyy-MM-dd") • @first.ServerName</div>
                 </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="@first.PhysicalBag (0x@(first.BagObjectType.ToString("X4")))">
-                    <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="22" Title="@first.PhysicalBag.ToString()" />
-                    <span>@first.PhysicalBag</span>
+
+                <div class="drop-context-strip">
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="32" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.PhysicalBag</div>
+                            <div class="rotmg-tooltip-sub">Container 0x@(first.BagObjectType.ToString("X4"))</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="30" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.CharacterName</div>
+                            <div class="rotmg-tooltip-sub">Fame: @first.BaseFameAtDrop.ToString("N0")</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="30" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.DungeonName</div>
+                            <div class="rotmg-tooltip-sub">@first.GraveDifficulty.ToString("0.#")/10 Graves</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="32" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.BossName</div>
+                            <div class="rotmg-tooltip-sub">@first.DungeonName</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="badge-ssnl badge-readonly inline-meta-item" title="SkinId: @first.CharacterSkinId">
-                    <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="20" Title="@first.CharacterName" />
-                    <span>@first.CharacterName</span>
-                </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="Portal: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
-                    <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="18" Title="@first.DungeonName" />
-                    <span>@first.DungeonName (@first.GraveDifficulty.ToString("0.#")/10)</span>
-                </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="Boss: 0x@(first.BossObjectType.ToString("X4"))">
-                    <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="20" Title="@first.BossName" />
-                    <span>@first.BossName</span>
-                </div>
-                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+
+                <div class="drop-items-strip">
                     @foreach (var item in bagGroup)
                     {
-                        <div class="bag-item-chip" style="border-color: @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny);">
-                            <GameSprite ItemId="item.ItemId" Size="24" Title="@item.ItemName" />
-                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">@item.ItemName</strong>
-                            @if (item.IsShiny)
-                            {
-                                <span class="shiny-pill">SHINY</span>
-                            }
-                            <span style="font-size: 0.74rem; color: #c084fc;">
-                                [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
-                            </span>
-                        </div>
+                        <ItemSprite ItemId="item.ItemId"
+                                    ItemName="@item.ItemName"
+                                    Rarity="item.Rarity"
+                                    IsShiny="item.IsShiny"
+                                    DropQuality="item.BagType"
+                                    RarityScore="item.RarityScore"
+                                    Size="42" />
                     }
                 </div>
+
                 @if (first.CombatSessionId.HasValue)
                 {
                     <button class="btn btn-sm inline-meta-item" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                            title="View Fight DPS"
                             @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
                         <UiIcon Name="sword" Size="14" />
-                        <span>View Fight DPS</span>
+                        <span>DPS</span>
                     </button>
                 }
             </div>
@@ -111,7 +178,16 @@ else
     [Parameter] public EventCallback<string> OnSetTab { get; set; }
     [Parameter] public EventCallback<Guid> OnOpenFight { get; set; }
 
-    private static readonly DropType[] DisplayDropTypes = Enum.GetValues<DropType>()
-        .Where(t => t != DropType.Other && t != DropType.Tiered)
-        .ToArray();
+    private static readonly DropType[] DisplayDropTypes =
+    [
+        DropType.RegularWhite,
+        DropType.LegendaryWhite,
+        DropType.EventWhite,
+        DropType.ST,
+        DropType.BPs,
+        DropType.Tops,
+        DropType.DivineGoodItem,
+        DropType.Shiny,
+        DropType.Shivine
+    ];
 }

@@ -1,0 +1,96 @@
+@* Authentic RotMG item slot tile with in-game RarityIcon_1..4 overlay, shiny_item_icon sparkle, and instant hover tooltip. *@
+
+@{
+    int innerSize = Math.Max(16, Size - 8);
+    int rarityBadgeSize = Math.Max(14, (int)Math.Round(Size * 0.42));
+    int shinyBadgeSize = Math.Max(10, (int)Math.Round(Size * 0.30));
+    string rarityClass = Rarity switch
+    {
+        ItemRarity.Uncommon => "rarity-uncommon",
+        ItemRarity.Rare => "rarity-rare",
+        ItemRarity.Legendary => "rarity-legendary",
+        ItemRarity.Divine => "rarity-divine",
+        _ => "rarity-common"
+    };
+}
+
+<div class="item-slot @rarityClass @(IsShiny ? "is-shiny" : "") @CssClass"
+     style="width: @(Size)px; height: @(Size)px;">
+
+    @if (!string.IsNullOrWhiteSpace(TextureFile))
+    {
+        <GameSprite TextureFile="@TextureFile" TextureIndex="TextureIndex" Size="innerSize" />
+    }
+    else if (ItemId.HasValue)
+    {
+        <GameSprite ItemId="ItemId.Value" Size="innerSize" />
+    }
+
+    @if (IsShiny)
+    {
+        <span class="item-slot-shiny-overlay">
+            <GameSprite UiSpriteName="shiny_item_icon" Size="shinyBadgeSize" />
+        </span>
+    }
+
+    @if (Rarity > ItemRarity.Common)
+    {
+        <span class="item-slot-rarity-overlay">
+            <GameSprite RarityIcon="Rarity" Size="rarityBadgeSize" />
+        </span>
+    }
+
+    @if (OnRemove.HasDelegate)
+    {
+        <button type="button"
+                class="item-slot-remove"
+                title="Remove drop record"
+                @onclick:stopPropagation="true"
+                @onclick="() => OnRemove.InvokeAsync()">✕</button>
+    }
+
+    @if (ShowTooltip && !string.IsNullOrWhiteSpace(ItemName))
+    {
+        <div class="rotmg-tooltip">
+            <div class="rotmg-tooltip-title" style="color: @(IsShiny ? "#f472b6" : "var(--text-primary)");">
+                <span>@ItemName</span>
+                @if (IsShiny)
+                {
+                    <span class="shiny-pill">SHINY</span>
+                }
+            </div>
+            <div class="rotmg-tooltip-meta">
+                <span class="rarity-text-@Rarity.ToString().ToLowerInvariant()">@Rarity (@((int)Rarity) slots)</span>
+                @if (DropQuality.HasValue && DropQuality.Value != DropType.Other)
+                {
+                    <span>• @UiHelpers.FormatDropType(DropQuality.Value)</span>
+                }
+            </div>
+            @if (RarityScore > 0)
+            {
+                <div class="rotmg-tooltip-score">Rarity Score: <strong>@Math.Round(RarityScore) pts</strong></div>
+            }
+            @if (!string.IsNullOrWhiteSpace(ExtraMeta))
+            {
+                <div class="rotmg-tooltip-sub">@ExtraMeta</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Size { get; set; } = 42;
+    [Parameter] public int? ItemId { get; set; }
+    [Parameter] public string? TextureFile { get; set; }
+    [Parameter] public int TextureIndex { get; set; }
+
+    [Parameter] public string? ItemName { get; set; }
+    [Parameter] public ItemRarity Rarity { get; set; } = ItemRarity.Common;
+    [Parameter] public bool IsShiny { get; set; }
+    [Parameter] public DropType? DropQuality { get; set; }
+    [Parameter] public double RarityScore { get; set; }
+    [Parameter] public string? ExtraMeta { get; set; }
+    [Parameter] public bool ShowTooltip { get; set; } = true;
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public EventCallback OnRemove { get; set; }
+}

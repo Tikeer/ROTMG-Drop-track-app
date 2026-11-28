@@ -94,7 +94,11 @@
             </div>
 
             <div class="collection-item-row">
-                <GameSprite TextureFile="@item.TextureFile" TextureIndex="item.TextureIndex" Size="32" Title="@item.Name" />
+                <ItemSprite TextureFile="@item.TextureFile"
+                            TextureIndex="item.TextureIndex"
+                            IsShiny="item.IsShiny"
+                            Size="38"
+                            ShowTooltip="false" />
                 <div style="min-width: 0; flex: 1;">
                     <div style="font-weight: 700; font-size: 0.92rem; color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)"); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                         <span>@item.Name</span>

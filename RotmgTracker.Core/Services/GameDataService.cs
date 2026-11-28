@@ -306,6 +306,9 @@ public class GameDataService
             foreach (var c in _classSprites.Values) Add(c.TextureFile, c.TextureIndex);
             foreach (var s in _skinSprites.Values) Add(s.TextureFile, s.TextureIndex);
 
+            // Always include Glowing Realm Portal (green orb used for Realm of the Mad God & Realm White counter)
+            Add("lofiEnvironment2", 0x36);
+
             return list;
         }
     }

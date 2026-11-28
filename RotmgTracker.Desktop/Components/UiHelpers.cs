@@ -24,7 +24,7 @@ public static class UiHelpers
         DropType.ST => (0x050F, BagType.OrangeBag),
         DropType.Tops => (0x06AC, BagType.RedBag),
         DropType.UT or DropType.DivineGoodItem => (0x0509, BagType.CyanBag),
-        DropType.BPs => (0x050B, BagType.BlueBag),
+        DropType.BPs => (0x050E, BagType.GoldBag),
         _ => (0x0507, BagType.PurpleBag)
     };
     public static string FormatDropType(DropType t) => t switch
@@ -33,6 +33,7 @@ public static class UiHelpers
         DropType.LegendaryWhite => "Legendary White",
         DropType.DivineGoodItem => "Divine Good Item",
         DropType.EventWhite => "Realm White",
+        DropType.BPs => "Gold Bag",
         _ => t.ToString()
     };
 

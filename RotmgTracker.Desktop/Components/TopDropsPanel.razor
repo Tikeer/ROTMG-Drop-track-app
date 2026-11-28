@@ -24,8 +24,12 @@ else
         {
             <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(drop.Rarity, drop.IsShiny);">
                 <span style="color: var(--text-muted); font-weight: 700; min-width: 28px;">#@rank</span>
-                <div class="inline-meta-item" style="min-width: 260px; gap: 8px;">
-                    <GameSprite ItemId="drop.ItemId" Size="26" Title="@drop.ItemName" />
+                <div class="inline-meta-item" style="min-width: 260px; gap: 10px;">
+                    <ItemSprite ItemId="drop.ItemId"
+                                Rarity="drop.Rarity"
+                                IsShiny="drop.IsShiny"
+                                Size="36"
+                                ShowTooltip="false" />
                     <div>
                         <div class="inline-meta-item">
                             <strong style="color: @(drop.IsShiny ? "#f472b6" : "var(--accent-white)");">@drop.ItemName</strong>

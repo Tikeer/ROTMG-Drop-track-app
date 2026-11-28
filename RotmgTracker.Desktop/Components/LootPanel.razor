@@ -89,53 +89,72 @@ else
         @foreach (var bagGroup in visibleGroups)
         {
             var first = bagGroup[0];
-            <div class="quest-row" style="flex-wrap: wrap; gap: 12px; border-left: 4px solid @UiHelpers.GetRarityBorderColor(first.Rarity, first.IsShiny);">
-                <div style="min-width: 145px; font-size: 0.78rem; color: var(--text-muted);">
+            var bestItem = bagGroup.OrderByDescending(i => i.RarityScore).First();
+            <div class="drop-log-row" style="border-left: 4px solid @UiHelpers.GetRarityBorderColor(bestItem.Rarity, bestItem.IsShiny);">
+                <div class="drop-log-time">
                     <div class="inline-meta-item" style="font-weight: 700; color: var(--text-primary);">
                         <UiIcon Name="clock" Size="12" />
-                        <span>@first.DroppedAt.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                        <span>@first.DroppedAt.ToString("HH:mm:ss")</span>
                     </div>
-                    <div>Fame: <strong>@first.BaseFameAtDrop.ToString("N0")</strong> • @first.ServerName</div>
+                    <div>@first.DroppedAt.ToString("yyyy-MM-dd") • @first.ServerName</div>
                 </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="@first.PhysicalBag (0x@(first.BagObjectType.ToString("X4")))">
-                    <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="22" Title="@first.PhysicalBag.ToString()" />
-                    <span>@first.PhysicalBag</span>
+
+                <div class="drop-context-strip">
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite BagObjectType="first.BagObjectType" FallbackBagType="first.PhysicalBag" Size="32" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.PhysicalBag</div>
+                            <div class="rotmg-tooltip-sub">Container 0x@(first.BagObjectType.ToString("X4"))</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="30" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.CharacterName</div>
+                            <div class="rotmg-tooltip-sub">Fame: @first.BaseFameAtDrop.ToString("N0")</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="30" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.DungeonName</div>
+                            <div class="rotmg-tooltip-sub">@first.GraveDifficulty.ToString("0.#")/10 Graves</div>
+                        </div>
+                    </div>
+
+                    <div class="context-sprite-box sprite-tip-host">
+                        <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="32" />
+                        <div class="rotmg-tooltip rotmg-tooltip-sm">
+                            <div class="rotmg-tooltip-title">@first.BossName</div>
+                            <div class="rotmg-tooltip-sub">@first.DungeonName</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="badge-ssnl badge-readonly inline-meta-item" title="SkinId: @first.CharacterSkinId">
-                    <GameSprite Class="first.CharacterClass" SkinId="first.CharacterSkinId" Size="20" Title="@first.CharacterName" />
-                    <span>@first.CharacterName</span>
-                </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="Portal: 0x@(first.DungeonPortalObjectType.ToString("X4"))">
-                    <GameSprite PortalObjectType="first.DungeonPortalObjectType" DungeonName="@first.DungeonName" Size="18" Title="@first.DungeonName" />
-                    <span>@first.DungeonName (@first.GraveDifficulty.ToString("0.#")/10)</span>
-                </div>
-                <div class="badge-nossnl badge-readonly inline-meta-item" title="Boss: 0x@(first.BossObjectType.ToString("X4"))">
-                    <GameSprite BossObjectType="first.BossObjectType" BossName="@first.BossName" Size="20" Title="@first.BossName" />
-                    <span>@first.BossName</span>
-                </div>
-                <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+
+                <div class="drop-items-strip">
                     @foreach (var item in bagGroup)
                     {
-                        <div class="bag-item-chip" style="border-color: @UiHelpers.GetRarityBorderColor(item.Rarity, item.IsShiny);">
-                            <GameSprite ItemId="item.ItemId" Size="26" Title="@item.ItemName" />
-                            <strong style="color: @(item.IsShiny ? "#f472b6" : "var(--accent-white)");">@item.ItemName</strong>
-                            @if (item.IsShiny)
-                            {
-                                <span class="shiny-pill">SHINY</span>
-                            }
-                            <span style="font-size: 0.74rem; color: #c084fc;">
-                                [@item.Rarity • @item.EnchantmentSlots slots • @item.RarityScore pts]
-                            </span>
-                            <button class="btn btn-danger btn-sm" style="padding: 1px 6px;" @onclick="() => State.RemoveLootRecord(item.Id)">✕</button>
-                        </div>
+                        var capturedId = item.Id;
+                        <ItemSprite ItemId="item.ItemId"
+                                    ItemName="@item.ItemName"
+                                    Rarity="item.Rarity"
+                                    IsShiny="item.IsShiny"
+                                    DropQuality="item.BagType"
+                                    RarityScore="item.RarityScore"
+                                    Size="42"
+                                    OnRemove="() => State.RemoveLootRecord(capturedId)" />
                     }
                 </div>
+
                 @if (first.CombatSessionId.HasValue)
                 {
                     <button class="btn btn-sm inline-meta-item" style="border-color: var(--accent-gold); color: var(--accent-gold);"
+                            title="View Fight DPS"
                             @onclick="() => OnOpenFight.InvokeAsync(first.CombatSessionId.Value)">
                         <UiIcon Name="sword" Size="14" />
-                        <span>View Fight DPS</span>
+                        <span>DPS</span>
                     </button>
                 }
             </div>

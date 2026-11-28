@@ -35,6 +35,8 @@ else if (!string.IsNullOrEmpty(FallbackText))
     [Parameter] public string? CssClass { get; set; }
     [Parameter] public string? FallbackText { get; set; }
 
+    [Parameter] public string? UiSpriteName { get; set; }
+    [Parameter] public ItemRarity? RarityIcon { get; set; }
     [Parameter] public string? TextureFile { get; set; }
     [Parameter] public int TextureIndex { get; set; }
 
@@ -51,6 +53,12 @@ else if (!string.IsNullOrEmpty(FallbackText))
 
     private bool TryResolve(out SpriteRect rect)
     {
+        if (!string.IsNullOrWhiteSpace(UiSpriteName))
+            return Sprites.TryGetUiSprite(UiSpriteName, out rect);
+
+        if (RarityIcon.HasValue)
+            return Sprites.TryGetRarityIconSprite(RarityIcon.Value, out rect);
+
         if (!string.IsNullOrWhiteSpace(TextureFile))
             return Sprites.TryGetSprite(TextureFile, TextureIndex, out rect);
 
