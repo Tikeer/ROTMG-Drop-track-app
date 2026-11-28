@@ -99,6 +99,29 @@ else
                 @(Sniffer.CaptureEnabled ? "Stop Capture" : "Start Capture")
             </button>
         </div>
+
+        <div class="settings-row settings-row-stack">
+            <div class="settings-row-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                <div>
+                    <div class="settings-row-label">Loot Bag Tracking</div>
+                    <div class="settings-row-desc">Choose which bag colors are saved to Loot History. Boss kills, DPS, dungeon completions, and Tinkerer marks are always tracked.</div>
+                </div>
+                <button type="button" class="btn btn-sm" @onclick="UiSettings.ResetTrackedBags">Enable All</button>
+            </div>
+            <div class="bag-filter-grid">
+                @foreach (var bag in TrackableBagOptions)
+                {
+                    bool enabled = UiSettings.IsBagTracked(bag.Bag);
+                    <button type="button"
+                            class="bag-filter-chip @(enabled ? "is-on" : "is-off")"
+                            title="@(enabled ? "Click to stop saving drops from this bag" : "Click to start saving drops from this bag")"
+                            @onclick="() => ToggleBag(bag.Bag)">
+                        <GameSprite BagObjectType="@bag.ObjectType" FallbackBagType="@bag.Bag" Size="20" />
+                        <span>@bag.Label</span>
+                    </button>
+                }
+            </div>
+        </div>
     </div>
 
     <!-- GAME DATA & CATALOGS -->
@@ -206,7 +229,24 @@ else
 @code {
     [Parameter] public EventCallback<string> OnSetTab { get; set; }
 
+    private static readonly (BagType Bag, int ObjectType, string Label)[] TrackableBagOptions =
+    [
+        (BagType.WhiteBag,  0x050C, "White"),
+        (BagType.OrangeBag, 0x050F, "Orange (ST)"),
+        (BagType.RedBag,    0x06AC, "Red (Tops)"),
+        (BagType.GoldBag,   0x050E, "Gold (BP)"),
+        (BagType.BlueBag,   0x050B, "Blue"),
+        (BagType.CyanBag,   0x0509, "Cyan"),
+        (BagType.EggBag,    0x0508, "Egg"),
+        (BagType.PurpleBag, 0x0507, "Purple")
+    ];
+
     private string _subTab = "general";
+
+    private void ToggleBag(BagType bag)
+    {
+        UiSettings.SetBagTracked(bag, !UiSettings.IsBagTracked(bag));
+    }
     private bool IsScanning => GameData.IsRescanning || _rescanInProgress;
     private bool _rescanInProgress;
     private string RescanMessage { get; set; } = string.Empty;

@@ -3676,3 +3676,47 @@ input, select { user-select: text; }
     line-height: 1.3;
     margin-top: 2px;
 }
+
+/* ===== Loot Bag Tracking Filter Chips (Settings D17) ===== */
+.settings-row-stack {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 10px;
+}
+
+.bag-filter-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.bag-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-main);
+    color: var(--text-muted);
+    transition: border-color 0.14s, background 0.14s, opacity 0.14s, color 0.14s;
+}
+
+.bag-filter-chip.is-on {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: rgba(56, 189, 248, 0.12);
+    color: var(--text-primary);
+}
+
+.bag-filter-chip.is-off {
+    opacity: 0.45;
+}
+
+.bag-filter-chip:hover {
+    border-color: var(--border-hover);
+    opacity: 1;
+}

@@ -40,6 +40,9 @@ public class RotmgStreamProcessor
     private readonly TrackerStateService _state;
     private readonly GameDataService _gameData;
 
+    /// <summary>Optional D17 filter controlling which physical bag colors are saved to LootHistory.</summary>
+    public Func<BagType, bool>? ShouldRecordBag { get; set; }
+
     private Rc4Cipher _serverCipher = new(Rc4Cipher.ServerToClientKeyHex);
     private Rc4Cipher _clientCipher = new(Rc4Cipher.ClientToServerKeyHex);
 
@@ -841,6 +844,10 @@ public class RotmgStreamProcessor
                     effectiveQuality = DropType.Other;
                 }
             }
+
+            // D17: optional physical bag filter before saving to LootHistory (boss kills & Tinkerer marks still processed above)
+            if (ShouldRecordBag != null && !ShouldRecordBag(physicalBag))
+                continue;
 
             _state.RecordLootDrop(
                 itemName: itemName,

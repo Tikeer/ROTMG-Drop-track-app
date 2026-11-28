@@ -1,4 +1,4 @@
-# RotMG Drop & Session Tracker
+# RotMG Drop, Dungeon & DPS Tracker (v2.0)
 
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet)
 ![C#](https://img.shields.io/badge/C%23-13-239120?style=flat-square&logo=csharp)
@@ -6,83 +6,98 @@
 ![Database](https://img.shields.io/badge/Database-SQLite%20%2B%20EF%20Core-003B57?style=flat-square&logo=sqlite)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2ea44f?style=flat-square)
 
-A lightweight, cross-platform desktop utility designed for **Realm of the Mad God (RotMG)** players to track character loot drops, daily dungeon mark quests, fallen characters, and end-of-season chest openings without relying on manual text notes.
+A cross-platform desktop tracker for **Realm of the Mad God (RotMG Exalt)** powered entirely by a **passive read-only TCP network sniffer** and local game asset extraction — zero manual data entry, zero client modification, zero server interference.
 
-Built with a decoupled architecture in **C# (.NET 10)** using **Photino.Blazor** and **SQLite** to deliver a fast, hardware-accelerated native desktop experience across Windows, macOS, and Linux while maintaining a shared domain layer ready for future expansion.
-
-<img width="905" height="618" alt="RotMG Tracker Dashboard" src="https://github.com/user-attachments/assets/20423096-2381-4508-81a5-3aaa0a9b80ca" />
-
-## Key Features
-
-- **Multi-Character & Class Tracking:** Create and switch between multiple active characters across all 18 RotMG classes with *Seasonal (SSNL)* and *Non-Seasonal* badges.
-- **Loot Counter:** Track *Regular Whites*, *Legendary Whites*, *STs*, *Blueprints*, *Tops*, *Divine Items*, *Shinies*, and *Shiny Divines* with instant background persistence.
-- **Automated Graveyard Archiving:** Marking a character as fallen (`RIP`) automatically archives its final loot statistics, class, and timestamp into a dedicated Graveyard view.
-- **Dungeon Mark To-Do List:** Track required dungeon marks (e.g., `3x Nest`, `4x Davy Jones`) for daily Tinkerer quests with animated progress bars and completion indicators.
-- **Chest Opening Analyzer:** Record loot across multiple chest categories (*Standard*, *Mighty*, *Void*, *Royal*, *Other*), track total chests opened, and calculate White/ST ratios in real time.
-- **SQLite Local Database:** Powered by **Entity Framework Core & SQLite** stored safely in the OS application data directory, featuring automatic migration from legacy `rotmg_data.json` files.
-
-## Architecture & Tech Stack
-
-The solution follows **Separation of Concerns (SoC)** to keep domain logic and data persistence completely independent of the UI rendering layer:
-
-```text
-RotmgTrackerV1/
-├── RotmgTrackerV1.Core/       # C# Class Library (Domain Models, Enums, EF Core SQLite Context, State Services)
-└── RotmgTrackerV1.Desktop/    # Cross-Platform Photino.Blazor Host (Native OS Window + Razor/CSS UI)           
-```
-- **Backend / Domain (`Core`):** C#, .NET 10, Entity Framework Core (SQLite), LINQ. Zero UI dependencies—reusable across desktop and web targets.
-- **Frontend (`Desktop`):** Photino.Blazor leveraging native OS webviews (WebView2 on Windows, WKWebView on macOS, WebKitGTK on Linux) for low memory usage, native HiDPI scaling, and smooth 144Hz rendering.
+Built in **C# (.NET 10)** with **Photino.Blazor** (native OS WebView2 / WKWebView / WebKitGTK) and **SQLite + EF Core Migrations**.
 
 ---
 
-## Getting Started
+## Key Features
 
-### Prerequisites
+### Passive Network Sniffer (TCP:2050)
+- **Zero-touch tracking:** Passively reads game traffic via `SharpPcap` (`Npcap` on Windows, `libpcap` / `ChmodBPF` on macOS) with an ordered TCP reassembly buffer (`TcpReorderBuffer`) and RC4 stream decryption.
+- **Automatic Account & Character Sync:** Detects all **19 RotMG classes**, character `charId`, skin, `X/8` maxed stats, Base Fame, Exaltations (stats 105–112), Realm Gold (stat 35), Rank Stars (stat 30), Seasonal status (stat 24), and currently equipped gear.
+- **Rarity & Enchantments (`stat 80`):** Decodes item `UNIQUE_DATA` blobs to extract item rarity (**Common → Divine**, 0–4 enchantment slots) and exact enchantment names/descriptions both for loot drops and equipped gear.
+- **Boss Kills, Dungeon Completions & Live DPS:** Confirms boss kills by correlating boss removal/kill flags with nearby loot bags, automatically records dungeon completions upon exiting the instance, and logs party damage contribution per fight.
+- **Configurable Bag Filter:** Toggle which physical bag colors (White, Orange/ST, Red/Tops, Gold/BP, Blue, Cyan, Egg, Purple) are recorded to Loot History without affecting boss kill or Tinkerer mark tracking.
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- Supported OS: Windows 10/11, macOS (Apple Silicon / Intel), or Linux
-- IDE: JetBrains Rider or Visual Studio 2022+
+### Trophy Hall & Item Collection
+- **Dungeon-Grouped Trophy Hall:** Organizes collectibles across 59 dungeons by **Boss / Miniboss** and **ST Sets**, plus a dedicated **Tiered Equipment** hall ordered cleanly (**Weapons → Abilities → Armors → Rings**, split by tier).
+- **Rich Hover Tooltips & Rarity Matrix:** Displays item sprite, tier (`UT`/`ST`/`T14`), Feed Power, Fame Bonus, drop sources with boss sprites, and a 5-tier **Rarities Collected** tracker.
+- **Local Sprite Atlas (Zero Copyrighted Assets in Git):** Extracts item, boss, portal, bag, skin, and UI sprites directly from your local RotMG Exalt `resources.assets` into a compact packed PNG atlas served via a custom `rotmg-sprites://` scheme.
 
-### Build & Run
+### Profile, Live Feed, Graveyard & Data Safety
+- **Live Feed & Unified Loot History:** Clickable drop-category filters (Regular White, Legendary White, Realm White, ST, UT, Gold Bag, Tops, Shiny), bag grouping, rarity badges, and 100-row paginated history.
+- **Character Profile:** Equipped gear with live rarity & enchantment tooltips, **Dream Set** target tracker (with empirical progress from tracked runs & drops), **Top Drops** (scored by `RarityScoreEngine` + customizable `item_value.json`), **Best Bags**, and **Est. Death Fame** (using the official client fame bonus table for `X/8` maxing + 76 single-dungeon milestones + 13 dungeon collections).
+- **Daily Quests & Graveyard:** Collapsible Tinkerer mark tracker taskbar and automated Graveyard archiving on character death (`DEATH` packet) with killer/dungeon sprites and estimated death fame.
+- **Backup & Sync:** Automated SQLite `VACUUM INTO` backups and JSON history export/import with deduplication for syncing records between Windows and macOS.
 
-1. Clone the repository:
-   ```bash
-   git clone [https://github.com/Tikeer/RotmgTrackerV1.git](https://github.com/Tikeer/RotmgTrackerV1.git)
-   cd RotmgTrackerV1
-    ```
-2. Build and run the desktop application:
-    ```bash
-    dotnet run --project RotmgTrackerV1.Desktop
-    ```
+---
 
-### Building Standalone Executables (Release)
-You can compile self-contained binaries (no .NET installation required on the target machine) for any platform using the following commands:
-- Windows (x64 single-file .exe):
-```bash
-dotnet publish RotmgTrackerV1.Desktop -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish/windows
+## Architecture
+
+```text
+ROTMG_Loot_Tracker_APP/
+├── RotmgTracker.Core/        # Domain models, EF Core SQLite DB & migrations, GameDataService,
+│                             # SpriteAtlasService, ItemSourceService, RarityScoreEngine, DeathFameCalculator
+├── RotmgTracker.Sniffer/     # Passive SharpPcap listener, TcpReorderBuffer, RC4, packet & stat 80 parsers
+├── RotmgTracker.Desktop/     # Photino.Blazor host, Razor tab panels, custom dark UI & CSS
+├── scripts/                  # One-click single-file Windows (.exe + Desktop shortcut) & macOS (.app) builders
+└── tools/                    # Offline dataset builder for Data/item_sources.json
 ```
-- macOS (Apple Silicon arm64):
-```bash
-dotnet publish RotmgTrackerV1.Desktop -c Release -r osx-arm64 --self-contained true -o ./publish/macos
+
+---
+
+## Prerequisites
+
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download)** (only needed to build from source)
+- **Windows:** [Npcap](https://npcap.com/) installed with **"Install Npcap in WinPcap API-compatible Mode"** checked
+- **macOS:** ChmodBPF permissions for non-root packet capture:
+  ```bash
+  brew install --cask wireshark-chmodbpf
+  ```
+- **RotMG Exalt** installed locally (used once to extract item/boss/enchantment catalogs and build the local sprite atlas)
+
+---
+
+## One-Click Release Build
+
+Instead of digging through hundreds of `.dll` files, use the included release scripts to produce a single clickable app:
+
+### Windows (`RotmgTracker.exe` + Desktop Shortcut)
+Run in PowerShell from the repository root (with the app closed):
+```powershell
+.\scripts\build-windows.ps1
 ```
-- Linux (x64):
+This creates a clean single-file executable at `.\publish\win-x64\RotmgTracker.exe` (alongside only `wwwroot\` and `Data\`) and automatically adds a **`RotMG Tracker`** shortcut on your Desktop. Pass `-NoShortcut` to skip the shortcut.
+
+### macOS (`RotMG Tracker.app`)
+Run in Terminal from the repository root:
 ```bash
-dotnet publish RotmgTrackerV1.Desktop -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o ./publish/linux
+chmod +x ./scripts/build-macos.sh
+./scripts/build-macos.sh
 ```
-Roadmap
+This builds `./publish/RotMG Tracker.app`, which you can double-click directly in Finder or drag into `/Applications`.
 
-- [x] Core domain models & automatic persistence
+### Development Run
+```bash
+dotnet run --project RotmgTracker.Desktop
+```
 
-- [x] Dark-mode dashboard UI with collapsible navigation sidebar
+---
 
-- [x] Multi-character tracking with RotMG class selection & Graveyard view
+## Data Storage
 
-- [x] Migration to cross-platform Photino.Blazor & SQLite database
+All user data stays local in your OS application data directory (never committed to git):
+- **Windows:** `%APPDATA%\RotmgTracker\`
+- **macOS:** `~/Library/Application Support/RotmgTracker/`
 
-- [ ] v2.0 Core: Passive network packet sniffer (SharpPcap / Npcap / libpcap)
+Includes `rotmg_tracker.db` (SQLite), `ui_settings.json`, `item_value.json` (optional per-item score multipliers), `sprites/` (local sprite atlas cache), `backups/`, `exports/`, and `import/`.
 
-- [ ] Automatic account/character detection in Nexus & automated Loot History log
+---
 
-- [ ] Live Dungeon Damage (DPS) meter with player contribution percentages
+## Roadmap
 
-- [ ] Item Collection log & Season countdown timer
+- [x] **v1.0** — Core domain models, multi-character tracking, SQLite persistence, dark Photino.Blazor UI
+- [x] **v2.0** — Passive TCP:2050/RC4 sniffer with TCP reordering, 19-class & account detection, Rarity & Enchantments (`stat 80`), Boss Kill / Dungeon Completion / Live DPS, Trophy Hall & Tiered Equipment Collection, local `resources.assets` sprite atlas, Profile (Dream Set, Top Drops, Best Bags, Est. Death Fame), Graveyard, Backup & Sync, one-click Windows/macOS builds
+- [ ] **v2.1+** — Own-character DPS estimation (from weapon shots), Vault packet (`117`) parsing, Enchantment & Pet Fame calculators

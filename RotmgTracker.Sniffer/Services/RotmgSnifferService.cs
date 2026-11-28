@@ -21,6 +21,13 @@ public class RotmgSnifferService : IDisposable
     public PacketCaptureLogger Capture { get; } = new();
     public bool CaptureEnabled => Capture.IsActive;
 
+    /// <summary>Optional D17 predicate controlling which physical bag colors are recorded to LootHistory.</summary>
+    public Func<BagType, bool>? ShouldRecordBag
+    {
+        get => _streamProcessor.ShouldRecordBag;
+        set => _streamProcessor.ShouldRecordBag = value;
+    }
+
     // Wlacza/wylacza zapis diagnostyki ramek do pliku (patrz PacketCaptureLogger)
     public void ToggleCapture()
     {
@@ -54,10 +61,15 @@ public class RotmgSnifferService : IDisposable
             var devices = CaptureDeviceList.Instance;
             if (devices.Count == 0)
             {
-                StatusMessage = "No network interfaces found (check chmodbpf / Npcap)";
+                StatusMessage = OperatingSystem.IsWindows()
+                    ? "No capture adapters found — install Npcap (npcap.com) with WinPcap API-compatible mode enabled."
+                    : OperatingSystem.IsMacOS()
+                        ? "No network interfaces found — install ChmodBPF: brew install --cask wireshark-chmodbpf"
+                        : "No network interfaces found — ensure libpcap is installed and capture permissions are granted.";
                 return;
             }
 
+            string? lastOpenError = null;
             foreach (var dev in devices)
             {
                 try
@@ -68,7 +80,10 @@ public class RotmgSnifferService : IDisposable
                     dev.StartCapture();
                     _activeDevices.Add(dev);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    lastOpenError = ex.Message;
+                }
             }
 
             if (_activeDevices.Count > 0)
@@ -78,12 +93,24 @@ public class RotmgSnifferService : IDisposable
             }
             else
             {
-                StatusMessage = "No BPF access — run in terminal: brew install --cask wireshark-chmodbpf";
+                StatusMessage = OperatingSystem.IsWindows()
+                    ? $"Could not open capture adapter — verify Npcap is installed (npcap.com) or run as Administrator. ({lastOpenError ?? "access denied"})"
+                    : OperatingSystem.IsMacOS()
+                        ? "No BPF capture permission — run in Terminal: brew install --cask wireshark-chmodbpf (then reboot or re-login)."
+                        : $"Capture permission denied — grant cap_net_raw/cap_net_admin or run with sudo. ({lastOpenError ?? "permission denied"})";
             }
+        }
+        catch (DllNotFoundException)
+        {
+            StatusMessage = OperatingSystem.IsWindows()
+                ? "Npcap driver (wpcap.dll) not found — install Npcap from https://npcap.com (enable WinPcap API-compatible mode)."
+                : "libpcap library not found — install libpcap for passive packet capture.";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Sniffer Error: {ex.Message}";
+            StatusMessage = OperatingSystem.IsWindows() && ex.Message.Contains("wpcap", StringComparison.OrdinalIgnoreCase)
+                ? "Npcap driver not found — install Npcap from https://npcap.com (enable WinPcap API-compatible mode)."
+                : $"Sniffer Error: {ex.Message}";
         }
     }
 

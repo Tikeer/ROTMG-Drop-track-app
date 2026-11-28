@@ -1,4 +1,5 @@
 using System.Text.Json;
+using RotmgTrackerV1.Core.Enums;
 
 namespace RotmgTrackerV1.Core.Services;
 
@@ -7,12 +8,24 @@ public class UiSettings
 {
     private const string FileName = "ui_settings.json";
     public static readonly string[] DefaultCharacterBarOrder = ["fame", "exalt", "stars", "gold"];
+    public static readonly BagType[] ConfigurableBagTypes =
+    [
+        BagType.WhiteBag,
+        BagType.OrangeBag,
+        BagType.RedBag,
+        BagType.GoldBag,
+        BagType.BlueBag,
+        BagType.CyanBag,
+        BagType.EggBag,
+        BagType.PurpleBag
+    ];
 
     private readonly object _sync = new();
     private readonly string _path;
     private bool _showLegacyOpenings;
     private bool _debugMode;
     private List<string> _characterBarOrder = new(DefaultCharacterBarOrder);
+    private HashSet<BagType> _trackedBags = new(ConfigurableBagTypes);
 
     public event Action? Changed;
 
@@ -85,6 +98,37 @@ public class UiSettings
         if (changed) Changed?.Invoke();
     }
 
+    public bool IsBagTracked(BagType bag)
+    {
+        lock (_sync) return _trackedBags.Contains(bag);
+    }
+
+    public void SetBagTracked(BagType bag, bool enabled)
+    {
+        bool changed = false;
+        lock (_sync)
+        {
+            changed = enabled ? _trackedBags.Add(bag) : _trackedBags.Remove(bag);
+            if (changed) Save();
+        }
+        if (changed) Changed?.Invoke();
+    }
+
+    public void ResetTrackedBags()
+    {
+        bool changed = false;
+        lock (_sync)
+        {
+            if (_trackedBags.Count != ConfigurableBagTypes.Length)
+            {
+                _trackedBags = new HashSet<BagType>(ConfigurableBagTypes);
+                Save();
+                changed = true;
+            }
+        }
+        if (changed) Changed?.Invoke();
+    }
+
     private static List<string> NormalizeOrder(IEnumerable<string>? raw)
     {
         var result = new List<string>();
@@ -129,6 +173,21 @@ public class UiSettings
                     .ToList();
                 _characterBarOrder = NormalizeOrder(list);
             }
+
+            if (root.TryGetProperty("TrackedBags", out var tb) && tb.ValueKind == JsonValueKind.Array)
+            {
+                var parsed = new HashSet<BagType>();
+                foreach (var el in tb.EnumerateArray())
+                {
+                    if (el.ValueKind == JsonValueKind.String &&
+                        Enum.TryParse<BagType>(el.GetString(), ignoreCase: true, out var bt) &&
+                        ConfigurableBagTypes.Contains(bt))
+                    {
+                        parsed.Add(bt);
+                    }
+                }
+                _trackedBags = parsed;
+            }
         }
         catch { }
     }
@@ -142,7 +201,8 @@ public class UiSettings
                 {
                     ShowLegacyOpenings = _showLegacyOpenings,
                     DebugMode = _debugMode,
-                    CharacterBarOrder = _characterBarOrder
+                    CharacterBarOrder = _characterBarOrder,
+                    TrackedBags = ConfigurableBagTypes.Where(b => _trackedBags.Contains(b)).Select(b => b.ToString()).ToList()
                 },
                 new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_path, json);

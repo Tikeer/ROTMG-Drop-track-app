@@ -12,6 +12,9 @@ public class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Ensure relative assets (wwwroot/, Data/) resolve when launched via Desktop shortcut or macOS .app bundle
+        Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
         // SharpPcap trzyma po jednym wątku z puli na każdy interfejs sieciowy (na macOS ~25).
         // Bez wyższego minimum pula dokłada wątki co ~500 ms i przez ~15 s kolejka zdarzeń UI stoi.
         ThreadPool.SetMinThreads(Math.Max(Environment.ProcessorCount * 4, 64), 64);
@@ -29,6 +32,9 @@ public class Program
 
         var app = appBuilder.Build();
         var sprites = app.Services.GetRequiredService<SpriteAtlasService>();
+        var sniffer = app.Services.GetRequiredService<RotmgSnifferService>();
+        var uiSettings = app.Services.GetRequiredService<UiSettings>();
+        sniffer.ShouldRecordBag = uiSettings.IsBagTracked;
 
         app.MainWindow
             .SetTitle("RotMG Drop & DPS Tracker")
