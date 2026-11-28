@@ -56,6 +56,8 @@ public sealed class AppStartup
                 {
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     _gameData.Initialize();
+                    // Fast (~3 ms) cached atlas load so sprites are ready on the very first UI frame
+                    _sprites.LoadCacheSync();
                     gameMs = sw.ElapsedMilliseconds;
                 }),
                 Task.Run(() =>
@@ -67,15 +69,17 @@ public sealed class AppStartup
 
             _isReady = true;
             LogTiming($"ready after {total.ElapsedMilliseconds} ms (game data {gameMs} ms, database {stateMs} ms, loot rows {_state.Data.LootHistory.Count})");
+            Changed?.Invoke();
         }
         catch (Exception ex)
         {
             Error = ex.Message;
             LogTiming($"startup failed: {ex.Message}");
+            Changed?.Invoke();
             return;
         }
 
-        // Sniffer (otwieranie interfejsów pcap) oraz atlas sprite'ów w tle, bez blokowania UI
+        // Rebuild sprite atlas in background only if cache was missing or outdated
         _ = _sprites.EnsureBuiltAsync();
 
         _ = Task.Run(() =>

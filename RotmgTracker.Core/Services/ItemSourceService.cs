@@ -137,17 +137,24 @@ public sealed class ItemSourceService
                 }
             }
 
-            if (drop.BagType != DropType.Other &&
+            // Only overlay LootHistory for unmapped White/ST/Shiny items (never pollute already-mapped dungeons with random event/chest/Tops drops)
+            bool isSpecialCollectible = drop.BagType is DropType.RegularWhite or DropType.LegendaryWhite
+                or DropType.EventWhite or DropType.ST or DropType.Shiny or DropType.Shivine;
+
+            if (isSpecialCollectible &&
                 !string.IsNullOrWhiteSpace(drop.DungeonName) &&
                 !IgnoredOverlayDungeons.Contains(drop.DungeonName.Trim()))
             {
                 string baseName = StripShinyPrefix(drop.ItemName);
-                if (!overlayByBaseName.TryGetValue(baseName, out var dset))
+                if (!_baseSourcesByItem.ContainsKey(baseName))
                 {
-                    dset = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    overlayByBaseName[baseName] = dset;
+                    if (!overlayByBaseName.TryGetValue(baseName, out var dset))
+                    {
+                        dset = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        overlayByBaseName[baseName] = dset;
+                    }
+                    dset.Add(drop.DungeonName.Trim());
                 }
-                dset.Add(drop.DungeonName.Trim());
             }
         }
 

@@ -28,13 +28,20 @@ public class Program
         appBuilder.RootComponents.Add<Dashboard>("#app");
 
         var app = appBuilder.Build();
+        var sprites = app.Services.GetRequiredService<SpriteAtlasService>();
 
         app.MainWindow
             .SetTitle("RotMG Drop & DPS Tracker")
             .SetUseOsDefaultSize(false)
             .SetSize(1280, 860)
             .SetMinSize(900, 620)
-            .Center();
+            .Center()
+            .RegisterCustomSchemeHandler("rotmg-sprites", (object sender, string scheme, string url, out string contentType) =>
+            {
+                contentType = "image/png";
+                byte[]? bytes = sprites.GetAtlasPngBytes();
+                return bytes != null ? new MemoryStream(bytes, writable: false) : Stream.Null;
+            });
 
         app.Run();
     }

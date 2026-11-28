@@ -59,7 +59,7 @@ public static class UiHelpers
     }
 
     /// <summary>
-    /// Single source of truth for Item Collection progress (matched strictly by ItemId).
+    /// Single source of truth for Item Collection progress (matched strictly by ItemId; Blueprints excluded).
     /// </summary>
     public static (int Owned, int Total, double Percent) ComputeCollectionProgress(
         IEnumerable<ItemMetadata> catalogItems,
@@ -67,9 +67,10 @@ public static class UiHelpers
         bool includeTiered = false,
         int minTier = 12)
     {
-        var eligible = includeTiered
-            ? catalogItems.Where(i => i.Tier <= 0 || i.Tier >= minTier).ToList()
-            : catalogItems.Where(i => i.Tier <= 0).ToList();
+        var eligible = catalogItems
+            .Where(i => i.Quality != DropType.BPs)
+            .Where(i => includeTiered ? (i.Tier <= 0 || i.Tier >= minTier) : i.Tier <= 0)
+            .ToList();
 
         var ownedIds = loot
             .Where(l => l.ItemId > 0)

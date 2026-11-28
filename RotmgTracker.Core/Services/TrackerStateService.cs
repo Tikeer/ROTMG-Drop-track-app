@@ -143,7 +143,13 @@ public partial class TrackerStateService
         RestoreLegacyCountersOnce();
 
         // Jednorazowo: stare rekordy (tagi S1-S4 z dawnego dropdownu) -> S31
-        if (MigrateSeasonTagsOnce())
+        bool needsSave = MigrateSeasonTagsOnce();
+
+        // Naprawa starych rekordów Shiny z Realmu zapisanych sprzed 2026-11-20 z BagType=Shiny zamiast EventWhite
+        if (RepairLegacyRealmShinyRecords())
+            needsSave = true;
+
+        if (needsSave)
             SaveAsync();
 
         // Drops = LegacyDrops + loot z historii (naprawia wcześniej wyzerowane liczniki)
@@ -152,6 +158,23 @@ public partial class TrackerStateService
 
         // Punkty rzadkości liczone wzorem z RarityScoreEngine + item_value.json (zmiana wzoru działa wstecz)
         RecalculateAllRarityScores();
+    }
+
+    private bool RepairLegacyRealmShinyRecords()
+    {
+        bool changed = false;
+        foreach (var l in Data.LootHistory)
+        {
+            if (l.BagType == DropType.Shiny &&
+                l.PhysicalBag == BagType.WhiteBag &&
+                l.DungeonName.Contains("Realm of the Mad God", StringComparison.OrdinalIgnoreCase))
+            {
+                l.BagType = DropType.EventWhite;
+                l.IsShiny = true;
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private void RecalculateAllRarityScores()
@@ -549,7 +572,7 @@ public partial class TrackerStateService
             (target.CompletedAt == null || r.CompletedAt <= target.CompletedAt));
     }
 
-    public void AddWishlistTarget(string itemName, string dungeonName, ItemRarity minRarity, bool requireShiny, double dropRate)
+    public void AddWishlistTarget(string itemName, string dungeonName, ItemRarity minRarity, bool requireShiny, double dropRate, int itemId = 0)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
 
@@ -557,6 +580,7 @@ public partial class TrackerStateService
 
         Data.Wishlist.Insert(0, new WishlistTarget
         {
+            ItemId = itemId,
             ItemName = itemName.Trim(),
             TargetDungeonName = string.IsNullOrWhiteSpace(dungeonName) ? "Any Dungeon" : dungeonName.Trim(),
             MinimumRarity = minRarity,

@@ -6,9 +6,9 @@
 @inject AppStartup Startup
 @inject UiSettings UiSettings
 
-@if (Sprites.IsReady && !string.IsNullOrEmpty(Sprites.AtlasDataUrl))
+@if (Sprites.IsReady)
 {
-    <style>:root { --sprite-atlas: url("@Sprites.AtlasDataUrl"); }</style>
+    <style>:root { --sprite-atlas: url("rotmg-sprites://localhost/atlas.png?v=@Sprites.Revision"); }</style>
 }
 
 @if (Startup.Error != null)

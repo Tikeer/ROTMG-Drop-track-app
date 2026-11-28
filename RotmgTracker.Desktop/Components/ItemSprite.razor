@@ -1,4 +1,4 @@
-@* Authentic RotMG item slot tile with in-game RarityIcon_1..4 overlay, shiny_item_icon sparkle, and instant hover tooltip. *@
+@* Authentic RotMG item slot tile with in-game RarityIcon_1..4 overlay, shiny_item_icon sparkle, and tooltip. *@
 
 @{
     int innerSize = Math.Max(16, Size - 8);
@@ -12,10 +12,14 @@
         ItemRarity.Divine => "rarity-divine",
         _ => "rarity-common"
     };
+    string? nativeTitle = LightweightTooltip && !string.IsNullOrWhiteSpace(ItemName)
+        ? BuildNativeTooltip()
+        : null;
 }
 
 <div class="item-slot @rarityClass @(IsShiny ? "is-shiny" : "") @CssClass"
-     style="width: @(Size)px; height: @(Size)px;">
+     style="width: @(Size)px; height: @(Size)px;"
+     title="@nativeTitle">
 
     @if (!string.IsNullOrWhiteSpace(TextureFile))
     {
@@ -49,7 +53,7 @@
                 @onclick="() => OnRemove.InvokeAsync()">✕</button>
     }
 
-    @if (ShowTooltip && !string.IsNullOrWhiteSpace(ItemName))
+    @if (ShowTooltip && !LightweightTooltip && !string.IsNullOrWhiteSpace(ItemName))
     {
         <div class="rotmg-tooltip">
             <div class="rotmg-tooltip-title" style="color: @(IsShiny ? "#f472b6" : "var(--text-primary)");">
@@ -91,6 +95,20 @@
     [Parameter] public double RarityScore { get; set; }
     [Parameter] public string? ExtraMeta { get; set; }
     [Parameter] public bool ShowTooltip { get; set; } = true;
+    /// <summary>When true, uses native title attribute instead of nested tooltip DOM nodes (huge perf win for dense grids).</summary>
+    [Parameter] public bool LightweightTooltip { get; set; }
     [Parameter] public string? CssClass { get; set; }
     [Parameter] public EventCallback OnRemove { get; set; }
+
+    private string BuildNativeTooltip()
+    {
+        var parts = new List<string> { IsShiny ? $"{ItemName} [SHINY]" : ItemName! };
+        if (Rarity > ItemRarity.Common)
+            parts.Add($"{Rarity} ({(int)Rarity} slots)");
+        if (RarityScore > 0)
+            parts.Add($"Score: {Math.Round(RarityScore)} pts");
+        if (!string.IsNullOrWhiteSpace(ExtraMeta))
+            parts.Add(ExtraMeta);
+        return string.Join(" • ", parts);
+    }
 }

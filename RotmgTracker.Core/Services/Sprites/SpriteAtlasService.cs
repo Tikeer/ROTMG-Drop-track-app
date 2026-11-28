@@ -23,17 +23,28 @@ public sealed class SpriteAtlasService
     private int _buildRunning;
 
     private Dictionary<string, SpriteRect> _entries = new(StringComparer.OrdinalIgnoreCase);
+    private byte[]? _atlasPngBytes;
 
     public bool IsReady { get; private set; }
     public bool IsBuilding => Volatile.Read(ref _buildRunning) == 1;
     public int AtlasWidth { get; private set; }
     public int AtlasHeight { get; private set; }
     public int SpriteCount => _entries.Count;
-    public string AtlasDataUrl { get; private set; } = string.Empty;
+    public int Revision { get; private set; }
     public string StatusMessage { get; private set; } = "Sprite atlas not loaded";
     public string SpritesFolder => _spritesDir;
 
     public event Action? Changed;
+
+    public byte[]? GetAtlasPngBytes()
+    {
+        lock (_lock) return _atlasPngBytes;
+    }
+
+    /// <summary>
+    /// Fast synchronous cache load (~3 ms) called during AppStartup BEFORE UI first frame so sprites appear immediately.
+    /// </summary>
+    public bool LoadCacheSync() => TryLoadCachedAtlas() != null;
 
     public SpriteAtlasService(GameDataService gameData, string? customSpritesDir = null)
     {
@@ -125,14 +136,14 @@ public sealed class SpriteAtlasService
                 return null;
 
             var entries = new Dictionary<string, SpriteRect>(manifest.Sprites, StringComparer.OrdinalIgnoreCase);
-            string dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
 
             lock (_lock)
             {
                 _entries = entries;
+                _atlasPngBytes = pngBytes;
                 AtlasWidth = manifest.AtlasWidth;
                 AtlasHeight = manifest.AtlasHeight;
-                AtlasDataUrl = dataUrl;
+                Revision++;
                 IsReady = true;
                 StatusMessage = $"Loaded cached atlas ({entries.Count} sprites, {AtlasWidth}x{AtlasHeight}, {pngBytes.Length / 1024} KB)";
             }
@@ -321,14 +332,13 @@ public sealed class SpriteAtlasService
         File.Move(tmpPng, _atlasPath, overwrite: true);
         File.Move(tmpJson, _manifestPath, overwrite: true);
 
-        string dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
-
         lock (_lock)
         {
             _entries = entries;
+            _atlasPngBytes = pngBytes;
             AtlasWidth = atlasWidth;
             AtlasHeight = atlasHeight;
-            AtlasDataUrl = dataUrl;
+            Revision++;
             IsReady = true;
             StatusMessage = $"Built atlas ({entries.Count} sprites, {atlasWidth}x{atlasHeight}, {pngBytes.Length / 1024} KB in {sw.ElapsedMilliseconds} ms)";
         }

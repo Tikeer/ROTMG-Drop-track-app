@@ -1826,3 +1826,47 @@ input, select { user-select: text; }
     gap: 6px;
     align-items: center;
 }
+
+/* ===== Custom Dark Autocomplete (Dream Set) ===== */
+.autocomplete-host {
+    position: relative;
+}
+
+.autocomplete-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 65;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #14141b;
+    border: 1px solid var(--border-hover);
+    border-radius: 8px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+}
+
+.autocomplete-option {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-primary);
+    padding: 6px 8px;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 0.84rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.autocomplete-option:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-subtle);
+}

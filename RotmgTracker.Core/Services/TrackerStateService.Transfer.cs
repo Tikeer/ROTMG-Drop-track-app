@@ -113,6 +113,7 @@ public partial class TrackerStateService
             Data.DungeonRuns = Data.DungeonRuns.OrderByDescending(r => r.CompletedAt).ToList();
             Data.CombatHistory = Data.CombatHistory.OrderByDescending(c => c.EndedAt).ToList();
 
+            RepairLegacyRealmShinyRecords();
             RecalculateAllRarityScores();
             foreach (var ch in Data.ActiveCharacters.Concat(Data.Graveyard))
                 RecalculateCharacterDrops(ch);

@@ -5,22 +5,57 @@
     <h2>Dream Set</h2>
 </div>
 
-<div class="quest-add-bar" style="flex-wrap: wrap;">
-    <input class="input" list="wish-items-list" style="min-width: 220px;" placeholder="Target item name..." @bind="WishItemName" />
-    <datalist id="wish-items-list">
-        @foreach (var item in GameData.GetAllKnownItems().Take(600))
-        {
-            <option value="@item.Name"></option>
-        }
-    </datalist>
+@{
+    var itemSuggestions = GetItemSuggestions();
+    var dungeonSuggestions = GetDungeonSuggestions();
+}
 
-    <input class="input" list="wish-dungeons-list" style="max-width: 200px;" placeholder="Target dungeon..." @bind="WishDungeonName" />
-    <datalist id="wish-dungeons-list">
-        @foreach (var p in GameData.GetAllKnownPortals().OrderByDescending(p => p.GraveDifficulty))
+<div class="quest-add-bar" style="flex-wrap: wrap; overflow: visible;">
+    <div class="autocomplete-host" style="min-width: 240px;">
+        <input class="input"
+               style="width: 100%;"
+               placeholder="Search target item (e.g. Makakoyumi)..."
+               value="@WishItemName"
+               @oninput="OnWishItemInput"
+               @onfocus="() => ShowItemMenu = true" />
+
+        @if (ShowItemMenu && itemSuggestions.Count > 0)
         {
-            <option value="@p.DungeonName">@p.GraveDifficulty/10 Graves</option>
+            <div class="dropdown-backdrop" @onclick="() => ShowItemMenu = false"></div>
+            <div class="autocomplete-menu">
+                @foreach (var item in itemSuggestions)
+                {
+                    <button type="button" class="autocomplete-option" @onclick="() => PickWishItem(item)">
+                        <GameSprite TextureFile="@item.TextureFile" TextureIndex="item.TextureIndex" Size="20" />
+                        <span style="color: @(item.IsShiny ? "#f472b6" : "var(--text-primary)");">@item.Name</span>
+                    </button>
+                }
+            </div>
         }
-    </datalist>
+    </div>
+
+    <div class="autocomplete-host" style="min-width: 190px; max-width: 220px;">
+        <input class="input"
+               style="width: 100%;"
+               placeholder="Target dungeon..."
+               value="@WishDungeonName"
+               @oninput="OnWishDungeonInput"
+               @onfocus="() => ShowDungeonMenu = true" />
+
+        @if (ShowDungeonMenu && dungeonSuggestions.Count > 0)
+        {
+            <div class="dropdown-backdrop" @onclick="() => ShowDungeonMenu = false"></div>
+            <div class="autocomplete-menu">
+                @foreach (var p in dungeonSuggestions)
+                {
+                    <button type="button" class="autocomplete-option" @onclick="() => PickWishDungeon(p.DungeonName)">
+                        <GameSprite PortalObjectType="p.ObjectType" DungeonName="@p.DungeonName" Size="18" />
+                        <span>@p.DungeonName</span>
+                    </button>
+                }
+            </div>
+        }
+    </div>
 
     <select class="select" @bind="WishMinRarity">
         @foreach (var r in Enum.GetValues<ItemRarity>())
@@ -65,7 +100,11 @@ else
                 <div class="inline-meta-item" style="min-width: 260px; gap: 10px;">
                     @if (spriteItemId > 0)
                     {
-                        <GameSprite ItemId="spriteItemId" Size="28" Title="@wish.ItemName" />
+                        <ItemSprite ItemId="spriteItemId"
+                                    Rarity="wish.MinimumRarity"
+                                    IsShiny="wish.RequireShiny"
+                                    Size="36"
+                                    ShowTooltip="false" />
                     }
                     <div>
                         <div class="inline-meta-item">
@@ -107,10 +146,69 @@ else
 
 @code {
     private string WishItemName { get; set; } = "";
+    private int WishItemId { get; set; }
     private string WishDungeonName { get; set; } = "";
     private ItemRarity WishMinRarity { get; set; } = ItemRarity.Common;
     private int WishOneInX { get; set; } = 100;
     private bool WishRequireShiny { get; set; }
+
+    private bool ShowItemMenu { get; set; }
+    private bool ShowDungeonMenu { get; set; }
+
+    private void OnWishItemInput(ChangeEventArgs e)
+    {
+        WishItemName = e.Value?.ToString() ?? "";
+        WishItemId = 0;
+        ShowItemMenu = true;
+    }
+
+    private void OnWishDungeonInput(ChangeEventArgs e)
+    {
+        WishDungeonName = e.Value?.ToString() ?? "";
+        ShowDungeonMenu = true;
+    }
+
+    private void PickWishItem(ItemMetadata item)
+    {
+        WishItemName = item.Name;
+        WishItemId = item.ItemId;
+        if (item.IsShiny) WishRequireShiny = true;
+        ShowItemMenu = false;
+    }
+
+    private void PickWishDungeon(string dungeon)
+    {
+        WishDungeonName = dungeon;
+        ShowDungeonMenu = false;
+    }
+
+    private List<ItemMetadata> GetItemSuggestions()
+    {
+        string q = WishItemName.Trim();
+        if (q.Length < 2) return new List<ItemMetadata>();
+
+        return GameData.GetAllKnownItems()
+            .Where(i => i.Quality != DropType.BPs && i.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(i => i.Name.StartsWith(q, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(i => i.IsShiny)
+            .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(15)
+            .ToList();
+    }
+
+    private List<PortalMetadata> GetDungeonSuggestions()
+    {
+        string q = WishDungeonName.Trim();
+        var portals = GameData.GetAllKnownPortals().AsEnumerable();
+        if (q.Length > 0)
+            portals = portals.Where(p => p.DungeonName.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        return portals
+            .OrderByDescending(p => p.GraveDifficulty)
+            .ThenBy(p => p.DungeonName, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList();
+    }
 
     private static double CalculateWishProbabilityPercent(WishlistTarget wish, int runs)
     {
@@ -122,9 +220,21 @@ else
     private void CreateWishlistTarget()
     {
         if (string.IsNullOrWhiteSpace(WishItemName)) return;
+
+        int resolvedId = WishItemId;
+        if (resolvedId <= 0)
+        {
+            var match = GameData.GetAllKnownItems()
+                .FirstOrDefault(i => string.Equals(i.Name, WishItemName.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match != null) resolvedId = match.ItemId;
+        }
+
         double rate = 1.0 / Math.Max(1, WishOneInX);
-        State.AddWishlistTarget(WishItemName, WishDungeonName, WishMinRarity, WishRequireShiny, rate);
+        State.AddWishlistTarget(WishItemName, WishDungeonName, WishMinRarity, WishRequireShiny, rate, resolvedId);
         WishItemName = "";
+        WishItemId = 0;
+        ShowItemMenu = false;
+        ShowDungeonMenu = false;
     }
 
     private void RemoveWishlistItem(Guid id)
